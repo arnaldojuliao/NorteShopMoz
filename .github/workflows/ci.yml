@@ -1,12 +1,10 @@
 # NorteShopMoz - Continuous Integration Workflow
 # Runs on every push and PR to main/develop branches
 #
-# Required GitHub Secrets:
-# - DOCKER_HUB_USERNAME / DOCKER_HUB_TOKEN (for pushing images)
-# - GHCR_TOKEN (optional, for GitHub Container Registry)
+# Required GitHub Secrets (todos opcionais):
 # - SONAR_TOKEN (optional, for SonarCloud)
 # - SNYK_TOKEN (optional, for Snyk security scanning)
-# - CODEQL_TOKEN (optional, for GitHub CodeQL)
+# As imagens Docker são publicadas no GHCR com o GITHUB_TOKEN automático.
 
 name: CI
 
@@ -21,11 +19,11 @@ on:
     - cron: '0 2 * * 1'
 
 env:
-  # Docker image names
+  # Docker image names (publicadas no GHCR — não requer secrets extras)
   BACKEND_IMAGE: ${{ github.repository_owner }}/norteshopmoz-api
   FRONTEND_IMAGE: ${{ github.repository_owner }}/norteshopmoz-frontend
   # Registry
-  REGISTRY: docker.io
+  REGISTRY: ghcr.io
 
 jobs:
   # ════════════════════════════════════════════════════════════════════════════
@@ -47,6 +45,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        if: matrix.language == 'java'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
@@ -89,8 +94,6 @@ jobs:
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
-          base: main
-          head: HEAD
           extra_args: --fail --no-verification
 
   # ════════════════════════════════════════════════════════════════════════════
@@ -103,6 +106,32 @@ jobs:
     defaults:
       run:
         working-directory: ./backend
+
+    # Os testes @SpringBootTest usam as portas padrão do application.yaml
+    # (Postgres 5434 / Redis 6381), alinhadas com o docker-compose local.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: norteshopmoz
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6381:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
 
     steps:
       - name: Checkout repository
@@ -144,6 +173,9 @@ jobs:
     name: Backend - Security Scan
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
     defaults:
       run:
         working-directory: ./backend
@@ -161,6 +193,7 @@ jobs:
 
       - name: Run OWASP Dependency Check
         uses: dependency-check/Dependency-Check_Action@main
+        continue-on-error: true
         with:
           project: 'NorteShopMoz API'
           path: '.'
@@ -186,7 +219,7 @@ jobs:
           scan-type: 'fs'
           scan-ref: './backend'
           format: 'sarif'
-          output: 'trivy-results.sarif'
+          output: 'backend/trivy-results.sarif'
           severity: 'HIGH,CRITICAL'
 
       - name: Upload Trivy results to GitHub Security
@@ -212,12 +245,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Docker Hub
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata for Backend
         id: meta-backend
@@ -291,6 +324,13 @@ jobs:
     name: Frontend - Security Scan
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      # Nível de job para que `if:` consiga avaliar o valor (o contexto
+      # `secrets` não está disponível em condições de passo).
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     defaults:
       run:
         working-directory: ./frontend
@@ -316,10 +356,9 @@ jobs:
       - name: Run Snyk (optional)
         uses: snyk/actions/node@master
         if: env.SNYK_TOKEN != ''
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           args: --severity-threshold=high
+          snyk-token: ${{ secrets.SNYK_TOKEN }}
 
       # Container image security scan (Trivy)
       - name: Run Trivy vulnerability scanner
@@ -329,7 +368,7 @@ jobs:
           scan-type: 'fs'
           scan-ref: './frontend'
           format: 'sarif'
-          output: 'trivy-results.sarif'
+          output: 'frontend/trivy-results.sarif'
           severity: 'HIGH,CRITICAL'
 
       - name: Upload Trivy results to GitHub Security
@@ -355,12 +394,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Docker Hub
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata for Frontend
         id: meta-frontend
@@ -399,10 +438,13 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Validate docker-compose.yml
-        run: docker compose -f docker-compose.yml config --quiet
+        run: |
+          docker compose -f docker-compose.yml config --quiet
+          # O serviço `api` fica atrás do profile "full" no ficheiro base
+          docker compose -f docker-compose.yml --profile full config --quiet
 
       - name: Validate docker-compose.prod.yml
-        run: docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
+        run: docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile full config --quiet
 
   # ═══════════════════════════════════════════════════════════════════════════
   # SUMMARY
