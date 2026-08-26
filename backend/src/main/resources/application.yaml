@@ -1,0 +1,114 @@
+spring:
+  application:
+    name: norteshopmoz-api
+
+  servlet:
+    multipart:
+      # Limites para o upload de imagens de produto (admin).
+      max-file-size: 10MB
+      max-request-size: 20MB
+
+  datasource:
+    # Padrão alinhado com o docker-compose (host 5434). Em produção defina DB_URL.
+    url: ${DB_URL:jdbc:postgresql://localhost:5434/norteshopmoz}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: false
+        jdbc:
+          time_zone: UTC
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6381}
+      timeout: 2s
+
+  cache:
+    type: redis
+
+  jackson:
+    default-property-inclusion: non_null
+    time-zone: UTC
+
+server:
+  port: ${PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      percentiles:
+        http.server.requests: 0.5,0.95,0.99
+
+app:
+  jwt:
+    # Substituir em produção via variável de ambiente JWT_SECRET (mín. 32 caracteres)
+    secret: ${JWT_SECRET:norteshopmoz-dev-secret-change-me-in-production-2026}
+    expiration-seconds: ${JWT_EXPIRATION:604800}
+    refresh-expiration-seconds: ${JWT_REFRESH_EXPIRATION:2592000}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+  rate-limit:
+    enabled: true
+    endpoints:
+      auth:
+        max-requests: 10
+        window-seconds: 60
+        key-prefix: "ratelimit"
+      api:
+        max-requests: 100
+        window-seconds: 60
+        key-prefix: "ratelimit"
+      default:
+        max-requests: 60
+        window-seconds: 60
+        key-prefix: "ratelimit"
+  mail:
+    # Email transacional (Resend). Sem RESEND_API_KEY o envio é ignorado (dev).
+    # `from` deve usar um domínio verificado no Resend (teste: onboarding@resend.dev).
+    resend-api-key: ${RESEND_API_KEY:}
+    from: ${RESEND_FROM:onboarding@resend.dev}
+    # Base URL pública da loja — usada nos links dos emails (ex.: verificação).
+    base-url: ${APP_BASE_URL:http://localhost:3000}
+  social:
+    # Login social (Google/Facebook) — credenciais OAuth. Vazias → login social desativado
+    # (o frontend oculta os botões quando as variáveis NEXT_PUBLIC_* faltam).
+    google-client-id: ${GOOGLE_CLIENT_ID:}
+    facebook-app-id: ${FACEBOOK_APP_ID:}
+    facebook-app-secret: ${FACEBOOK_APP_SECRET:}
+  # Diretório onde ficam as imagens enviadas pelos administradores (fallback local;
+  # com Cloudinary configurada, as imagens vão para a nuvem e este diretório é ignorado).
+  upload-dir: ${UPLOAD_DIR:./uploads}
+  cloudinary:
+    # Credenciais da Cloudinary (armazenamento/CDN de imagens de produto).
+    # Vêm de variáveis de ambiente (CLOUDINARY_*) — sem valores por omissão.
+    cloud-name: ${CLOUDINARY_CLOUD_NAME:}
+    api-key: ${CLOUDINARY_API_KEY:}
+    api-secret: ${CLOUDINARY_API_SECRET:}
+  payments:
+    # Modo do gateway de pagamentos: `simulated` (padrão, sem cobrança real) ou
+    # `live` (exige implementação real de PaymentGateway com credenciais).
+    mode: ${PAYMENTS_MODE:simulated}
+
+logging:
+  level:
+    mz.norteshopmoz: INFO

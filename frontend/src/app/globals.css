@@ -1,0 +1,420 @@
+@import "tailwindcss";
+
+/* Ativa a variante `dark:` (aplicada quando <html> tem a classe .dark). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* ── Typography ─────────────────────────────────────────────── */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  /* ── NSM Brand palette — "Azul Norte" (deep royal blue) ─────── */
+  --color-primary-50: #eef4ff;
+  --color-primary-100: #dce7ff;
+  --color-primary-200: #c0d3ff;
+  --color-primary-300: #94b4ff;
+  --color-primary-400: #618bff;
+  --color-primary-500: #3b66f8;
+  --color-primary-600: #1f46e6;
+  --color-primary-700: #1b36c8;
+  --color-primary-800: #1c30a1;
+  --color-primary-900: #1c2e7f;
+  --color-primary-950: #151e4d;
+
+  /* Deep navy for footer / dark surfaces */
+  --color-navy-700: #1b2a55;
+  --color-navy-800: #141f42;
+  --color-navy-900: #0e1730;
+  --color-navy-950: #090f21;
+
+  /* ── Motion (light & performant) ────────────────────────────── */
+  --animate-fade-up: fade-up 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-fade-in: fade-in 0.4s ease both;
+  --animate-cart-pop: cart-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-slide-down: slide-down 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-soft-pulse: soft-pulse 2.4s ease-in-out infinite;
+  --animate-badge-spin: badge-spin 14s linear infinite;
+  --animate-float: float 5s ease-in-out infinite;
+  --animate-float-slow: float 7s ease-in-out infinite;
+  --animate-marquee: marquee 40s linear infinite;
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes cart-pop {
+    0% {
+      transform: scale(1);
+    }
+    35% {
+      transform: scale(1.28);
+    }
+    65% {
+      transform: scale(0.92);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  @keyframes slide-down {
+    from {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes soft-pulse {
+    0%,
+    100% {
+      box-shadow:
+        0 1px 2px rgb(15 23 42 / 0.06),
+        0 0 0 0 rgb(31 70 230 / 0.16);
+    }
+    50% {
+      box-shadow:
+        0 1px 2px rgb(15 23 42 / 0.06),
+        0 0 0 10px rgb(31 70 230 / 0);
+    }
+  }
+  @keyframes badge-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @keyframes float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-12px);
+    }
+  }
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-white text-slate-800 antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display text-slate-900;
+  }
+
+  ::selection {
+    @apply bg-primary-600 text-white;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-primary-600);
+    outline-offset: 2px;
+  }
+
+  /* Respect users who prefer reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Subtle card elevation — soft, elegant shadows */
+  .shadow-card {
+    box-shadow:
+      0 1px 2px rgb(15 23 42 / 0.05),
+      0 10px 24px -10px rgb(15 23 42 / 0.1);
+  }
+  .shadow-card-hover {
+    box-shadow:
+      0 2px 4px rgb(15 23 42 / 0.06),
+      0 16px 36px -12px rgb(31 70 230 / 0.16);
+  }
+
+  .container-nsm {
+    @apply mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8;
+  }
+}
+
+/* ── Modo escuro ───────────────────────────────────────────────
+   A classe .dark é aplicada no <html> pelo ThemeContext (com script
+   inline no <head> para evitar flash). As regras abaixo remapeiam as
+   utilidades claras para uma paleta escura (azul-marinho profundo),
+   cobrindo a app inteira sem reescrever cada componente. */
+
+html.dark {
+  color-scheme: dark;
+}
+
+/* Transição suave ao alternar o tema (removida automaticamente ~350ms) */
+html.theme-switching,
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition:
+    background-color 0.3s ease,
+    border-color 0.3s ease,
+    color 0.3s ease,
+    fill 0.3s ease,
+    box-shadow 0.3s ease !important;
+}
+
+html.dark body {
+  background-color: #0a101f;
+  color: #cbd5e1;
+}
+
+html.dark h1,
+html.dark h2,
+html.dark h3,
+html.dark h4 {
+  color: #f1f5f9;
+}
+
+/* Superfícies */
+html.dark .bg-white {
+  background-color: #111a2e;
+}
+html.dark .bg-white\/95 {
+  background-color: rgb(13 20 38 / 0.95);
+}
+html.dark .bg-white\/90 {
+  background-color: rgb(13 20 38 / 0.9);
+}
+html.dark .bg-white\/85 {
+  background-color: rgb(13 20 38 / 0.85);
+}
+html.dark .bg-white\/80 {
+  background-color: rgb(13 20 38 / 0.8);
+}
+html.dark .bg-slate-50 {
+  background-color: #16203a;
+}
+html.dark .bg-slate-50\/60 {
+  background-color: rgb(22 32 58 / 0.6);
+}
+html.dark .bg-slate-50\/70 {
+  background-color: rgb(22 32 58 / 0.7);
+}
+html.dark .bg-slate-100 {
+  background-color: #1b2740;
+}
+html.dark .bg-slate-200 {
+  background-color: #23304f;
+}
+html.dark .bg-slate-200\/80 {
+  background-color: rgb(35 48 79 / 0.8);
+}
+html.dark .bg-slate-300 {
+  background-color: #2f4064;
+}
+
+/* Bordas e separadores */
+html.dark .border-slate-100 {
+  border-color: #1c2947;
+}
+html.dark .border-slate-200 {
+  border-color: #243352;
+}
+html.dark .border-slate-300 {
+  border-color: #2f4064;
+}
+html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #1c2947;
+}
+
+/* Texto neutro */
+html.dark .text-slate-900 {
+  color: #f1f5f9;
+}
+html.dark .text-slate-800 {
+  color: #e2e8f0;
+}
+html.dark .text-slate-700 {
+  color: #cbd5e1;
+}
+html.dark .text-slate-600 {
+  color: #a8b6cf;
+}
+html.dark .text-slate-500 {
+  color: #8fa0bb;
+}
+html.dark .text-slate-400 {
+  color: #7c8db0;
+}
+html.dark .text-slate-300 {
+  color: #64748b;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #5d6c8f;
+}
+
+/* Fundos tingidos + texto emparelhado (badges, estados, destaques) */
+html.dark .bg-primary-50 {
+  background-color: #16224a;
+}
+html.dark .bg-primary-50\/50 {
+  background-color: rgb(22 34 74 / 0.5);
+}
+html.dark .bg-primary-50\/60 {
+  background-color: rgb(22 34 74 / 0.6);
+}
+html.dark .bg-primary-50\/70 {
+  background-color: rgb(22 34 74 / 0.7);
+}
+html.dark .bg-primary-100 {
+  background-color: #1c2b5c;
+}
+html.dark .bg-primary-200\/70 {
+  background-color: rgb(29 45 94 / 0.7);
+}
+html.dark .text-primary-500 {
+  color: #8fa6ff;
+}
+html.dark .text-primary-600 {
+  color: #7d9bff;
+}
+html.dark .text-primary-700 {
+  color: #9db4ff;
+}
+html.dark .text-primary-800 {
+  color: #c0d3ff;
+}
+
+html.dark .bg-emerald-50 {
+  background-color: #0b2a21;
+}
+html.dark .bg-emerald-100 {
+  background-color: #10382c;
+}
+html.dark .text-emerald-600 {
+  color: #34d399;
+}
+html.dark .text-emerald-700 {
+  color: #6ee7b7;
+}
+
+html.dark .bg-amber-50 {
+  background-color: #2a2110;
+}
+html.dark .text-amber-700 {
+  color: #fcd34d;
+}
+
+html.dark .bg-red-50 {
+  background-color: #2a1419;
+}
+html.dark .bg-red-50\/60 {
+  background-color: rgb(42 20 25 / 0.6);
+}
+html.dark .bg-red-100 {
+  background-color: #3a1a22;
+}
+html.dark .text-red-500 {
+  color: #f87171;
+}
+html.dark .text-red-600 {
+  color: #fca5a5;
+}
+html.dark .text-red-700 {
+  color: #fecaca;
+}
+
+html.dark .bg-sky-50 {
+  background-color: #0c2230;
+}
+html.dark .text-sky-200 {
+  color: #bae6fd;
+}
+html.dark .text-sky-600 {
+  color: #38bdf8;
+}
+html.dark .text-sky-700 {
+  color: #7dd3fc;
+}
+
+html.dark .bg-indigo-50 {
+  background-color: #191c3d;
+}
+html.dark .text-indigo-700 {
+  color: #a5b4fc;
+}
+
+html.dark .bg-violet-50 {
+  background-color: #231a3f;
+}
+html.dark .text-violet-700 {
+  color: #c4b5fd;
+}
+
+html.dark .bg-blue-50 {
+  background-color: #0e2433;
+}
+html.dark .text-blue-700 {
+  color: #93c5fd;
+}
+
+/* Elevação em modo escuro — sombras suaves para dar profundidade aos cartões */
+html.dark .shadow-card {
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.3),
+    0 10px 28px -10px rgb(0 0 0 / 0.5);
+}
+html.dark .shadow-card-hover {
+  box-shadow:
+    0 2px 6px rgb(0 0 0 / 0.3),
+    0 18px 44px -14px rgb(0 0 0 / 0.6);
+}

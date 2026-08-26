@@ -1,0 +1,226 @@
+# PostgreSQL Exporter Custom Queries for NorteShopMoz
+# Place at: monitoring/postgres-exporter/queries.yaml
+
+postgresql:
+  - query_name: "pg_stat_database"
+    query: |
+      SELECT
+        datname,
+        numbackends,
+        xact_commit,
+        xact_rollback,
+        blks_read,
+        blks_hit,
+        tup_returned,
+        tup_fetched,
+        tup_inserted,
+        tup_updated,
+        tup_deleted,
+        conflicts,
+        temp_files,
+        temp_bytes,
+        deadlocks,
+        blk_read_time,
+        blk_write_time
+      FROM pg_stat_database
+      WHERE datname = current_database()
+    metrics:
+      - datname:
+          usage: "LABEL"
+      - numbackends:
+          usage: "GAUGE"
+          description: "Number of backends connected"
+      - xact_commit:
+          usage: "COUNTER"
+          description: "Number of committed transactions"
+      - xact_rollback:
+          usage: "COUNTER"
+          description: "Number of rolled back transactions"
+      - blks_read:
+          usage: "COUNTER"
+          description: "Blocks read"
+      - blks_hit:
+          usage: "COUNTER"
+          description: "Blocks hit"
+      - tup_returned:
+          usage: "COUNTER"
+          description: "Rows returned"
+      - tup_fetched:
+          usage: "COUNTER"
+          description: "Rows fetched"
+      - tup_inserted:
+          usage: "COUNTER"
+          description: "Rows inserted"
+      - tup_updated:
+          usage: "COUNTER"
+          description: "Rows updated"
+      - tup_deleted:
+          usage: "COUNTER"
+          description: "Rows deleted"
+      - conflicts:
+          usage: "COUNTER"
+          description: "Conflicts"
+      - temp_files:
+          usage: "COUNTER"
+          description: "Temporary files created"
+      - temp_bytes:
+          usage: "COUNTER"
+          description: "Temporary bytes written"
+      - deadlocks:
+          usage: "COUNTER"
+          description: "Deadlocks detected"
+      - blk_read_time:
+          usage: "COUNTER"
+          description: "Block read time (ms)"
+      - blk_write_time:
+          usage: "COUNTER"
+          description: "Block write time (ms)"
+
+  - query_name: "pg_stat_user_tables"
+    query: |
+      SELECT
+        relname,
+        seq_scan,
+        seq_tup_read,
+        idx_scan,
+        idx_tup_fetch,
+        n_tup_ins,
+        n_tup_upd,
+        n_tup_del,
+        n_live_tup,
+        n_dead_tup,
+        vacuum_count,
+        autovacuum_count,
+        last_vacuum,
+        last_autovacuum,
+        last_analyze,
+        last_autoanalyze
+      FROM pg_stat_user_tables
+      WHERE schemaname = 'public'
+    metrics:
+      - relname:
+          usage: "LABEL"
+      - seq_scan:
+          usage: "COUNTER"
+          description: "Sequential scans"
+      - seq_tup_read:
+          usage: "COUNTER"
+          description: "Rows read by sequential scan"
+      - idx_scan:
+          usage: "COUNTER"
+          description: "Index scans"
+      - idx_tup_fetch:
+          usage: "COUNTER"
+          description: "Rows fetched by index scan"
+      - n_tup_ins:
+          usage: "COUNTER"
+          description: "Rows inserted"
+      - n_tup_upd:
+          usage: "COUNTER"
+          description: "Rows updated"
+      - n_tup_del:
+          usage: "COUNTER"
+          description: "Rows deleted"
+      - n_live_tup:
+          usage: "GAUGE"
+          description: "Live rows"
+      - n_dead_tup:
+          usage: "GAUGE"
+          description: "Dead rows"
+      - vacuum_count:
+          usage: "COUNTER"
+          description: "Manual vacuum count"
+      - autovacuum_count:
+          usage: "COUNTER"
+          description: "Autovacuum count"
+
+  - query_name: "pg_locks"
+    query: |
+      SELECT
+        mode,
+        locktype,
+        COUNT(*) as count
+      FROM pg_locks
+      WHERE pid <> pg_backend_pid()
+      GROUP BY mode, locktype
+    metrics:
+      - mode:
+          usage: "LABEL"
+      - locktype:
+          usage: "LABEL"
+      - count:
+          usage: "GAUGE"
+          description: "Number of locks"
+
+  - query_name: "pg_stat_activity"
+    query: |
+      SELECT
+        state,
+        COUNT(*) as count
+      FROM pg_stat_activity
+      WHERE pid <> pg_backend_pid()
+      GROUP BY state
+    metrics:
+      - state:
+          usage: "LABEL"
+      - count:
+          usage: "GAUGE"
+          description: "Connections by state"
+
+  - query_name: "norteshopmoz_business_metrics"
+    query: |
+      SELECT
+        'orders_total' as metric,
+        COUNT(*) as value
+      FROM orders
+      UNION ALL
+      SELECT
+        'orders_pending' as metric,
+        COUNT(*) as value
+      FROM orders WHERE status = 'PEDIDO_RECEBIDO'
+      UNION ALL
+      SELECT
+        'orders_paid' as metric,
+        COUNT(*) as value
+      FROM orders WHERE status = 'PAGAMENTO_CONFIRMADO'
+      UNION ALL
+      SELECT
+        'orders_shipped' as metric,
+        COUNT(*) as value
+      FROM orders WHERE status IN ('ENVIADO', 'EM_TRANSITO')
+      UNION ALL
+      SELECT
+        'orders_delivered' as metric,
+        COUNT(*) as value
+      FROM orders WHERE status = 'ENTREGUE'
+      UNION ALL
+      SELECT
+        'users_total' as metric,
+        COUNT(*) as value
+      FROM users
+      UNION ALL
+      SELECT
+        'users_verified' as metric,
+        COUNT(*) as value
+      FROM users WHERE email_verified = true
+      UNION ALL
+      SELECT
+        'products_total' as metric,
+        COUNT(*) as value
+      FROM products
+      UNION ALL
+      SELECT
+        'products_in_stock' as metric,
+        COUNT(*) as value
+      FROM products WHERE stock > 0
+      UNION ALL
+      SELECT
+        'reviews_total' as metric,
+        COUNT(*) as value
+      FROM reviews
+    metrics:
+      - metric:
+          usage: "LABEL"
+      - value:
+          usage: "GAUGE"
+          description: "Business metric value"

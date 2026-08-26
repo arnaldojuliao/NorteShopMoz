@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-check-suppression.2.0.xsd">
+    <!-- Example suppression - remove or modify as needed -->
+    <!--
+    <suppress>
+        <notes>Example: Spring Boot 3.x uses older Jackson version</notes>
+        <packageUrl>pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.0</packageUrl>
+        <cve>CVE-2020-28491</cve>
+    </suppress>
+    -->
+</suppressions>

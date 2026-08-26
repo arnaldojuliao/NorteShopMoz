@@ -1,0 +1,2474 @@
+{
+ "categories": [
+  {
+   "slug": "eletronicos",
+   "name": "Eletrónicos",
+   "emoji": "📺",
+   "image": "https://images.unsplash.com/photo-1498049794561-7780e7231661?auto=format&fit=crop&w=800&q=70",
+   "description": "TV, áudio, áudio portátil e muito mais."
+  },
+  {
+   "slug": "telemoveis",
+   "name": "Telemóveis",
+   "emoji": "📱",
+   "image": "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=800&q=70",
+   "description": "Smartphones e acessórios móveis."
+  },
+  {
+   "slug": "informatica",
+   "name": "Informática",
+   "emoji": "💻",
+   "image": "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=800&q=70",
+   "description": "Portáteis, periféricos e redes."
+  },
+  {
+   "slug": "casa",
+   "name": "Casa",
+   "emoji": "🏠",
+   "image": "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=800&q=70",
+   "description": "Mobiliário, cozinha e eletrodomésticos."
+  },
+  {
+   "slug": "moda",
+   "name": "Moda",
+   "emoji": "👕",
+   "image": "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=800&q=70",
+   "description": "Roupa, calçado e estilo."
+  },
+  {
+   "slug": "beleza",
+   "name": "Beleza",
+   "emoji": "💄",
+   "image": "https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=800&q=70",
+   "description": "Perfumes, cuidados e cosméticos."
+  },
+  {
+   "slug": "acessorios",
+   "name": "Acessórios",
+   "emoji": "⌚",
+   "image": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=70",
+   "description": "Relógios, óculos, malas e gadgets."
+  },
+  {
+   "slug": "desporto",
+   "name": "Desporto",
+   "emoji": "⚽",
+   "image": "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=800&q=70",
+   "description": "Fitness, treino e equipamento."
+  },
+  {
+   "slug": "automovel",
+   "name": "Automóvel",
+   "emoji": "🚗",
+   "image": "https://images.unsplash.com/photo-1489824904134-891ab64532f1?auto=format&fit=crop&w=800&q=70",
+   "description": "Acessórios e tecnologia para o carro."
+  },
+  {
+   "slug": "outros",
+   "name": "Outros",
+   "emoji": "🎁",
+   "image": "https://images.unsplash.com/photo-1513885535751-8b9238bd345a?auto=format&fit=crop&w=800&q=70",
+   "description": "Brinquedos, bebé, pets e presentes."
+  }
+ ],
+ "products": [
+  {
+   "id": "p-001",
+   "slug": "smartphone-nsm-x10-128gb",
+   "name": "Smartphone NSM X10 · 128 GB",
+   "brand": "NSM",
+   "category": "telemoveis",
+   "price": 15900,
+   "oldPrice": 18500,
+   "rating": 4.7,
+   "ratingCount": 342,
+   "sold": 1280,
+   "stock": 46,
+   "images": [
+    "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1598327105666-5b89351aff97?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1556656793-08538906a9f8?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Ecrã AMOLED de 6,5\", câmara tripla de 50 MP e bateria de 5.000 mAh com carregamento rápido.",
+   "description": [
+    "O NSM X10 é o smartphone perfeito para o dia a dia: ecrã AMOLED de 6,5\" com 90 Hz, processador octa-core rápido e 128 GB de armazenamento.",
+    "A câmara tripla de 50 MP captura fotos nítidas mesmo à noite, e a bateria de 5.000 mAh dura até dois dias de uso normal.",
+    "Dual SIM para usar dois números ao mesmo tempo — ideal para quem usa operadoras diferentes em Moçambique."
+   ],
+   "specs": [
+    {
+     "label": "Ecrã",
+     "value": "AMOLED 6,5\" · 90 Hz"
+    },
+    {
+     "label": "Armazenamento",
+     "value": "128 GB + 6 GB RAM"
+    },
+    {
+     "label": "Câmara",
+     "value": "Tripla 50 MP + 8 MP + 2 MP"
+    },
+    {
+     "label": "Bateria",
+     "value": "5.000 mAh · carga rápida 33W"
+    },
+    {
+     "label": "Sistema",
+     "value": "Android 14"
+    },
+    {
+     "label": "SIM",
+     "value": "Dual SIM + slot microSD"
+    }
+   ],
+   "badges": [
+    "OFERTA",
+    "MAIS VENDIDO"
+   ],
+   "bestseller": true,
+   "dealOfDay": true,
+   "variants": [
+    {
+     "type": "Cor",
+     "options": [
+      {
+       "name": "Azul Meia-Noite",
+       "hex": "#1e2a4a"
+      },
+      {
+       "name": "Preto",
+       "hex": "#111827"
+      },
+      {
+       "name": "Branco",
+       "hex": "#f8fafc"
+      }
+     ]
+    }
+   ],
+   "deliveryDays": [
+    2,
+    5
+   ],
+   "freeShipping": true,
+   "tags": [
+    "smartphone",
+    "android",
+    "dual sim",
+    "128gb"
+   ]
+  },
+  {
+   "id": "p-002",
+   "slug": "smartphone-pontotech-a20",
+   "name": "Smartphone PontoTech A20 · 64 GB",
+   "brand": "PontoTech",
+   "category": "telemoveis",
+   "price": 9850,
+   "rating": 4.5,
+   "ratingCount": 218,
+   "sold": 940,
+   "stock": 78,
+   "images": [
+    "https://images.unsplash.com/photo-1598327105666-5b89351aff97?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Ecrã HD+ de 6,3\", câmara dupla de 32 MP e 64 GB — leve, rápido e acessível.",
+   "description": [
+    "O PontoTech A20 combina desempenho e preço acessível para quem precisa de um telemóvel confiável no dia a dia.",
+    "Ecrã HD+ de 6,3\" com brilho confortável, câmara dupla de 32 MP e bateria de 4.500 mAh.",
+    "Inclui capa protetora e película de ecrã na caixa."
+   ],
+   "specs": [
+    {
+     "label": "Ecrã",
+     "value": "HD+ 6,3\""
+    },
+    {
+     "label": "Armazenamento",
+     "value": "64 GB + 4 GB RAM"
+    },
+    {
+     "label": "Câmara",
+     "value": "Dupla 32 MP + 5 MP"
+    },
+    {
+     "label": "Bateria",
+     "value": "4.500 mAh"
+    },
+    {
+     "label": "SIM",
+     "value": "Dual SIM"
+    }
+   ],
+   "badges": [
+    "MAIS VENDIDO"
+   ],
+   "featured": true,
+   "bestseller": true,
+   "deliveryDays": [
+    2,
+    5
+   ],
+   "tags": [
+    "smartphone",
+    "android",
+    "económico"
+   ]
+  },
+  {
+   "id": "p-003",
+   "slug": "power-bank-20000mah",
+   "name": "Power Bank Rápido 20.000 mAh",
+   "brand": "VoltGo",
+   "category": "telemoveis",
+   "price": 1150,
+   "oldPrice": 1450,
+   "rating": 4.6,
+   "ratingCount": 156,
+   "sold": 610,
+   "stock": 120,
+   "images": [
+    "https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1609592806590-c4fb17ea506e?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Carregue o telemóvel até 4 vezes. Duas saídas USB com carga rápida 22,5W.",
+   "description": [
+    "Nunca fique sem bateria: 20.000 mAh carregam o seu smartphone até 4 vezes.",
+    "Duas portas USB e uma USB-C com carga rápida de 22,5W para vários dispositivos ao mesmo tempo.",
+    "Design compacto e indicador LED de bateria."
+   ],
+   "specs": [
+    {
+     "label": "Capacidade",
+     "value": "20.000 mAh"
+    },
+    {
+     "label": "Saídas",
+     "value": "2× USB-A + 1× USB-C"
+    },
+    {
+     "label": "Carga rápida",
+     "value": "22,5W"
+    },
+    {
+     "label": "Peso",
+     "value": "380 g"
+    }
+   ],
+   "badges": [
+    "NOVO"
+   ],
+   "isNew": true,
+   "deliveryDays": [
+    3,
+    6
+   ],
+   "tags": [
+    "bateria",
+    "carregador",
+    "portátil"
+   ]
+  },
+  {
+   "id": "p-004",
+   "slug": "smartwatch-pulsefit-pro",
+   "name": "Smartwatch PulseFit Pro",
+   "brand": "PulseFit",
+   "category": "telemoveis",
+   "price": 4200,
+   "oldPrice": 5100,
+   "rating": 4.4,
+   "ratingCount": 97,
+   "sold": 340,
+   "stock": 52,
+   "images": [
+    "https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Chamadas Bluetooth, monitor de batimentos, sono e 100+ modos desportivos.",
+   "description": [
+    "O PulseFit Pro acompanha a sua saúde: batimentos cardíacos, oxigenação, sono e stress.",
+    "Receba chamadas e notificações diretamente no pulso com Bluetooth 5.3.",
+    "Resistente à água (IP68) e bateria até 10 dias."
+   ],
+   "specs": [
+    {
+     "label": "Ecrã",
+     "value": "AMOLED 1,43\""
+    },
+    {
+     "label": "Bateria",
+     "value": "Até 10 dias"
+    },
+    {
+     "label": "Resistência",
+     "value": "IP68"
+    },
+    {
+     "label": "Compatibilidade",
+     "value": "Android e iOS"
+    }
+   ],
+   "badges": [
+    "OFERTA"
+   ],
+   "deliveryDays": [
+    3,
+    7
+   ],
+   "tags": [
+    "smartwatch",
+    "fitness",
+    "saúde"
+   ]
+  },
+  {
+   "id": "p-005",
+   "slug": "tv-led-43-smart",
+   "name": "TV LED 43\" Smart Full HD",
+   "brand": "NovaHome",
+   "category": "eletronicos",
+   "price": 24500,
+   "oldPrice": 28900,
+   "rating": 4.6,
+   "ratingCount": 189,
+   "sold": 430,
+   "stock": 24,
+   "images": [
+    "https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1593784991095-a205069470b6?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Smart TV 43\" com Netflix, YouTube e muito mais. Controlo por voz incluído.",
+   "description": [
+    "Assista às suas séries e novelas favoritas numa TV Smart Full HD de 43\".",
+    "Sistema com Netflix, YouTube e outras apps pré-instaladas, além de comando com controlo por voz.",
+    "Duas portas HDMI, Wi-Fi integrado e som Dolby Audio."
+   ],
+   "specs": [
+    {
+     "label": "Ecrã",
+     "value": "43\" LED Full HD"
+    },
+    {
+     "label": "Smart",
+     "value": "Wi-Fi · apps integradas"
+    },
+    {
+     "label": "Entradas",
+     "value": "2× HDMI · 2× USB"
+    },
+    {
+     "label": "Áudio",
+     "value": "Dolby Audio 20W"
+    }
+   ],
+   "badges": [
+    "MAIS VENDIDO"
+   ],
+   "bestseller": true,
+   "deliveryDays": [
+    3,
+    7
+   ],
+   "tags": [
+    "tv",
+    "smart",
+    "entretenimento"
+   ]
+  },
+  {
+   "id": "p-006",
+   "slug": "coluna-bluetooth-boom",
+   "name": "Coluna Bluetooth Boom 360°",
+   "brand": "BoomBox",
+   "category": "eletronicos",
+   "price": 2400,
+   "oldPrice": 3200,
+   "rating": 4.8,
+   "ratingCount": 421,
+   "sold": 2150,
+   "stock": 88,
+   "images": [
+    "https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1589003077984-894e133dabab?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Som 360° potente, graves profundos e 12 horas de bateria. À prova de água.",
+   "description": [
+    "Leve a festa para todo o lado com som 360° e graves profundos.",
+    "Bluetooth 5.0 com alcance de 15 metros, resistente a água (IPX6) e bateria para 12 horas.",
+    "Perfeita para praia, churrasco e encontros com amigos."
+   ],
+   "specs": [
+    {
+     "label": "Potência",
+     "value": "30W RMS"
+    },
+    {
+     "label": "Bateria",
+     "value": "12 horas"
+    },
+    {
+     "label": "Bluetooth",
+     "value": "5.0 · 15 m"
+    },
+    {
+     "label": "Resistência",
+     "value": "IPX6"
+    }
+   ],
+   "badges": [
+    "OFERTA"
+   ],
+   "dealOfDay": true,
+   "deliveryDays": [
+    2,
+    5
+   ],
+   "tags": [
+    "áudio",
+    "bluetooth",
+    "festa"
+   ]
+  },
+  {
+   "id": "p-007",
+   "slug": "auscultadores-bluetooth-anc",
+   "name": "Auscultadores Bluetooth ANC",
+   "brand": "SoundMax",
+   "category": "eletronicos",
+   "price": 3450,
+   "oldPrice": 4300,
+   "rating": 4.7,
+   "ratingCount": 264,
+   "sold": 870,
+   "stock": 64,
+   "images": [
+    "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1546435770-a3e426bf472b?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Cancelamento ativo de ruído, 30h de bateria e conforto premium.",
+   "description": [
+    "Elimine o ruído do autocarro, machimbombo ou escritório com o cancelamento ativo de ruído.",
+    "30 horas de reprodução com ANC ligado e carregamento rápido via USB-C.",
+    "Almofadas macias de memória para conforto durante todo o dia."
+   ],
+   "specs": [
+    {
+     "label": "ANC",
+     "value": "Cancelamento ativo -35dB"
+    },
+    {
+     "label": "Bateria",
+     "value": "30 horas"
+    },
+    {
+     "label": "Bluetooth",
+     "value": "5.3 · multiponto"
+    },
+    {
+     "label": "Peso",
+     "value": "245 g"
+    }
+   ],
+   "badges": [
+    "MAIS VENDIDO"
+   ],
+   "featured": true,
+   "bestseller": true,
+   "deliveryDays": [
+    2,
+    5
+   ],
+   "tags": [
+    "áudio",
+    "anc",
+    "sem fios"
+   ]
+  },
+  {
+   "id": "p-008",
+   "slug": "camara-acao-4k",
+   "name": "Câmara de Ação 4K Ultra HD",
+   "brand": "AeroPro",
+   "category": "eletronicos",
+   "price": 7800,
+   "rating": 4.5,
+   "ratingCount": 76,
+   "sold": 210,
+   "stock": 33,
+   "images": [
+    "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1512790182412-b19e6d62bc39?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Grava em 4K a 60fps, resistente à água e com estabilização de imagem.",
+   "description": [
+    "Capture aventuras em 4K Ultra HD com estabilização eletrónica de imagem.",
+    "Resistente à água até 10 metros sem caixa, ecrã tátil traseiro e controlo por voz.",
+    "Inclui suportes para bicicleta, capacete e selfie stick."
+   ],
+   "specs": [
+    {
+     "label": "Resolução",
+     "value": "4K @ 60fps"
+    },
+    {
+     "label": "Resistência",
+     "value": "À prova de água 10 m"
+    },
+    {
+     "label": "Ecrã",
+     "value": "Tátil 2,4\""
+    },
+    {
+     "label": "Bateria",
+     "value": "2× 1.350 mAh"
+    }
+   ],
+   "badges": [
+    "NOVO"
+   ],
+   "isNew": true,
+   "deliveryDays": [
+    4,
+    8
+   ],
+   "tags": [
+    "câmara",
+    "4k",
+    "ação"
+   ]
+  },
+  {
+   "id": "p-009",
+   "slug": "drone-hd-4k",
+   "name": "Drone com Câmara HD 4K",
+   "brand": "AeroPro",
+   "category": "eletronicos",
+   "price": 18900,
+   "oldPrice": 21500,
+   "rating": 4.3,
+   "ratingCount": 58,
+   "sold": 95,
+   "stock": 15,
+   "images": [
+    "https://images.unsplash.com/photo-1473968512647-3e447244af8f?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1527977966376-1c8408f9f108?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Drone dobrável com câmara 4K, GPS e modo de regresso automático.",
+   "description": [
+    "Voe e filme paisagens de Moçambique em 4K com estabilização de 3 eixos.",
+    "GPS com regresso automático à origem, modo de seguimento e 25 minutos de voo.",
+    "Dobrável e compacto — cabe numa mochila."
+   ],
+   "specs": [
+    {
+     "label": "Câmara",
+     "value": "4K · gimbal 3 eixos"
+    },
+    {
+     "label": "Autonomia",
+     "value": "25 min de voo"
+    },
+    {
+     "label": "Alcance",
+     "value": "1 km"
+    },
+    {
+     "label": "GPS",
+     "value": "Regresso automático"
+    }
+   ],
+   "badges": [
+    "OFERTA"
+   ],
+   "deliveryDays": [
+    5,
+    10
+   ],
+   "tags": [
+    "drone",
+    "4k",
+    "gps"
+   ]
+  },
+  {
+   "id": "p-010",
+   "slug": "auscultadores-gaming",
+   "name": "Auscultadores Gaming com Microfone",
+   "brand": "SoundMax",
+   "category": "eletronicos",
+   "price": 1950,
+   "rating": 4.4,
+   "ratingCount": 143,
+   "sold": 520,
+   "stock": 71,
+   "images": [
+    "https://images.unsplash.com/photo-1599669454699-248893623440?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1593305841991-05c297ba4575?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Som surround 7.1, microfone com cancelamento de ruído e RGB.",
+   "description": [
+    "Som surround virtual 7.1 para ouvir cada passo dos seus adversários.",
+    "Microfone flexível com cancelamento de ruído e almofadas de conforto para longas sessões.",
+    "Compatível com PC, consolas e telemóvel."
+   ],
+   "specs": [
+    {
+     "label": "Som",
+     "value": "Surround 7.1"
+    },
+    {
+     "label": "Microfone",
+     "value": "Cancelamento de ruído"
+    },
+    {
+     "label": "Ligação",
+     "value": "USB + 3,5mm"
+    }
+   ],
+   "badges": [
+    "NOVO"
+   ],
+   "isNew": true,
+   "deliveryDays": [
+    3,
+    6
+   ],
+   "tags": [
+    "gaming",
+    "áudio",
+    "pc"
+   ]
+  },
+  {
+   "id": "p-011",
+   "slug": "mini-projetor-hd",
+   "name": "Mini Projetor HD 1080p",
+   "brand": "NovaHome",
+   "category": "eletronicos",
+   "price": 9400,
+   "rating": 4.2,
+   "ratingCount": 47,
+   "sold": 88,
+   "stock": 19,
+   "images": [
+    "https://images.unsplash.com/photo-1522869635100-9f4c5e86aa37?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1601944177325-f8867652837f?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Cinema em casa: projeta até 120\" com ligação Wi-Fi, HDMI e USB.",
+   "description": [
+    "Transforme qualquer parede em cinema com projeção até 120 polegadas em Full HD.",
+    "Ligação sem fios para o telemóvel, além de HDMI e USB.",
+    "Ideal para festas, futebol e filmes em família."
+   ],
+   "specs": [
+    {
+     "label": "Resolução",
+     "value": "HD 1080p"
+    },
+    {
+     "label": "Tamanho",
+     "value": "Até 120\""
+    },
+    {
+     "label": "Ligações",
+     "value": "Wi-Fi · HDMI · USB · AV"
+    },
+    {
+     "label": "Lâmpada",
+     "value": "30.000 horas"
+    }
+   ],
+   "badges": [],
+   "featured": true,
+   "deliveryDays": [
+    4,
+    8
+   ],
+   "tags": [
+    "projetor",
+    "cinema",
+    "multimédia"
+   ]
+  },
+  {
+   "id": "p-012",
+   "slug": "portatil-15-6-core-i5",
+   "name": "Portátil 15,6\" Core i5 · 8GB/256GB",
+   "brand": "TechNova",
+   "category": "informatica",
+   "price": 42500,
+   "oldPrice": 48900,
+   "rating": 4.7,
+   "ratingCount": 132,
+   "sold": 310,
+   "stock": 18,
+   "images": [
+    "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Core i5 de 12.ª geração, 8 GB RAM e SSD de 256 GB. Leve, rápido e confiável.",
+   "description": [
+    "Desempenho sólido para trabalho, estudos e entretenimento: Core i5 de 12.ª geração e 8 GB de RAM.",
+    "SSD de 256 GB arranca o Windows em segundos, e o ecrã Full HD de 15,6\" é perfeito para o dia a dia.",
+    "Bateria para até 8 horas e apenas 1,7 kg."
+   ],
+   "specs": [
+    {
+     "label": "Processador",
+     "value": "Intel Core i5 (12.ª ger.)"
+    },
+    {
+     "label": "Memória",
+     "value": "8 GB RAM · SSD 256 GB"
+    },
+    {
+     "label": "Ecrã",
+     "value": "15,6\" Full HD IPS"
+    },
+    {
+     "label": "Bateria",
+     "value": "Até 8 horas"
+    },
+    {
+     "label": "Sistema",
+     "value": "Windows 11"
+    }
+   ],
+   "badges": [
+    "OFERTA",
+    "MAIS VENDIDO"
+   ],
+   "featured": true,
+   "bestseller": true,
+   "deliveryDays": [
+    3,
+    7
+   ],
+   "freeShipping": true,
+   "tags": [
+    "portátil",
+    "laptop",
+    "trabalho"
+   ]
+  },
+  {
+   "id": "p-013",
+   "slug": "teclado-mecanico-rgb",
+   "name": "Teclado Mecânico RGB",
+   "brand": "GamerX",
+   "category": "informatica",
+   "price": 2750,
+   "oldPrice": 3400,
+   "rating": 4.6,
+   "ratingCount": 112,
+   "sold": 430,
+   "stock": 57,
+   "images": [
+    "https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1541140532154-b024d705b90a?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Switches mecânicos azuis, retroiluminação RGB e estrutura em alumínio.",
+   "description": [
+    "Digitação precisa e tátil com switches mecânicos azuis.",
+    "Retroiluminação RGB com 16,8 milhões de cores e teclas programáveis.",
+    "Estrutura em alumínio resistente e layout completo com teclado numérico."
+   ],
+   "specs": [
+    {
+     "label": "Switch",
+     "value": "Mecânico azul"
+    },
+    {
+     "label": "Iluminação",
+     "value": "RGB 16,8M cores"
+    },
+    {
+     "label": "Ligação",
+     "value": "USB-C removível"
+    }
+   ],
+   "badges": [
+    "NOVO"
+   ],
+   "isNew": true,
+   "deliveryDays": [
+    3,
+    6
+   ],
+   "tags": [
+    "teclado",
+    "gaming",
+    "mecânico"
+   ]
+  },
+  {
+   "id": "p-014",
+   "slug": "rato-sem-fios",
+   "name": "Rato Sem Fios Silencioso",
+   "brand": "TechNova",
+   "category": "informatica",
+   "price": 850,
+   "oldPrice": 1100,
+   "rating": 4.3,
+   "ratingCount": 208,
+   "sold": 960,
+   "stock": 140,
+   "images": [
+    "https://images.unsplash.com/photo-1527814050087-3793815479db?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Clics silenciosos, 2.400 DPI e bateria de 12 meses. Perfeito para o escritório.",
+   "description": [
+    "Trabalhe sem incomodar ninguém com clics silenciosos.",
+    "Sensor de 2.400 DPI, conetor USB que funciona como recetor e bateria para 12 meses.",
+    "Compatível com Windows, macOS e Linux."
+   ],
+   "specs": [
+    {
+     "label": "DPI",
+     "value": "2.400 ajustável"
+    },
+    {
+     "label": "Bateria",
+     "value": "12 meses (1× AA)"
+    },
+    {
+     "label": "Ligação",
+     "value": "2.4 GHz wireless"
+    }
+   ],
+   "badges": [
+    "OFERTA"
+   ],
+   "deliveryDays": [
+    2,
+    5
+   ],
+   "tags": [
+    "rato",
+    "wireless",
+    "escritório"
+   ]
+  },
+  {
+   "id": "p-015",
+   "slug": "monitor-27-qhd",
+   "name": "Monitor 27\" QHD 144Hz",
+   "brand": "TechNova",
+   "category": "informatica",
+   "price": 16800,
+   "oldPrice": 19500,
+   "rating": 4.5,
+   "ratingCount": 64,
+   "sold": 120,
+   "stock": 21,
+   "images": [
+    "https://images.unsplash.com/photo-1547082299-de196ea013d6?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Painel IPS QHD com 144 Hz, 1ms de resposta e HDR — ideal para trabalho e gaming.",
+   "description": [
+    "Nitidez incrível com resolução QHD (2560×1440) e painel IPS com cores precisas.",
+    "144 Hz e 1ms de resposta para jogos fluidos, com suporte HDR.",
+    "Ajustável em altura, inclinação e rotação."
+   ],
+   "specs": [
+    {
+     "label": "Painel",
+     "value": "IPS QHD 27\""
+    },
+    {
+     "label": "Taxa",
+     "value": "144 Hz · 1ms"
+    },
+    {
+     "label": "Cores",
+     "value": "99% sRGB · HDR10"
+    },
+    {
+     "label": "Entradas",
+     "value": "HDMI 2.0 · DP 1.4"
+    }
+   ],
+   "badges": [],
+   "featured": true,
+   "deliveryDays": [
+    4,
+    8
+   ],
+   "tags": [
+    "monitor",
+    "gaming",
+    "qhd"
+   ]
+  },
+  {
+   "id": "p-016",
+   "slug": "tablet-10-4-128gb",
+   "name": "Tablet 10,4\" 128 GB",
+   "brand": "TechNova",
+   "category": "informatica",
+   "price": 12500,
+   "rating": 4.4,
+   "ratingCount": 88,
+   "sold": 240,
+   "stock": 37,
+   "images": [
+    "https://images.unsplash.com/photo-1561154464-82e9adf32764?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1585790050230-5dd28404ccb9?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Ecrã 2K, 128 GB e bateria para 10 horas — estudo e entretenimento.",
+   "description": [
+    "Ecrã 2K de 10,4\" com cores vivas, ideal para ler, estudar e ver filmes.",
+    "128 GB de armazenamento, câmara de 8 MP e bateria para até 10 horas.",
+    "Leve (450 g) e compatível com caneta opcional."
+   ],
+   "specs": [
+    {
+     "label": "Ecrã",
+     "value": "10,4\" 2K"
+    },
+    {
+     "label": "Armazenamento",
+     "value": "128 GB + 4 GB RAM"
+    },
+    {
+     "label": "Bateria",
+     "value": "10 horas"
+    },
+    {
+     "label": "Peso",
+     "value": "450 g"
+    }
+   ],
+   "badges": [
+    "NOVO"
+   ],
+   "isNew": true,
+   "deliveryDays": [
+    4,
+    8
+   ],
+   "tags": [
+    "tablet",
+    "estudo",
+    "entretenimento"
+   ]
+  },
+  {
+   "id": "p-017",
+   "slug": "sofa-3-lugares",
+   "name": "Sofá 3 Lugares Premium",
+   "brand": "NovaHome",
+   "category": "casa",
+   "price": 32000,
+   "oldPrice": 39900,
+   "rating": 4.6,
+   "ratingCount": 74,
+   "sold": 58,
+   "stock": 8,
+   "images": [
+    "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1550226891-ef816aed4a98?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Tecido resistente, estrutura em madeira maciça e assento confortável.",
+   "description": [
+    "O sofá perfeito para a sala de estar: tecido de alta resistência e estrutura em madeira maciça.",
+    "Assento com espuma de alta densidade que mantém a forma por anos.",
+    "Montagem simples incluída no serviço de entrega."
+   ],
+   "specs": [
+    {
+     "label": "Lugares",
+     "value": "3"
+    },
+    {
+     "label": "Estrutura",
+     "value": "Madeira maciça"
+    },
+    {
+     "label": "Tecido",
+     "value": "Alta resistência"
+    },
+    {
+     "label": "Dimensões",
+     "value": "210 × 85 × 88 cm"
+    }
+   ],
+   "badges": [
+    "MAIS VENDIDO"
+   ],
+   "bestseller": true,
+   "deliveryDays": [
+    5,
+    10
+   ],
+   "tags": [
+    "sofa",
+    "sala",
+    "mobiliário"
+   ]
+  },
+  {
+   "id": "p-018",
+   "slug": "cadeira-escritorio",
+   "name": "Cadeira de Escritório Ergonómica",
+   "brand": "WorkEase",
+   "category": "casa",
+   "price": 9900,
+   "oldPrice": 12500,
+   "rating": 4.5,
+   "ratingCount": 93,
+   "sold": 175,
+   "stock": 26,
+   "images": [
+    "https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1598300042247-d088f8ab3a91?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Suporte lombar ajustável, braços 3D e apoio de cabeça. Trabalhe com conforto.",
+   "description": [
+    "Passe horas a trabalhar sem dores nas costas com suporte lombar ajustável.",
+    "Braços 3D, apoio de cabeça e assento em rede respirável.",
+    "Suporta até 120 kg e rotação de 360°."
+   ],
+   "specs": [
+    {
+     "label": "Capacidade",
+     "value": "Até 120 kg"
+    },
+    {
+     "label": "Ajustes",
+     "value": "Lombar · braços 3D · altura"
+    },
+    {
+     "label": "Material",
+     "value": "Rede respirável"
+    }
+   ],
+   "badges": [
+    "OFERTA"
+   ],
+   "deliveryDays": [
+    4,
+    8
+   ],
+   "tags": [
+    "cadeira",
+    "escritório",
+    "ergonómica"
+   ]
+  },
+  {
+   "id": "p-019",
+   "slug": "candeiro-mesa-led",
+   "name": "Candeiro de Mesa LED Moderno",
+   "brand": "NovaHome",
+   "category": "casa",
+   "price": 1650,
+   "rating": 4.7,
+   "ratingCount": 121,
+   "sold": 380,
+   "stock": 64,
+   "images": [
+    "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "3 temperaturas de luz, braço articulado e porta USB para carregar o telemóvel.",
+   "description": [
+    "Ilumine a secretária com 3 temperaturas de luz ajustáveis por toque.",
+    "Braço articulado de metal, base estável e porta USB integrada.",
+    "Luz LED de longa duração, sem aquecimento."
+   ],
+   "specs": [
+    {
+     "label": "Luz",
+     "value": "LED 3 tons"
+    },
+    {
+     "label": "Porta",
+     "value": "USB 5V/1A"
+    },
+    {
+     "label": "Braço",
+     "value": "Metálico articulado"
+    }
+   ],
+   "badges": [
+    "NOVO"
+   ],
+   "isNew": true,
+   "deliveryDays": [
+    3,
+    6
+   ],
+   "tags": [
+    "luminária",
+    "escritório",
+    "led"
+   ]
+  },
+  {
+   "id": "p-020",
+   "slug": "frigorifico-285l",
+   "name": "Frigorífico 285L Inverter",
+   "brand": "NovaHome",
+   "category": "casa",
+   "price": 38500,
+   "oldPrice": 44000,
+   "rating": 4.7,
+   "ratingCount": 102,
+   "sold": 145,
+   "stock": 12,
+   "images": [
+    "https://images.unsplash.com/photo-1584568694244-14fbdf83bd30?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1574269909862-7e1d70bb8078?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Compressor Inverter económico, congelador grande e gaveta fresca.",
+   "description": [
+    "Mantenha os alimentos frescos com o compressor Inverter que poupa até 40% de energia.",
+    "285 litros com congelador espaçoso e gaveta para frutas e legumes.",
+    "Baixo ruído (38 dB) e garantia de 2 anos."
+   ],
+   "specs": [
+    {
+     "label": "Capacidade",
+     "value": "285 L"
+    },
+    {
+     "label": "Tecnologia",
+     "value": "Inverter"
+    },
+    {
+     "label": "Ruído",
+     "value": "38 dB"
+    },
+    {
+     "label": "Classe",
+     "value": "A+ (eficiência)"
+    }
+   ],
+   "badges": [
+    "OFERTA",
+    "MAIS VENDIDO"
+   ],
+   "bestseller": true,
+   "dealOfDay": true,
+   "deliveryDays": [
+    4,
+    9
+   ],
+   "freeShipping": true,
+   "tags": [
+    "frigorífico",
+    "cozinha",
+    "eletrodoméstico"
+   ]
+  },
+  {
+   "id": "p-021",
+   "slug": "cafeteira-eletrica",
+   "name": "Cafeteira Elétrica 1,2L",
+   "brand": "CasaNova",
+   "category": "casa",
+   "price": 4950,
+   "oldPrice": 6200,
+   "rating": 4.6,
+   "ratingCount": 88,
+   "sold": 260,
+   "stock": 41,
+   "images": [
+    "https://images.unsplash.com/photo-1517668808822-9ebb02f2a0e6?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Cafeteira de filtro com jarra de vidro, placa quente e função anti-gotas.",
+   "description": [
+    "Prepare até 12 chávenas de café fresco de uma só vez.",
+    "Placa quente mantém o café na temperatura ideal e a função anti-gotas evita pingos.",
+    "Filtro permanente reutilizável incluído."
+   ],
+   "specs": [
+    {
+     "label": "Capacidade",
+     "value": "1,2 L (12 chávenas)"
+    },
+    {
+     "label": "Potência",
+     "value": "900W"
+    },
+    {
+     "label": "Jarra",
+     "value": "Vidro com placa quente"
+    }
+   ],
+   "badges": [
+    "OFERTA"
+   ],
+   "deliveryDays": [
+    3,
+    6
+   ],
+   "tags": [
+    "cafeteira",
+    "café",
+    "cozinha"
+   ]
+  },
+  {
+   "id": "p-022",
+   "slug": "jogo-panelas",
+   "name": "Jogo de Panelas Antiaderentes 5 Peças",
+   "brand": "CasaNova",
+   "category": "casa",
+   "price": 2850,
+   "oldPrice": 3500,
+   "rating": 4.5,
+   "ratingCount": 167,
+   "sold": 540,
+   "stock": 82,
+   "images": [
+    "https://images.unsplash.com/photo-1556911220-bff31c812dba?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1584990347449-a2a4d47e055b?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Revestimento antiaderente 3 camadas, cabos frios e compatível com indução.",
+   "description": [
+    "Cozinhe com menos óleo graças ao revestimento antiaderente de 3 camadas.",
+    "Cabos que não aquecem, tampa de vidro temperado e compatibilidade com indução.",
+    "Set completo: 1 panela grande, 2 médias, 1 pequena e 1 frigideira."
+   ],
+   "specs": [
+    {
+     "label": "Peças",
+     "value": "5"
+    },
+    {
+     "label": "Revestimento",
+     "value": "Antiaderente 3 camadas"
+    },
+    {
+     "label": "Compatível",
+     "value": "Indução · gás · elétrico"
+    }
+   ],
+   "badges": [],
+   "featured": true,
+   "deliveryDays": [
+    3,
+    6
+   ],
+   "tags": [
+    "panelas",
+    "cozinha",
+    "antiaderente"
+   ]
+  },
+  {
+   "id": "p-023",
+   "slug": "tapete-sala",
+   "name": "Tapete para Sala 160×230",
+   "brand": "NovaHome",
+   "category": "casa",
+   "price": 3200,
+   "rating": 4.3,
+   "ratingCount": 45,
+   "sold": 92,
+   "stock": 30,
+   "images": [
+    "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1567016432779-094069958ea5?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Felpa macia, base antiderrapante e lavável à máquina.",
+   "description": [
+    "Dê mais conforto e estilo à sala com este tapete de felpa macia.",
+    "Base antiderrapante segura e tecido lavável à máquina.",
+    "Dimensões 160×230 cm — perfeito para salas médias."
+   ],
+   "specs": [
+    {
+     "label": "Dimensões",
+     "value": "160 × 230 cm"
+    },
+    {
+     "label": "Material",
+     "value": "Poliéster felpudo"
+    },
+    {
+     "label": "Limpeza",
+     "value": "Lavável à máquina"
+    }
+   ],
+   "badges": [],
+   "deliveryDays": [
+    4,
+    8
+   ],
+   "tags": [
+    "tapete",
+    "sala",
+    "decor"
+   ]
+  },
+  {
+   "id": "p-024",
+   "slug": "tenis-desporto",
+   "name": "Ténis de Desporto Unissexo",
+   "brand": "UrbanFit",
+   "category": "moda",
+   "price": 2100,
+   "oldPrice": 2800,
+   "rating": 4.6,
+   "ratingCount": 312,
+   "sold": 1430,
+   "stock": 95,
+   "images": [
+    "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1560769629-975ec94e6a86?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Leves, respiráveis e com excelente aderência. Para treino ou uso diário.",
+   "description": [
+    "Ténis leves com malha respirável e sola de borracha com excelente aderência.",
+    "Amortecimento confortável para treino, caminhada ou uso diário.",
+    "Disponíveis em vários tamanhos."
+   ],
+   "specs": [
+    {
+     "label": "Material",
+     "value": "Malha respirável + borracha"
+    },
+    {
+     "label": "Tamanhos",
+     "value": "38–45"
+    },
+    {
+     "label": "Uso",
+     "value": "Treino · casual"
+    }
+   ],
+   "badges": [
+    "MAIS VENDIDO"
+   ],
+   "featured": true,
+   "bestseller": true,
+   "variants": [
+    {
+     "type": "Tamanho",
+     "options": [
+      {
+       "name": "38"
+      },
+      {
+       "name": "39"
+      },
+      {
+       "name": "40"
+      },
+      {
+       "name": "41"
+      },
+      {
+       "name": "42"
+      },
+      {
+       "name": "43"
+      },
+      {
+       "name": "44"
+      },
+      {
+       "name": "45"
+      }
+     ]
+    }
+   ],
+   "deliveryDays": [
+    3,
+    6
+   ],
+   "tags": [
+    "ténis",
+    "calçado",
+    "desporto"
+   ]
+  },
+  {
+   "id": "p-025",
+   "slug": "camisola-basica",
+   "name": "Camisola Básica Premium",
+   "brand": "UrbanFit",
+   "category": "moda",
+   "price": 650,
+   "rating": 4.5,
+   "ratingCount": 421,
+   "sold": 2210,
+   "stock": 200,
+   "images": [
+    "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Algodão premium de 180g/m², corte regular e cores para todos.",
+   "description": [
+    "Camisola em algodão 100% premium com toque suave e durabilidade.",
+    "Corte regular que assenta bem em todos os corpos.",
+    "Disponível em 8 cores."
+   ],
+   "specs": [
+    {
+     "label": "Material",
+     "value": "100% algodão 180g/m²"
+    },
+    {
+     "label": "Tamanhos",
+     "value": "S–XXL"
+    },
+    {
+     "label": "Cores",
+     "value": "8"
+    }
+   ],
+   "badges": [],
+   "variants": [
+    {
+     "type": "Tamanho",
+     "options": [
+      {
+       "name": "S"
+      },
+      {
+       "name": "M"
+      },
+      {
+       "name": "L"
+      },
+      {
+       "name": "XL"
+      },
+      {
+       "name": "XXL"
+      }
+     ]
+    },
+    {
+     "type": "Cor",
+     "options": [
+      {
+       "name": "Branco",
+       "hex": "#f8fafc"
+      },
+      {
+       "name": "Preto",
+       "hex": "#111827"
+      },
+      {
+       "name": "Azul",
+       "hex": "#1f46e6"
+      },
+      {
+       "name": "Vermelho",
+       "hex": "#dc2626"
+      }
+     ]
+    }
+   ],
+   "deliveryDays": [
+    2,
+    5
+   ],
+   "tags": [
+    "camisola",
+    "básico",
+    "algodão"
+   ]
+  },
+  {
+   "id": "p-026",
+   "slug": "vestido-verao",
+   "name": "Vestido de Verão Elegante",
+   "brand": "ModaMZ",
+   "category": "moda",
+   "price": 1850,
+   "rating": 4.7,
+   "ratingCount": 89,
+   "sold": 210,
+   "stock": 48,
+   "images": [
+    "https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1539008835657-9e8e9680c956?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Leve, fresco e elegante — perfeito para o calor moçambicano.",
+   "description": [
+    "Vestido leve em viscose com corte fluido que valoriza a silhueta.",
+    "Tecido fresco, ideal para o clima quente de Maputo e arredores.",
+    "Comprimento midi com cinto ajustável."
+   ],
+   "specs": [
+    {
+     "label": "Material",
+     "value": "Viscose"
+    },
+    {
+     "label": "Tamanhos",
+     "value": "36–44"
+    },
+    {
+     "label": "Cor",
+     "value": "Vários tons"
+    }
+   ],
+   "badges": [
+    "NOVO"
+   ],
+   "isNew": true,
+   "variants": [
+    {
+     "type": "Tamanho",
+     "options": [
+      {
+       "name": "36"
+      },
+      {
+       "name": "38"
+      },
+      {
+       "name": "40"
+      },
+      {
+       "name": "42"
+      },
+      {
+       "name": "44"
+      }
+     ]
+    }
+   ],
+   "deliveryDays": [
+    3,
+    7
+   ],
+   "tags": [
+    "vestido",
+    "verão",
+    "elegante"
+   ]
+  },
+  {
+   "id": "p-027",
+   "slug": "calca-ganga-slim",
+   "name": "Calça de Ganga Slim",
+   "brand": "ModaMZ",
+   "category": "moda",
+   "price": 1750,
+   "rating": 4.4,
+   "ratingCount": 134,
+   "sold": 380,
+   "stock": 66,
+   "images": [
+    "https://images.unsplash.com/photo-1542272604-787c3835535d?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1551537482-f2075a1d41f2?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Corte slim com elasticidade, resistente e confortável o dia todo.",
+   "description": [
+    "Ganga com 2% de elastano para total liberdade de movimento.",
+    "Corte slim moderno que combina com tudo.",
+    "Lavagem escura que não desbota facilmente."
+   ],
+   "specs": [
+    {
+     "label": "Material",
+     "value": "98% algodão · 2% elastano"
+    },
+    {
+     "label": "Tamanhos",
+     "value": "28–40"
+    }
+   ],
+   "badges": [],
+   "variants": [
+    {
+     "type": "Tamanho",
+     "options": [
+      {
+       "name": "28"
+      },
+      {
+       "name": "30"
+      },
+      {
+       "name": "32"
+      },
+      {
+       "name": "34"
+      },
+      {
+       "name": "36"
+      },
+      {
+       "name": "38"
+      },
+      {
+       "name": "40"
+      }
+     ]
+    }
+   ],
+   "deliveryDays": [
+    3,
+    6
+   ],
+   "tags": [
+    "ganga",
+    "jeans",
+    "slim"
+   ]
+  },
+  {
+   "id": "p-028",
+   "slug": "sapatilhas-casuais",
+   "name": "Sapatilhas Casuais Brancas",
+   "brand": "UrbanFit",
+   "category": "moda",
+   "price": 1950,
+   "rating": 4.5,
+   "ratingCount": 176,
+   "sold": 640,
+   "stock": 73,
+   "images": [
+    "https://images.unsplash.com/photo-1560769629-975ec94e6a86?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1600185365926-3a2ce3cdb9eb?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "O clássico branco que combina com tudo. Conforto desde o primeiro dia.",
+   "description": [
+    "Sapatilhas brancas atemporais, fáceis de combinar.",
+    "Interior acolchoado e sola flexível para conforto imediato.",
+    "Fáceis de limpar — perfeitas para o clima quente."
+   ],
+   "specs": [
+    {
+     "label": "Material",
+     "value": "Sintético premium"
+    },
+    {
+     "label": "Tamanhos",
+     "value": "37–44"
+    }
+   ],
+   "badges": [
+    "NOVO"
+   ],
+   "isNew": true,
+   "featured": true,
+   "variants": [
+    {
+     "type": "Tamanho",
+     "options": [
+      {
+       "name": "37"
+      },
+      {
+       "name": "38"
+      },
+      {
+       "name": "39"
+      },
+      {
+       "name": "40"
+      },
+      {
+       "name": "41"
+      },
+      {
+       "name": "42"
+      },
+      {
+       "name": "43"
+      },
+      {
+       "name": "44"
+      }
+     ]
+    }
+   ],
+   "deliveryDays": [
+    3,
+    6
+   ],
+   "tags": [
+    "sapatilhas",
+    "casual",
+    "branco"
+   ]
+  },
+  {
+   "id": "p-029",
+   "slug": "perfume-oud-imperial",
+   "name": "Perfume Oud Imperial 100 ml",
+   "brand": "Essenza",
+   "category": "beleza",
+   "price": 3950,
+   "oldPrice": 4800,
+   "rating": 4.8,
+   "ratingCount": 254,
+   "sold": 890,
+   "stock": 58,
+   "images": [
+    "https://images.unsplash.com/photo-1541643600914-78b084683601?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1594035910387-fea47794261f?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Fragrância amadeirada intensa com notas de oud, âmbar e especiarias.",
+   "description": [
+    "Oud Imperial é a fragrância assinatura para ocasiões especiais.",
+    "Notas de saída: bergamota e açafrão; corpo: oud e rosa; fundo: âmbar e almíscar.",
+    "Longa duração — até 12 horas na pele."
+   ],
+   "specs": [
+    {
+     "label": "Volume",
+     "value": "100 ml"
+    },
+    {
+     "label": "Família",
+     "value": "Amadeirado oriental"
+    },
+    {
+     "label": "Duração",
+     "value": "Até 12 horas"
+    },
+    {
+     "label": "Género",
+     "value": "Unissexo"
+    }
+   ],
+   "badges": [
+    "MAIS VENDIDO"
+   ],
+   "bestseller": true,
+   "deliveryDays": [
+    2,
+    5
+   ],
+   "tags": [
+    "perfume",
+    "oud",
+    "luxo"
+   ]
+  },
+  {
+   "id": "p-030",
+   "slug": "set-cosmeticos-glow",
+   "name": "Set de Cosméticos Glow",
+   "brand": "Essenza",
+   "category": "beleza",
+   "price": 1450,
+   "oldPrice": 1900,
+   "rating": 4.6,
+   "ratingCount": 143,
+   "sold": 470,
+   "stock": 61,
+   "images": [
+    "https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1596704017254-9b121068fb31?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Kit completo: batom, sombras, pó e pincéis para um look profissional.",
+   "description": [
+    "Set completo com 12 cores de sombra, 3 batons, pó compacto e 4 pincéis.",
+    "Pigmentação intensa e acabamento profissional em casa.",
+    "Caixa ideal para oferta."
+   ],
+   "specs": [
+    {
+     "label": "Peças",
+     "value": "20"
+    },
+    {
+     "label": "Conteúdo",
+     "value": "Sombras · batons · pó · pincéis"
+    }
+   ],
+   "badges": [
+    "OFERTA"
+   ],
+   "deliveryDays": [
+    3,
+    6
+   ],
+   "tags": [
+    "maquilhagem",
+    "kit",
+    "presente"
+   ]
+  },
+  {
+   "id": "p-031",
+   "slug": "creme-hidratante-facial",
+   "name": "Creme Hidratante Facial 50 ml",
+   "brand": "Essenza",
+   "category": "beleza",
+   "price": 780,
+   "rating": 4.7,
+   "ratingCount": 198,
+   "sold": 730,
+   "stock": 112,
+   "images": [
+    "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Hidratação profunda com ácido hialurónico e vitamina E.",
+   "description": [
+    "Hidratação profunda para pele normal a seca, com ácido hialurónico e vitamina E.",
+    "Textura leve de absorção rápida, sem sensação gordurosa.",
+    "Uso diário, de manhã e à noite."
+   ],
+   "specs": [
+    {
+     "label": "Volume",
+     "value": "50 ml"
+    },
+    {
+     "label": "Indicado",
+     "value": "Pele normal a seca"
+    },
+    {
+     "label": "Ativos",
+     "value": "Ácido hialurónico · Vit. E"
+    }
+   ],
+   "badges": [
+    "NOVO"
+   ],
+   "isNew": true,
+   "featured": true,
+   "deliveryDays": [
+    2,
+    5
+   ],
+   "tags": [
+    "creme",
+    "hidratante",
+    "skincare"
+   ]
+  },
+  {
+   "id": "p-032",
+   "slug": "secador-cabelo",
+   "name": "Secador de Cabelo Profissional",
+   "brand": "GlamPro",
+   "category": "beleza",
+   "price": 1600,
+   "oldPrice": 2100,
+   "rating": 4.4,
+   "ratingCount": 87,
+   "sold": 290,
+   "stock": 44,
+   "images": [
+    "https://images.unsplash.com/photo-1522338242992-e1a54906a8da?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1595476108010-b4d1f102b1b1?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "2.200W com íons negativos, 3 temperaturas e bico concentrador.",
+   "description": [
+    "Secagem rápida com 2.200W e tecnologia de íons negativos que reduz o frisado.",
+    "3 velocidades, 3 temperaturas e botão de ar frio.",
+    "Inclui bico concentrador e difusor."
+   ],
+   "specs": [
+    {
+     "label": "Potência",
+     "value": "2.200W"
+    },
+    {
+     "label": "Tecnologia",
+     "value": "Íons negativos"
+    },
+    {
+     "label": "Acessórios",
+     "value": "Bico + difusor"
+    }
+   ],
+   "badges": [
+    "OFERTA"
+   ],
+   "dealOfDay": true,
+   "deliveryDays": [
+    3,
+    6
+   ],
+   "tags": [
+    "secador",
+    "cabelo",
+    "beleza"
+   ]
+  },
+  {
+   "id": "p-033",
+   "slug": "relogio-classico-aco",
+   "name": "Relógio Clássico de Aço",
+   "brand": "TempoMZ",
+   "category": "acessorios",
+   "price": 2900,
+   "oldPrice": 3600,
+   "rating": 4.6,
+   "ratingCount": 118,
+   "sold": 340,
+   "stock": 39,
+   "images": [
+    "https://images.unsplash.com/photo-1524592094714-0f0654e20314?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Pulseira de aço inoxidável, mostrador analógico e resistente à água.",
+   "description": [
+    "Relógio clássico com caixa e pulseira em aço inoxidável.",
+    "Mostrador analógico de leitura fácil e resistente à água (3 ATM).",
+    "O presente ideal para ocasiões especiais."
+   ],
+   "specs": [
+    {
+     "label": "Material",
+     "value": "Aço inoxidável"
+    },
+    {
+     "label": "Resistência",
+     "value": "3 ATM"
+    },
+    {
+     "label": "Mecanismo",
+     "value": "Quartzo japonês"
+    }
+   ],
+   "badges": [],
+   "featured": true,
+   "deliveryDays": [
+    3,
+    6
+   ],
+   "tags": [
+    "relógio",
+    "clássico",
+    "aço"
+   ]
+  },
+  {
+   "id": "p-034",
+   "slug": "oculos-sol-polarizados",
+   "name": "Óculos de Sol Polarizados",
+   "brand": "SolarMax",
+   "category": "acessorios",
+   "price": 1250,
+   "oldPrice": 1700,
+   "rating": 4.5,
+   "ratingCount": 164,
+   "sold": 520,
+   "stock": 84,
+   "images": [
+    "https://images.unsplash.com/photo-1572635196237-14b3f281503f?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1511499767150-a48a237f0083?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Lentes polarizadas UV400 com armação leve e resistente.",
+   "description": [
+    "Lentes polarizadas que eliminam o reflexo do sol — perfeito para o clima moçambicano.",
+    "Proteção UV400 completa e armação leve de acetato.",
+    "Inclui estojo e pano de limpeza."
+   ],
+   "specs": [
+    {
+     "label": "Lentes",
+     "value": "Polarizadas UV400"
+    },
+    {
+     "label": "Armação",
+     "value": "Acetato leve"
+    },
+    {
+     "label": "Extras",
+     "value": "Estojo + pano"
+    }
+   ],
+   "badges": [
+    "OFERTA"
+   ],
+   "deliveryDays": [
+    2,
+    5
+   ],
+   "tags": [
+    "óculos",
+    "sol",
+    "polarizado"
+   ]
+  },
+  {
+   "id": "p-035",
+   "slug": "mochila-urbana",
+   "name": "Mochila Urbana Antirroubo",
+   "brand": "UrbanFit",
+   "category": "acessorios",
+   "price": 2350,
+   "oldPrice": 2900,
+   "rating": 4.6,
+   "ratingCount": 206,
+   "sold": 610,
+   "stock": 57,
+   "images": [
+    "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1581605405669-fcdf81165afa?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Porta USB, bolsos escondidos e à prova de água. Para trabalho e viagens.",
+   "description": [
+    "Mochila com fechos escondidos antirroubo e bolsos internos organizados.",
+    "Porta USB externa para carregar o telemóvel em movimento.",
+    "Tecido resistente à água e acolchoamento para o portátil de 15,6\"."
+   ],
+   "specs": [
+    {
+     "label": "Capacidade",
+     "value": "25 L"
+    },
+    {
+     "label": "Portátil",
+     "value": "Até 15,6\""
+    },
+    {
+     "label": "Extras",
+     "value": "Porta USB · antirroubo"
+    }
+   ],
+   "badges": [
+    "MAIS VENDIDO"
+   ],
+   "bestseller": true,
+   "deliveryDays": [
+    3,
+    6
+   ],
+   "tags": [
+    "mochila",
+    "trabalho",
+    "viagem"
+   ]
+  },
+  {
+   "id": "p-036",
+   "slug": "pulseira-fitness",
+   "name": "Pulseira Fitness com Monitor de Sono",
+   "brand": "PulseFit",
+   "category": "acessorios",
+   "price": 1150,
+   "rating": 4.3,
+   "ratingCount": 92,
+   "sold": 380,
+   "stock": 66,
+   "images": [
+    "https://images.unsplash.com/photo-1575311373937-040b8e1fd5b6?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Passos, calorias, sono e notificações — 7 dias de bateria.",
+   "description": [
+    "Acompanhe passos, calorias, ritmo cardíaco e qualidade do sono.",
+    "Receba chamadas e mensagens diretamente no pulso.",
+    "Bateria para 7 dias e resistente ao suor."
+   ],
+   "specs": [
+    {
+     "label": "Ecrã",
+     "value": "AMOLED 1,1\""
+    },
+    {
+     "label": "Bateria",
+     "value": "7 dias"
+    },
+    {
+     "label": "Sensores",
+     "value": "FC · SpO2 · sono"
+    }
+   ],
+   "badges": [
+    "NOVO"
+   ],
+   "isNew": true,
+   "deliveryDays": [
+    3,
+    6
+   ],
+   "tags": [
+    "fitness",
+    "pulseira",
+    "saúde"
+   ]
+  },
+  {
+   "id": "p-037",
+   "slug": "bicicleta-montanha",
+   "name": "Bicicleta de Montanha 21 Velocidades",
+   "brand": "RodaLivre",
+   "category": "desporto",
+   "price": 21500,
+   "oldPrice": 24900,
+   "rating": 4.6,
+   "ratingCount": 67,
+   "sold": 82,
+   "stock": 9,
+   "images": [
+    "https://images.unsplash.com/photo-1485965120184-e220f721d03e?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1532298229144-0ec0c57515c7?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Quadro em alumínio, suspensão dianteira e travões a disco.",
+   "description": [
+    "Bicicleta de montanha com quadro leve em alumínio e suspensão dianteira.",
+    "21 velocidades e travões a disco para total controlo em qualquer terreno.",
+    "Ideal para uso urbano e estradas de terra."
+   ],
+   "specs": [
+    {
+     "label": "Quadro",
+     "value": "Alumínio 17\""
+    },
+    {
+     "label": "Velocidades",
+     "value": "21"
+    },
+    {
+     "label": "Travões",
+     "value": "Disco mecânico"
+    },
+    {
+     "label": "Rodas",
+     "value": "26\""
+    }
+   ],
+   "badges": [
+    "MAIS VENDIDO"
+   ],
+   "bestseller": true,
+   "deliveryDays": [
+    4,
+    9
+   ],
+   "tags": [
+    "bicicleta",
+    "montanha",
+    "desporto"
+   ]
+  },
+  {
+   "id": "p-038",
+   "slug": "bola-futebol-t5",
+   "name": "Bola de Futebol Tamanho 5",
+   "brand": "RodaLivre",
+   "category": "desporto",
+   "price": 950,
+   "rating": 4.5,
+   "ratingCount": 143,
+   "sold": 710,
+   "stock": 130,
+   "images": [
+    "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Costura térmica, superfície durável e perfeita para todos os campos.",
+   "description": [
+    "Bola oficial tamanho 5 com costura térmica que não abre.",
+    "Superfície de PU durável para campos de relva, terra ou cimento.",
+    "Excelente retenção de forma e balanço."
+   ],
+   "specs": [
+    {
+     "label": "Tamanho",
+     "value": "5 (adulto)"
+    },
+    {
+     "label": "Material",
+     "value": "PU costura térmica"
+    }
+   ],
+   "badges": [],
+   "deliveryDays": [
+    2,
+    5
+   ],
+   "tags": [
+    "bola",
+    "futebol",
+    "desporto"
+   ]
+  },
+  {
+   "id": "p-039",
+   "slug": "kit-treino-casa",
+   "name": "Kit de Treino em Casa",
+   "brand": "UrbanFit",
+   "category": "desporto",
+   "price": 1750,
+   "rating": 4.4,
+   "ratingCount": 88,
+   "sold": 260,
+   "stock": 49,
+   "images": [
+    "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Tapete, halteres ajustáveis, bandas elásticas e corda — treine em casa.",
+   "description": [
+    "Kit completo para treinar em casa: tapete antiderrapante, 2 halteres ajustáveis, 3 bandas elásticas e corda.",
+    "Perfeito para iniciantes e avançados.",
+    "Inclui guia de treino em português."
+   ],
+   "specs": [
+    {
+     "label": "Itens",
+     "value": "7"
+    },
+    {
+     "label": "Halteres",
+     "value": "Ajustáveis 2–10 kg"
+    }
+   ],
+   "badges": [
+    "NOVO"
+   ],
+   "isNew": true,
+   "deliveryDays": [
+    4,
+    8
+   ],
+   "tags": [
+    "treino",
+    "fitness",
+    "casa"
+   ]
+  },
+  {
+   "id": "p-040",
+   "slug": "carregador-usb-carro",
+   "name": "Carregador USB para Carro 2 Portas",
+   "brand": "VoltGo",
+   "category": "automovel",
+   "price": 480,
+   "rating": 4.5,
+   "ratingCount": 156,
+   "sold": 820,
+   "stock": 150,
+   "images": [
+    "https://images.unsplash.com/photo-1489824904134-891ab64532f1?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Carga rápida 36W total, compatível com USB-C e USB-A.",
+   "description": [
+    "Carregue dois dispositivos ao mesmo tempo no carro com 36W de potência total.",
+    "Compatível com USB-C (PD) e USB-A (Quick Charge 3.0).",
+    "Design compacto com luz LED."
+   ],
+   "specs": [
+    {
+     "label": "Potência",
+     "value": "36W total"
+    },
+    {
+     "label": "Portas",
+     "value": "1× USB-C PD + 1× USB-A QC3.0"
+    }
+   ],
+   "badges": [
+    "NOVO"
+   ],
+   "isNew": true,
+   "featured": true,
+   "deliveryDays": [
+    2,
+    5
+   ],
+   "tags": [
+    "carro",
+    "carregador",
+    "usb"
+   ]
+  },
+  {
+   "id": "p-041",
+   "slug": "aspirador-carro",
+   "name": "Mini Aspirador para Carro 8.000 Pa",
+   "brand": "AutoPro",
+   "category": "automovel",
+   "price": 1200,
+   "oldPrice": 1600,
+   "rating": 4.3,
+   "ratingCount": 74,
+   "sold": 190,
+   "stock": 42,
+   "images": [
+    "https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1605559424843-9e4c228bf1c2?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Aspiração potente sem fios com filtro HEPA e acessórios.",
+   "description": [
+    "Aspirador sem fios com 8.000 Pa de sucção — perfeito para limpar o carro.",
+    "Filtro HEPA lavável e bateria recarregável USB.",
+    "Inclui bicos para frestas e escova."
+   ],
+   "specs": [
+    {
+     "label": "Sucção",
+     "value": "8.000 Pa"
+    },
+    {
+     "label": "Filtro",
+     "value": "HEPA lavável"
+    },
+    {
+     "label": "Bateria",
+     "value": "2.000 mAh (USB)"
+    }
+   ],
+   "badges": [
+    "OFERTA"
+   ],
+   "deliveryDays": [
+    3,
+    6
+   ],
+   "tags": [
+    "aspirador",
+    "carro",
+    "limpeza"
+   ]
+  },
+  {
+   "id": "p-042",
+   "slug": "conjunto-construcao",
+   "name": "Conjunto de Construção Cidade 1.000 peças",
+   "brand": "KidFun",
+   "category": "outros",
+   "price": 2650,
+   "oldPrice": 3200,
+   "rating": 4.8,
+   "ratingCount": 134,
+   "sold": 420,
+   "stock": 36,
+   "images": [
+    "https://images.unsplash.com/photo-1566576912321-d58ddd7a6088?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1587654780291-39c9404d746b?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Set de construção com 1.000 peças, figuras e manual de montagem.",
+   "description": [
+    "1.000 peças de construção compatíveis com as principais marcas.",
+    "Inclui 2 figuras, veículos e manual de montagem ilustrado.",
+    "Estimula a criatividade e coordenação das crianças (6+ anos)."
+   ],
+   "specs": [
+    {
+     "label": "Peças",
+     "value": "1.000"
+    },
+    {
+     "label": "Idade",
+     "value": "6+ anos"
+    }
+   ],
+   "badges": [
+    "OFERTA"
+   ],
+   "deliveryDays": [
+    4,
+    8
+   ],
+   "tags": [
+    "brinquedo",
+    "construção",
+    "crianças"
+   ]
+  },
+  {
+   "id": "p-043",
+   "slug": "brinquedo-educativo-madeira",
+   "name": "Brinquedo Educativo de Madeira",
+   "brand": "KidFun",
+   "category": "outros",
+   "price": 1350,
+   "rating": 4.7,
+   "ratingCount": 96,
+   "sold": 310,
+   "stock": 58,
+   "images": [
+    "https://images.unsplash.com/photo-1513885535751-8b9238bd345a?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1594787318286-3d835c1d207f?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Blocos de madeira com letras e números — aprender brincando.",
+   "description": [
+    "Blocos de madeira natural com letras, números e formas geométricas.",
+    "Tinta atóxica e bordas arredondadas para total segurança.",
+    "Auxilia no reconhecimento de letras, números e cores."
+   ],
+   "specs": [
+    {
+     "label": "Material",
+     "value": "Madeira natural"
+    },
+    {
+     "label": "Idade",
+     "value": "3+ anos"
+    },
+    {
+     "label": "Peças",
+     "value": "48"
+    }
+   ],
+   "badges": [
+    "NOVO"
+   ],
+   "isNew": true,
+   "deliveryDays": [
+    3,
+    7
+   ],
+   "tags": [
+    "educativo",
+    "madeira",
+    "crianças"
+   ]
+  },
+  {
+   "id": "p-044",
+   "slug": "cama-cao",
+   "name": "Cama Confortável para Cão Médio",
+   "brand": "PetLife",
+   "category": "outros",
+   "price": 1100,
+   "rating": 4.6,
+   "ratingCount": 87,
+   "sold": 240,
+   "stock": 47,
+   "images": [
+    "https://images.unsplash.com/photo-1587300003388-59208cc962cb?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1601758228041-f3b2795255f1?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Felpa macia, base antiderrapante e capa lavável.",
+   "description": [
+    "Cama redonda de felpa macia com borda elevada para apoio da cabeça.",
+    "Base antiderrapante e capa removível lavável à máquina.",
+    "Tamanho médio: ideal para cães até 15 kg."
+   ],
+   "specs": [
+    {
+     "label": "Tamanho",
+     "value": "Médio (até 15 kg)"
+    },
+    {
+     "label": "Material",
+     "value": "Felpa · capa lavável"
+    },
+    {
+     "label": "Dimensões",
+     "value": "60 × 60 cm"
+    }
+   ],
+   "badges": [],
+   "featured": true,
+   "deliveryDays": [
+    3,
+    7
+   ],
+   "tags": [
+    "cão",
+    "pet",
+    "cama"
+   ]
+  }
+ ]
+}

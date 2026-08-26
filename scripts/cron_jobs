@@ -1,0 +1,49 @@
+# NorteShopMoz - Cron Jobs para Backups Automatizados
+# Instalar: crontab -e
+# Ou copiar para /etc/cron.d/norteshop-backups
+
+# Variáveis de ambiente
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+SHELL=/bin/bash
+MAILTO="devops@norteshop.com"
+
+# === BACKUPS DIÁRIOS ===
+# Backup completo diário às 02:30 (baixo tráfego)
+30 2 * * * root /home/killer/Área de trabalho/NorteShopMoz/scripts/backup.sh full 7 >> /var/log/norteshop-backup.log 2>&1
+
+# Backup incremental a cada 6 horas (02:00, 08:00, 14:00, 20:00)
+0 */6 * * * root /home/killer/Área de trabalho/NorteShopMoz/scripts/backup.sh incremental 1 >> /var/log/norteshop-backup-incremental.log 2>&1
+
+# === LIMPEZA SEMANAL ===
+# Limpeza de backups antigos (domingo 03:00)
+0 3 * * 0 root find /backups/norteshop -name "norteshop_*.sql.gz" -type f -mtime +30 -delete >> /var/log/norteshop-cleanup.log 2>&1
+
+# === VERIFICAÇÃO DE INTEGRIDADE DIÁRIA ===
+# Verificar integridade dos backups (04:00)
+0 4 * * * root /home/killer/Área de trabalho/NorteShopMoz/scripts/backup.sh full 1 --verify-only >> /var/log/norteshop-verify.log 2>&1
+
+# === MONITORAMENTO WAL ARCHIVE ===
+# Verificar se WAL archive está funcionando (a cada 15 min)
+*/15 * * * * root test -d /backups/wal_archive && find /backups/wal_archive -name "*.backup" -mmin +60 -delete 2>/dev/null; echo "$(date): WAL archive OK" >> /var/log/norteshop-wal-monitor.log 2>&1
+
+# === RESTORE TEST MENSAL ===
+# Test restore no primeiro domingo do mês às 04:00
+0 4 1 * * root /home/killer/Área de trabalho/NorteShopMoz/scripts/restore.sh /backups/norteshop/latest.sql.gz norteshopmoz_test norteshopmoz_test --verify-only >> /var/log/norteshop-restore-test.log 2>&1
+
+# === LIMPEZA DE LOGS ANTIGOS ===
+# Limpar logs de backup mais antigos que 90 dias
+0 5 * * * root find /var/log -name "norteshop-*.log" -type f -mtime +90 -delete
+
+# === NOTIFICAÇÃO DE STATUS ===
+# Relatório diário de status (06:00)
+0 6 * * * root /home/killer/Área de trabalho/NorteShopMoz/scripts/backup_status.sh >> /var/log/norteshop-status.log 2>&1
+
+# === VARIÁVEIS DE AMBIENTE PARA CRON ===
+# BACKUP_DIR=/backups/norteshop
+# DB_HOST=localhost
+# DB_PORT=5432
+# DB_NAME=norteshopmoz
+# DB_USER=norteshopmoz
+# BACKUP_S3_BUCKET=norteshop-backups-prod
+# SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
+# AWS_DEFAULT_REGION=us-east-1

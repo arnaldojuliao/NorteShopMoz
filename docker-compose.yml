@@ -1,0 +1,99 @@
+# NSM · NorteShopMoz — Infraestrutura
+#
+# Uso:
+#   docker compose up -d                       # só PostgreSQL + Redis
+#   docker compose --profile full up -d --build # + API Spring Boot
+#
+# ⚠️  PRODUÇÃO: Todas as variáveis marcadas com ${VAR} SÃO OBRIGATÓRIAS.
+#    Não há fallbacks inseguros. Configure no .env.prod ou secrets manager.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: nsm-db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-norteshopmoz}
+      POSTGRES_USER: ${DB_USER:-norteshopmoz}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}  # OBRIGATÓRIO - sem fallback
+    ports:
+      - "5434:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-norteshopmoz} -d ${DB_NAME:-norteshopmoz}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    container_name: nsm-redis
+    # Em produção, use Redis com ACL/password: command: redis-server --requirepass ${REDIS_PASSWORD}
+    ports:
+      - "6381:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  api:
+    profiles: ["full"]
+    build:
+      context: ./backend
+    container_name: nsm-api
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/${DB_NAME:-norteshopmoz}
+      DB_USER: ${DB_USER:-norteshopmoz}
+      DB_PASSWORD: ${DB_PASSWORD}  # OBRIGATÓRIO
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # REDIS_PASSWORD: ${REDIS_PASSWORD}  # Descomente se usar Redis com password
+      JWT_SECRET: ${JWT_SECRET}  # OBRIGATÓRIO - mínimo 32 chars (openssl rand -base64 48)
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}  # OBRIGATÓRIO - ex: https://norteshop.com,https://www.norteshop.com
+      # Email transacional (Resend) — OBRIGATÓRIO em produção
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      RESEND_FROM: ${RESEND_FROM}
+      APP_BASE_URL: ${APP_BASE_URL}  # OBRIGATÓRIO - ex: https://norteshop.com
+      # Imagens de produto (Cloudinary) — OBRIGATÓRIO em produção
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
+      # Gateway de pagamentos: simulated (padrão, sem cobrança) ou live (real)
+      PAYMENTS_MODE: ${PAYMENTS_MODE:-simulated}
+      # Login social (Google/Facebook) — OPCIONAL mas recomendado
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      FACEBOOK_APP_ID: ${FACEBOOK_APP_ID}
+      FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET}
+      # Cookies seguros
+      APP_COOKIE_SECURE: ${APP_COOKIE_SECURE:-true}
+      APP_COOKIE_DOMAIN: ${APP_COOKIE_DOMAIN:-}
+      # Força IPv4 na JVM: em redes sem rota IPv6, o DNS pode devolver apenas
+      # registos AAAA e as chamadas externas (Resend, Google, Facebook) falham
+      # com "Network is unreachable".
+      JAVA_TOOL_OPTIONS: "-Djava.net.preferIPv4Stack=true"
+      # Proxy de saída para as chamadas HTTP do backend (Resend, Google,
+      # Facebook) — lido por EmailService/SocialAuthService. Vazio = direto.
+      # Em produção normal deixe vazio.
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,db,redis}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+
+# Rede com MTU reduzido: nesta rede o path MTU real é <1300 e o ICMP de
+# fragmentação está filtrado — com o padrão 1500, o handshake TLS dos
+# containers morre ("Unable to establish SSL", timeouts no Resend/Google/
+# Facebook) enquanto o host funciona normalmente.
+networks:
+  default:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: "1200"
