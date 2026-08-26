@@ -19,9 +19,10 @@ on:
     - cron: '0 2 * * 1'
 
 env:
-  # Docker image names (publicadas no GHCR — não requer secrets extras)
-  BACKEND_IMAGE: ${{ github.repository_owner }}/norteshopmoz-api
-  FRONTEND_IMAGE: ${{ github.repository_owner }}/norteshopmoz-frontend
+  # Docker image names (publicadas no GHCR — não requer secrets extras).
+  # O prefixo do registry é OBRIGATÓRIO nos tags; sem ele o buildx envia para docker.io.
+  BACKEND_IMAGE: ghcr.io/${{ github.repository_owner }}/norteshopmoz-api
+  FRONTEND_IMAGE: ghcr.io/${{ github.repository_owner }}/norteshopmoz-frontend
   # Registry
   REGISTRY: ghcr.io
 
@@ -54,7 +55,7 @@ jobs:
           java-version: '21'
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
           queries: +security-and-quality
@@ -73,7 +74,7 @@ jobs:
           npm run build
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: "/language:${{ matrix.language }}"
 
@@ -94,7 +95,9 @@ jobs:
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
-          extra_args: --fail --no-verification
+          # A ação já acrescenta --fail automaticamente; repetir dá
+          # "flag 'fail' cannot be repeated"
+          extra_args: --no-verification
 
   # ════════════════════════════════════════════════════════════════════════════
   # BACKEND - Spring Boot (Maven)
@@ -191,6 +194,11 @@ jobs:
           java-version: '21'
           cache: 'maven'
 
+      # Popula ~/.m2 para o Trivy não ter de resolver BOMs no Maven Central
+      # (evita 429 Too Many Requests)
+      - name: Resolve Maven dependencies
+        run: mvn -B -q dependency:resolve
+
       - name: Run OWASP Dependency Check
         uses: dependency-check/Dependency-Check_Action@main
         continue-on-error: true
@@ -214,6 +222,8 @@ jobs:
       # Container image security scan (Trivy)
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
+        id: trivy-backend
+        continue-on-error: true
         if: github.event_name == 'push'
         with:
           scan-type: 'fs'
@@ -223,8 +233,8 @@ jobs:
           severity: 'HIGH,CRITICAL'
 
       - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('backend/trivy-results.sarif') != ''
         with:
           sarif_file: 'backend/trivy-results.sarif'
 
@@ -372,8 +382,8 @@ jobs:
           severity: 'HIGH,CRITICAL'
 
       - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('frontend/trivy-results.sarif') != ''
         with:
           sarif_file: 'frontend/trivy-results.sarif'
 
