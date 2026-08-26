@@ -29,6 +29,7 @@ public class JwtService {
                 .subject(user.getEmail())
                 .claim("uid", user.getId())
                 .claim("name", user.getFullName())
+                .claim("role", user.getRole())
                 .claim("typ", "access")
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(props.jwt().expiration())))

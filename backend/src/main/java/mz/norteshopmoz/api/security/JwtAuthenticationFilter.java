@@ -9,9 +9,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.Date;
 import java.util.List;
+import io.jsonwebtoken.Claims;
 import mz.norteshopmoz.api.config.JwtCookieService;
-import mz.norteshopmoz.api.domain.UserAccount;
-import mz.norteshopmoz.api.repository.UserRepository;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -27,14 +26,12 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
-    private final UserRepository userRepository;
     private final SessionRevocationService sessionRevocationService;
     private final JwtCookieService jwtCookieService;
 
-    public JwtAuthenticationFilter(JwtService jwtService, UserRepository userRepository,
+    public JwtAuthenticationFilter(JwtService jwtService,
             SessionRevocationService sessionRevocationService, JwtCookieService jwtCookieService) {
         this.jwtService = jwtService;
-        this.userRepository = userRepository;
         this.sessionRevocationService = sessionRevocationService;
         this.jwtCookieService = jwtCookieService;
     }
@@ -66,7 +63,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 boolean revoked = uid != null && issuedAt != null
                         && sessionRevocationService.isRevoked(uid, issuedAt.getTime());
                 if (!revoked) {
-                    userRepository.findByEmailIgnoreCase(email).ifPresent(user -> authenticate(request, user));
+                    authenticate(request, claims);
                 }
             } catch (JwtException | IllegalArgumentException ignored) {
                 // token inválido/expirado → pedido segue como anónimo (401 quando protegido)
@@ -75,10 +72,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
-    private void authenticate(HttpServletRequest request, UserAccount user) {
-        UserPrincipal principal = new UserPrincipal(user.getId(), user.getEmail(), user.getFullName(), user.getRole());
+    private void authenticate(HttpServletRequest request, Claims claims) {
+        String email = claims.getSubject();
+        String uid = claims.get("uid", String.class);
+        String name = claims.get("name", String.class);
+        String role = claims.get("role", String.class);
+        if (role == null || role.isBlank()) {
+            role = "CUSTOMER";
+        }
+        UserPrincipal principal = new UserPrincipal(uid, email, name, role);
         var authentication = new UsernamePasswordAuthenticationToken(
-                principal, null, List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole())));
+                principal, null, List.of(new SimpleGrantedAuthority("ROLE_" + role)));
         authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
         SecurityContextHolder.getContext().setAuthentication(authentication);
     }
