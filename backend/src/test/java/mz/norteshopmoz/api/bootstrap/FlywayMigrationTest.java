@@ -69,6 +69,8 @@ class FlywayMigrationTest {
             // Histórico do Flyway: schema vazio → a V1 é aplicada diretamente,
             // SEM linha de baseline (version 0). Se aparecesse um baseline, a
             // migração inicial tinha sido saltada e o schema viria vazio.
+            // A base do projeto já incluiu V4, V5, V6 e V7; o teste tem de validar
+            // o conjunto completo de migrações, não apenas as 3 iniciais.
             List<String> applied = new ArrayList<>();
             boolean allSucceeded = true;
             try (PreparedStatement ps = conn.prepareStatement(
@@ -81,7 +83,7 @@ class FlywayMigrationTest {
             }
             assertThat(applied)
                     .as("num schema vazio o Flyway aplica todas as migrações, sem baseline")
-                    .containsExactly("1", "2", "3");
+                    .containsExactly("1", "2", "3", "4", "5", "6", "7");
             assertThat(allSucceeded).isTrue();
             assertThat(applied).doesNotContain("0");
 
@@ -105,6 +107,13 @@ class FlywayMigrationTest {
             assertThat(indexExists(conn, "idx_orders_status")).isTrue();
             assertThat(indexExists(conn, "idx_orders_date")).isTrue();
             assertThat(indexExists(conn, "idx_order_items_product_id")).isTrue();
+
+            // V4-V7 adicionaram os índices de lookup do utilizador e a tabela do
+            // ShedLock — o estado de evolução do schema deve manter-se consistente.
+            assertThat(indexExists(conn, "idx_orders_user_id")).isTrue();
+            assertThat(indexExists(conn, "idx_users_reset_token")).isTrue();
+            assertThat(indexExists(conn, "idx_users_verification_token")).isTrue();
+            assertThat(tableExists(conn, "shedlock")).isTrue();
         }
 
         // O contexto arrancou com ddl-auto=validate (senão o teste nem corria) e
