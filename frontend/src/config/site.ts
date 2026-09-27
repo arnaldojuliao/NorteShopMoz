@@ -5,26 +5,32 @@
  * (NEXT_PUBLIC_*), para não ser preciso alterar código ao mudar de
  * telefone/email/domínio. Os padrões abaixo são placeholders — substitua
  * pelas informações reais da loja no .env ou aqui.
+ *
+ * O acesso a `process.env.NEXT_PUBLIC_*` é **estático** (de propósito): só
+ * assim o Next inlina o valor no bundle do browser — o acesso dinâmico
+ * (`process.env[key]`) devolvia sempre o padrão nos componentes cliente
+ * (Header/Footer mostravam o telefone placeholder). `envOr` trata a string
+ * vazia como ausente (ver lib/env.ts).
  */
 
-const env = (key: string, fallback: string): string => process.env[key] ?? fallback;
+import { envOr } from "@/lib/env";
 
 export const site = {
   /** Nome da loja. */
-  name: "NorteShop",
+  name: "NorteShopMoz",
   nameFull: "NorteShopMoz",
 
   /** URL base pública (usado em SEO, sitemap, robots e JSON-LD). */
-  url: env("NEXT_PUBLIC_SITE_URL", "https://norteshop.com"),
+  url: envOr(process.env.NEXT_PUBLIC_SITE_URL, "https://norteshopmoz.com"),
 
   /** Telefone/WhatsApp de apoio (apenas dígitos, com indicativo). */
-  phoneDigits: env("NEXT_PUBLIC_SUPPORT_PHONE", "258841234567").replace(/[^0-9]/g, ""),
+  phoneDigits: envOr(process.env.NEXT_PUBLIC_SUPPORT_PHONE, "258841234567").replace(/[^0-9]/g, ""),
   /** Telefone formatado para exibição. */
-  phoneDisplay: env("NEXT_PUBLIC_SUPPORT_PHONE_DISPLAY", "+258 84 123 4567"),
+  phoneDisplay: envOr(process.env.NEXT_PUBLIC_SUPPORT_PHONE_DISPLAY, "+258 84 123 4567"),
 
   /** Emails institucionais. */
-  email: env("NEXT_PUBLIC_SUPPORT_EMAIL", "apoio@norteshop.com"),
-  privacyEmail: env("NEXT_PUBLIC_PRIVACY_EMAIL", "privacidade@norteshop.com"),
+  email: envOr(process.env.NEXT_PUBLIC_SUPPORT_EMAIL, "apoio@norteshopmoz.com"),
+  privacyEmail: envOr(process.env.NEXT_PUBLIC_PRIVACY_EMAIL, "privacidade@norteshopmoz.com"),
 
   /** Morada física. */
   addressLine1: "Av. 24 de Julho",
@@ -37,9 +43,9 @@ export const site = {
 
   /** Redes sociais (substituir pelos perfis oficiais quando existirem). */
   socials: {
-    facebook: env("NEXT_PUBLIC_FACEBOOK_URL", "https://facebook.com"),
-    instagram: env("NEXT_PUBLIC_INSTAGRAM_URL", "https://instagram.com"),
-    x: env("NEXT_PUBLIC_X_URL", "https://x.com"),
+    facebook: envOr(process.env.NEXT_PUBLIC_FACEBOOK_URL, "https://facebook.com"),
+    instagram: envOr(process.env.NEXT_PUBLIC_INSTAGRAM_URL, "https://instagram.com"),
+    x: envOr(process.env.NEXT_PUBLIC_X_URL, "https://x.com"),
   },
 } as const;
 

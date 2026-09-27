@@ -3,7 +3,7 @@ import { InfoPage } from "@/components/layout/InfoPage";
 
 export const metadata: Metadata = {
   title: "Termos e condições",
-  description: "Termos e condições de utilização da loja online NorteShop.",
+  description: "Termos e condições de utilização da loja online NorteShopMoz.",
 };
 
 export default function TermosPage() {
@@ -17,7 +17,7 @@ export default function TermosPage() {
           title: "1. Aceitação dos termos",
           body: (
             <p>
-              Ao utilizar a NorteShop (NS), concorda com estes termos. Os preços são
+              Ao utilizar a NorteShopMoz (NS), concorda com estes termos. Os preços são
               apresentados em Meticais (MT) e podem ser alterados sem aviso prévio, sendo o
               preço confirmado no momento do checkout.
             </p>

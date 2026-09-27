@@ -55,7 +55,7 @@ export function ProductCard({
   return (
     <article
       className={cn(
-        "group relative flex flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white p-2 transition-all duration-300 hover:-translate-y-1 hover:border-slate-200 hover:shadow-card-hover",
+        "group relative flex flex-col overflow-hidden rounded-2xl border border-slate-100 bg-surface p-2 transition-all duration-300 hover:-translate-y-1 hover:border-slate-200 hover:shadow-card-hover",
         className,
       )}
     >
@@ -100,13 +100,15 @@ export function ProductCard({
           <WishlistButton product={product} size="sm" />
         </div>
 
-        {/* Ações rápidas no hover (desktop) */}
+        {/* Ações rápidas: aparecem no hover (ratos), no foco (teclado) e ficam
+            sempre visíveis em ecrãs tácteis ≥640px — aí o `sm:hidden` de baixo
+            já não existe e sem isto não havia forma de comprar. */}
         {!hideCart && (
-        <div className="absolute inset-x-2 bottom-2 z-[3] hidden translate-y-2 items-center gap-1.5 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100 sm:flex">
+        <div className="absolute inset-x-2 bottom-2 z-[3] hidden translate-y-2 items-center gap-1.5 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100 sm:flex sm:no-hover:translate-y-0 sm:no-hover:opacity-100">
           <button
             onClick={handleAddToCart}
             disabled={out}
-            className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg bg-navy-900/90 text-xs font-semibold text-white shadow-sm backdrop-blur transition hover:bg-primary-700 disabled:opacity-50"
+            className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg bg-navy-900/90 text-xs font-semibold text-white shadow-sm backdrop-blur transition hover:bg-brand-strong disabled:opacity-50"
           >
             <ShoppingCart className="size-3.5" />
             {out ? "Esgotado" : "Adicionar"}
@@ -118,15 +120,16 @@ export function ProductCard({
       {/* Informação compacta */}
       <div className="flex flex-1 flex-col gap-1 p-2 pt-2.5">
         <div className="flex items-center justify-between gap-2">
-          <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+          <span className="truncate text-xs font-semibold uppercase tracking-wider text-slate-400">
             {product.brand ?? "NSM Select"}
           </span>
           {product.freeShipping && (
-            <span className="shrink-0 text-[9px] font-bold text-emerald-600">ENVIO GRÁTIS</span>
+            <span className="shrink-0 text-xs font-bold text-emerald-700">ENVIO GRÁTIS</span>
           )}
         </div>
 
-        <Link href={`/produto/${product.slug}`} className="group/title">
+        {/* `-my-1 py-1`: com o título numa só linha o link tinha 18px de altura. */}
+        <Link href={`/produto/${product.slug}`} className="group/title -my-1 py-1">
           <h3 className="line-clamp-2 text-[13px] font-semibold leading-snug text-slate-800 transition group-hover/title:text-primary-700">
             {product.name}
           </h3>
@@ -140,7 +143,7 @@ export function ProductCard({
               {format(product.price)}
             </span>
             {product.oldPrice && (
-              <span className="text-[11px] text-slate-400 line-through">
+              <span className="text-xs text-slate-400 line-through">
                 {format(product.oldPrice)}
               </span>
             )}
@@ -149,7 +152,7 @@ export function ProductCard({
 
         {!hideShipping && (
         <div className="flex items-center justify-between gap-2">
-          <span className="flex items-center gap-1 text-[10px] text-slate-500">
+          <span className="flex items-center gap-1 text-xs text-slate-500">
             <Truck className="size-3 text-primary-500" aria-hidden />
             {product.deliveryDays[0]}–{product.deliveryDays[1]} dias ·{" "}
             {formatCompact(product.sold)} vendidos
@@ -158,7 +161,7 @@ export function ProductCard({
             onClick={handleAddToCart}
             disabled={out}
             aria-label={`Adicionar ${product.name} ao carrinho`}
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-700 transition-all hover:bg-primary-600 hover:text-white active:scale-95 disabled:opacity-40 sm:hidden"
+            className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-700 transition-all hover:bg-brand hover:text-white active:scale-95 disabled:opacity-40 sm:hidden"
           >
             <ShoppingCart className="size-3.5" />
           </button>

@@ -13,19 +13,24 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: Size;
   loading?: boolean;
   href?: string;
+  /** Só com `href`: abrir noutra aba (ex.: «Ver na loja» a partir do painel). */
+  target?: string;
+  rel?: string;
   fullWidth?: boolean;
   children: ReactNode;
 }
 
 const variants: Record<Variant, string> = {
+  // `bg-brand*` (e não `bg-primary-*`): o azul como superfície tem de manter o
+  // tom da marca no tema escuro — os shades `primary-*` clareiam para servir texto.
   primary:
-    "bg-primary-600 text-white hover:bg-primary-700 active:bg-primary-800 shadow-sm shadow-primary-600/25",
+    "bg-brand text-white hover:bg-brand-strong active:bg-brand-deep shadow-sm shadow-brand/25",
   secondary:
     "bg-primary-50 text-primary-700 hover:bg-primary-100 active:bg-primary-200/70",
   outline:
-    "border border-slate-300 bg-white text-slate-700 hover:border-primary-400 hover:text-primary-700 active:bg-slate-50",
+    "border border-slate-300 bg-surface text-slate-700 hover:border-primary-400 hover:text-primary-700 active:bg-slate-50",
   ghost: "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
-  danger: "bg-red-600 text-white hover:bg-red-700",
+  danger: "bg-danger text-white hover:bg-danger-strong",
   dark: "bg-navy-900 text-white hover:bg-navy-800",
 };
 
@@ -36,7 +41,7 @@ const sizes: Record<Size, string> = {
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant = "primary", size = "md", loading, href, fullWidth, className, children, disabled, ...rest },
+  { variant = "primary", size = "md", loading, href, target, rel, fullWidth, className, children, disabled, ...rest },
   ref,
 ) {
   const classes = cn(
@@ -59,7 +64,14 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
 
   if (href) {
     return (
-      <Link href={href} className={classes}>
+      <Link
+        href={href}
+        className={classes}
+        target={target}
+        // Abrir noutra aba sem `noopener` deixa a página de destino manipular
+        // `window.opener` (tabnabbing) — aplica-se sempre que target é _blank.
+        rel={rel ?? (target === "_blank" ? "noopener noreferrer" : undefined)}
+      >
         {content}
       </Link>
     );

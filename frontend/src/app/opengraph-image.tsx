@@ -5,12 +5,13 @@ import { join } from "node:path";
 const fontData = readFileSync(
   join(process.cwd(), "node_modules/next/dist/compiled/@vercel/og/Geist-Regular.ttf")
 );
-// Logo real (public/logo.png) embutido como data URI — a marca aparece no preview.
-const logoData = readFileSync(join(process.cwd(), "public/logo.png"));
+// Logo real (versão de 512px) embutido como data URI — a marca aparece no
+// preview sem carregar o master de 1,3 MB.
+const logoData = readFileSync(join(process.cwd(), "public/logo-512.png"));
 const LOGO_URI = `data:image/png;base64,${logoData.toString("base64")}`;
 
 export const alt =
-  "NorteShop — Compras simples, seguras e acessíveis em Moçambique";
+  "NorteShopMoz — Compras simples, seguras e acessíveis em Moçambique";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -36,7 +37,7 @@ export default function OpengraphImage() {
           <img src={LOGO_URI} width={64} height={64} alt="" style={{ borderRadius: 18 }} />
           <div style={{ display: "flex", flexDirection: "column" }}>
             <span style={{ fontSize: 34, fontWeight: 700, letterSpacing: -1 }}>
-              NorteShop
+              NorteShopMoz
             </span>
             <span style={{ fontSize: 18, opacity: 0.75, marginTop: 2 }}>
               Loja online moçambicana

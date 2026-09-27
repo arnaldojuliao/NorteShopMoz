@@ -8,7 +8,7 @@ import { site } from "@/config/site";
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticRoutes: MetadataRoute.Sitemap = [
     { url: site.url, changeFrequency: "daily", priority: 1 },
-    { url: `${site.url}/procurar`, changeFrequency: "daily", priority: 0.8 },
+    { url: `${site.url}/explore`, changeFrequency: "daily", priority: 0.8 },
     { url: `${site.url}/categorias`, changeFrequency: "weekly", priority: 0.8 },
     { url: `${site.url}/sobre`, changeFrequency: "monthly", priority: 0.5 },
     { url: `${site.url}/ajuda`, changeFrequency: "monthly", priority: 0.5 },

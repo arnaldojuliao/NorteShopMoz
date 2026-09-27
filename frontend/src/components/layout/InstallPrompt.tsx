@@ -78,15 +78,17 @@ export function InstallPrompt() {
 
   return (
     <div
-      role="dialog"
-      aria-label="Instalar o app NorteShop"
+      /* Não é um dialog: nada fica bloqueado e o foco não é capturado. Um
+         `role="dialog"` fazia os leitores de ecrã entrarem em modo modal. */
+      role="region"
+      aria-label="Instalar o app NorteShopMoz"
       className="fixed inset-x-4 bottom-20 z-[70] mx-auto max-w-sm sm:inset-x-auto sm:bottom-6 sm:right-6 lg:bottom-6"
     >
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card-hover">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-surface shadow-card-hover">
         <div className="flex items-start gap-3 p-4 pb-3">
           <LogoMark className="mt-0.5 size-11 shrink-0 rounded-xl text-sm" />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold text-slate-900">Instalar o app NorteShop</p>
+            <p className="text-sm font-bold text-slate-900">Instalar o app NorteShopMoz</p>
             <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
               Acesso rápido, ícone no ecrã inicial e compras mais rápidas.
             </p>
@@ -103,7 +105,7 @@ export function InstallPrompt() {
         <div className="px-4 pb-4">
           <button
             onClick={install}
-            className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary-600 px-3 py-2.5 text-sm font-semibold text-white shadow-sm shadow-primary-600/25 transition hover:bg-primary-700 active:scale-[0.98]"
+            className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-brand px-3 py-2.5 text-sm font-semibold text-white shadow-sm shadow-brand/25 transition hover:bg-brand-strong active:scale-[0.98]"
           >
             <Download className="size-4" aria-hidden /> Instalar app
           </button>

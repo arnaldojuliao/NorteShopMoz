@@ -16,7 +16,9 @@ export function Reveal({
   return (
     <div
       ref={ref}
-      className={cn(visible ? "animate-fade-up" : "opacity-0", className)}
+      // `.reveal-wait` (e não `opacity-0`) para que o conteúdo apareça quando
+      // não há JavaScript — ver globals.css.
+      className={cn(visible ? "animate-fade-up" : "reveal-wait", className)}
       style={{ animationDelay: `${delay}ms` }}
     >
       {children}

@@ -1,16 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import Image from "next/image";
 import { ChevronRight, LayoutGrid } from "lucide-react";
 import { repo } from "@/lib/repo";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
+import { ProductImage } from "@/components/product/ProductImage";
+import { site } from "@/config/site";
+import { isValidImageSrc, serializeJsonLd } from "@/lib/utils";
+import { envOr } from "@/lib/env";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://norteshop.com";
+const SITE_URL = envOr(process.env.NEXT_PUBLIC_SITE_URL, site.url);
 
 export const metadata: Metadata = {
   title: "Categorias — Comprar por categoria em Moçambique",
   description:
-    "Explore todas as categorias da NorteShop: eletrónicos, telemóveis, informática, casa, moda, beleza, acessórios, desporto e mais.",
+    "Explore todas as categorias da NorteShopMoz: eletrónicos, telemóveis, informática, casa, moda, beleza, acessórios, desporto e mais.",
 };
 
 export default async function CategoriesPage() {
@@ -28,7 +31,7 @@ export default async function CategoriesPage() {
   const itemListJsonLd = {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
-    name: "Categorias — NorteShop",
+    name: "Categorias — NorteShopMoz",
     url: `${SITE_URL}/categorias`,
     mainEntity: {
       "@type": "ItemList",
@@ -37,7 +40,8 @@ export default async function CategoriesPage() {
         position: i + 1,
         name: c.name,
         url: `${SITE_URL}/categoria/${c.slug}`,
-        image: c.image,
+        // Imagens inválidas (ex.: "img.jpg") seriam rejeitadas pelo schema.org.
+        ...(isValidImageSrc(c.image) ? { image: c.image } : {}),
       })),
     },
   };
@@ -46,7 +50,7 @@ export default async function CategoriesPage() {
       <div className="container-nsm py-5">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(itemListJsonLd) }}
       />
       <Breadcrumbs items={[{ label: "Categorias" }]} />
 
@@ -69,23 +73,27 @@ export default async function CategoriesPage() {
           <Link
             key={c.slug}
             href={`/categoria/${c.slug}`}
-            className="group relative aspect-[4/3] overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-card-hover"
+            className="group relative aspect-[4/3] overflow-hidden rounded-2xl border border-slate-100 bg-surface shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-card-hover"
           >
-            <Image
+            <ProductImage
               src={c.image}
               alt={c.name}
               fill
               sizes="(max-width: 640px) 50vw, (max-width: 1280px) 33vw, 25vw"
-              className="object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+              emoji={c.emoji}
+              label={c.name}
+              imgClassName="object-cover transition-transform duration-500 ease-out group-hover:scale-105"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-navy-950/90 via-navy-950/30 to-transparent" />
-            <div className="absolute inset-x-0 bottom-0 p-3.5">
+            {/* Conteúdo sobre o degradê navy — `theme-inverse` mantém a paleta
+                clara (text-primary-300 clareia no tema escuro e aqui é ilegível). */}
+            <div className="theme-inverse absolute inset-x-0 bottom-0 p-3.5">
               <span className="mb-1 block text-2xl" aria-hidden>
                 {c.emoji}
               </span>
               <p className="font-display text-base font-bold text-white">{c.name}</p>
-              <p className="mt-0.5 line-clamp-1 text-[11px] text-white/70">{c.description}</p>
-              <p className="mt-1.5 flex items-center gap-0.5 text-[11px] font-semibold text-primary-300">
+              <p className="mt-0.5 line-clamp-1 text-xs text-white/70">{c.description}</p>
+              <p className="mt-1.5 flex items-center gap-0.5 text-xs font-semibold text-primary-300">
                 {counts.get(c.slug) ?? 0} produtos
                 <ChevronRight className="size-3 transition-transform duration-300 group-hover:translate-x-0.5" />
               </p>

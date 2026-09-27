@@ -1,5 +1,6 @@
 package mz.norteshopmoz.api.service;
 
+import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
@@ -14,6 +15,7 @@ import mz.norteshopmoz.api.security.AuditService;
 import mz.norteshopmoz.api.security.JwtService;
 import mz.norteshopmoz.api.security.LoginAttemptService;
 import mz.norteshopmoz.api.security.RefreshTokenService;
+import mz.norteshopmoz.api.security.SessionIdleService;
 import mz.norteshopmoz.api.security.SessionRevocationService;
 import mz.norteshopmoz.api.web.dto.AuthDtos.AuthResponse;
 import mz.norteshopmoz.api.web.dto.AuthDtos.LoginRequest;
@@ -31,8 +33,16 @@ public class AuthService {
     /** Tamanho máximo da imagem descodificada (base64) — 512px WebP fica bem abaixo. */
     private static final int MAX_AVATAR_BYTES = 1_500_000;
 
-    /** Validade do link de verificação de email. */
+    /** Validade do link e do código de verificação de email. */
     private static final Duration VERIFICATION_TTL = Duration.ofHours(24);
+
+    /**
+     * Tentativas falhadas com o código antes de o invalidar. São 1M de combinações
+     * e a janela de validade é longa — sem limite, a força bruta era viável.
+     */
+    private static final int MAX_CODE_ATTEMPTS = 5;
+
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     /** Validade do link de recuperação de palavra-passe. */
     private static final Duration RESET_TTL = Duration.ofHours(1);
@@ -47,13 +57,16 @@ public class AuthService {
     private final AppProperties props;
     private final JwtCookieService jwtCookieService;
     private final LoginAttemptService loginAttemptService;
+    private final SessionIdleService sessionIdleService;
     private final AuditService auditService;
+    private final EmailThrottleService emailThrottle;
 
     public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtService jwtService,
             RefreshTokenService refreshTokenService,
             EmailService emailService, SessionRevocationService sessionRevocationService,
             SocialAuthService socialAuthService, AppProperties props, JwtCookieService jwtCookieService,
-            LoginAttemptService loginAttemptService, AuditService auditService) {
+            LoginAttemptService loginAttemptService, SessionIdleService sessionIdleService,
+            AuditService auditService, EmailThrottleService emailThrottle) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
@@ -64,7 +77,9 @@ public class AuthService {
         this.props = props;
         this.jwtCookieService = jwtCookieService;
         this.loginAttemptService = loginAttemptService;
+        this.sessionIdleService = sessionIdleService;
         this.auditService = auditService;
+        this.emailThrottle = emailThrottle;
     }
 
     @Transactional
@@ -74,6 +89,11 @@ public class AuthService {
             auditService.logAuthEvent(AuditService.AuthEvent.REGISTER, email, clientIp, userAgent, false, "Email already exists");
             throw ApiException.conflict("Já existe uma conta com este email");
         }
+        // Travão dos emails públicos: o endereço vem do PEDIDO, não de uma conta —
+        // sem isto, um script com uma lista de endereços queima a cota do
+        // fornecedor de email (e os clientes reais deixam de receber a confirmação
+        // do pedido) e suja a reputação do domínio. Ver EmailThrottleService.
+        emailThrottle.assertAllowed(email);
         UserAccount user = UserAccount.builder()
                 .email(email)
                 .fullName(request.fullName().trim())
@@ -84,15 +104,19 @@ public class AuthService {
                 .authProvider("EMAIL")
                 .verificationToken(newVerificationToken())
                 .verificationTokenExpiry(Instant.now().plus(VERIFICATION_TTL))
+                .verificationCode(newVerificationCode())
                 .build();
         userRepository.save(user);
-        emailService.sendVerification(user, verificationUrl(user.getVerificationToken()));
-        String accessToken = jwtService.generateToken(user);
-        String refreshToken = jwtService.generateRefreshToken(user);
-        refreshTokenService.store(user.getId(), refreshToken);
-        setAuthCookies(response, accessToken, refreshToken, rememberMe);
+        emailService.sendVerification(user, verificationUrl(user.getVerificationToken()), user.getVerificationCode());
+        emailThrottle.recordSent(email);
+        // Sessão com id próprio (sid): a partir daqui o SERVIDOR mede a
+        // inatividade desta sessão (ver SessionIdleService).
+        IssuedSession session = issueSession(user);
+        String accessToken = session.accessToken();
+        String refreshToken = session.refreshToken();
+        String csrfToken = setAuthCookies(response, accessToken, refreshToken, rememberMe);
         auditService.logAuthEvent(AuditService.AuthEvent.REGISTER, email, clientIp, userAgent, true, "User registered");
-        return new AuthResponse(accessToken, refreshToken, UserDto.from(user));
+        return new AuthResponse(UserDto.from(user), csrfToken, accessTokenExpiresInSeconds());
     }
 
     /** Confirma o email com o token do link. Login continua permitido sem verificação. */
@@ -107,14 +131,56 @@ public class AuthService {
                 || user.getVerificationTokenExpiry().isBefore(Instant.now())) {
             throw ApiException.badRequest("Link expirado — peça um novo email de verificação no perfil");
         }
-        user.setEmailVerified(true);
-        user.setVerificationToken(null);
-        user.setVerificationTokenExpiry(null);
-        userRepository.save(user);
+        markVerified(user);
         return UserDto.from(user);
     }
 
-    /** Gera novo token e reenvia o email de verificação (conta não verificada). */
+    /**
+     * Confirma o email com o **código de 6 dígitos** do email — alternativa ao
+     * link (o utilizador cola-o na página de configurações da conta).
+     *
+     * <p>Só a própria conta pode usar o seu código (endpoint autenticado) e cada
+     * erro consome uma tentativa: ao fim de {@value #MAX_CODE_ATTEMPTS} o código é
+     * invalidado e é preciso pedir um novo.
+     *
+     * <p>{@code noRollbackFor}: o contador de tentativas é gravado **antes** de
+     * lançar o erro; sem isto, o rollback da transação (ApiException é uma
+     * RuntimeException) descartava o incremento e a tentativa nunca contava.
+     */
+    @Transactional(noRollbackFor = ApiException.class)
+    public UserDto verifyEmailWithCode(String userId, String code) {
+        UserAccount user = userRepository.findById(userId)
+                .orElseThrow(() -> ApiException.unauthorized("Utilizador não encontrado"));
+        if (user.isEmailVerified()) {
+            throw ApiException.conflict("O seu email já está verificado");
+        }
+        String expected = user.getVerificationCode();
+        if (expected == null
+                || user.getVerificationTokenExpiry() == null
+                || user.getVerificationTokenExpiry().isBefore(Instant.now())) {
+            throw ApiException.badRequest("Código expirado — peça um novo código de verificação");
+        }
+        if (!expected.equals(code == null ? "" : code.trim())) {
+            int attempts = user.getVerificationCodeAttempts() + 1;
+            if (attempts >= MAX_CODE_ATTEMPTS) {
+                // Invalida link e código: obriga a pedir um novo (não fica a janela
+                // aberta a tentativas ilimitadas dentro das 24 horas).
+                user.setVerificationCode(null);
+                user.setVerificationToken(null);
+                user.setVerificationTokenExpiry(null);
+                user.setVerificationCodeAttempts(0);
+                userRepository.save(user);
+                throw ApiException.badRequest("Demasiadas tentativas — peça um novo código de verificação");
+            }
+            user.setVerificationCodeAttempts(attempts);
+            userRepository.save(user);
+            throw ApiException.badRequest("Código incorreto. Confirme os 6 dígitos e tente novamente.");
+        }
+        markVerified(user);
+        return UserDto.from(user);
+    }
+
+    /** Gera novo token/código e reenvia o email de verificação (conta não verificada). */
     @Transactional
     public UserDto resendVerification(String userId) {
         UserAccount user = userRepository.findById(userId)
@@ -124,15 +190,39 @@ public class AuthService {
         }
         user.setVerificationToken(newVerificationToken());
         user.setVerificationTokenExpiry(Instant.now().plus(VERIFICATION_TTL));
+        user.setVerificationCode(newVerificationCode());
+        user.setVerificationCodeAttempts(0);
         userRepository.save(user);
-        emailService.sendVerification(user, verificationUrl(user.getVerificationToken()));
+        // Mesmo sendo a própria conta, o envio passa pelo travão: é ele que impede
+        // que cliques repetidos (ou um script com a sessão roubada) consumam a cota.
+        emailThrottle.assertAllowed(user.getEmail());
+        emailService.sendVerification(user, verificationUrl(user.getVerificationToken()), user.getVerificationCode());
+        emailThrottle.recordSent(user.getEmail());
         return UserDto.from(user);
     }
 
-    /** Termina a sessão em todos os dispositivos (revoga todos os tokens do utilizador). */
-    public void logout(String userId, HttpServletResponse response, String clientIp, String userAgent) {
+    /** Marca o email como confirmado e consome o token, o código e as tentativas. */
+    private void markVerified(UserAccount user) {
+        user.setEmailVerified(true);
+        user.setVerificationToken(null);
+        user.setVerificationTokenExpiry(null);
+        user.setVerificationCode(null);
+        user.setVerificationCodeAttempts(0);
+        userRepository.save(user);
+    }
+
+    /**
+     * Termina a sessão em todos os dispositivos (revoga todos os tokens do
+     * utilizador) e apaga a janela de inatividade deste dispositivo.
+     *
+     * @param sessionId {@code sid} da sessão atual (vem do principal), pode ser
+     *                  {@code null} em tokens sem sessão
+     */
+    public void logout(String userId, String sessionId, HttpServletResponse response,
+            String clientIp, String userAgent) {
         sessionRevocationService.revokeAll(userId);
         refreshTokenService.revokeAll(userId);
+        sessionIdleService.end(sessionId);
         jwtCookieService.clearAuthCookies(response);
         auditService.logAuthEvent(AuditService.AuthEvent.LOGOUT, userId, clientIp, userAgent, true, "Logout all devices");
     }
@@ -143,11 +233,16 @@ public class AuthService {
      */
     @Transactional
     public void requestPasswordReset(String email) {
+        // O travão é verificado ANTES de tocar na base de dados e não revela se a
+        // conta existe (a resposta é idêntica nos dois casos, como antes) — apenas
+        // impede que a mesma caixa de correio (ou a loja inteira) seja bombardeada.
+        emailThrottle.assertAllowed(email);
         userRepository.findByEmailIgnoreCase(email.trim().toLowerCase()).ifPresent(user -> {
             user.setResetToken(newVerificationToken());
             user.setResetTokenExpiry(Instant.now().plus(RESET_TTL));
             userRepository.save(user);
             emailService.sendPasswordReset(user, resetUrl(user.getResetToken()));
+            emailThrottle.recordSent(user.getEmail());
         });
     }
 
@@ -172,6 +267,11 @@ public class AuthService {
 
     private static String newVerificationToken() {
         return UUID.randomUUID().toString();
+    }
+
+    /** Código numérico de 6 dígitos (com zeros à esquerda), criptograficamente seguro. */
+    private static String newVerificationCode() {
+        return String.format("%06d", SECURE_RANDOM.nextInt(1_000_000));
     }
 
     private String verificationUrl(String token) {
@@ -211,12 +311,14 @@ public class AuthService {
         // Login bem-sucedido — limpa contadores
         loginAttemptService.recordSuccess(clientIp, email);
         
-        String accessToken = jwtService.generateToken(user);
-        String refreshToken = jwtService.generateRefreshToken(user);
-        refreshTokenService.store(user.getId(), refreshToken);
-        setAuthCookies(response, accessToken, refreshToken, rememberMe);
+        // Sessão com id próprio (sid): a partir daqui o SERVIDOR mede a
+        // inatividade desta sessão (ver SessionIdleService).
+        IssuedSession session = issueSession(user);
+        String accessToken = session.accessToken();
+        String refreshToken = session.refreshToken();
+        String csrfToken = setAuthCookies(response, accessToken, refreshToken, rememberMe);
         auditService.logAuthEvent(AuditService.AuthEvent.LOGIN_SUCCESS, email, clientIp, userAgent, true, "Login successful");
-        return new AuthResponse(accessToken, refreshToken, UserDto.from(user));
+        return new AuthResponse(UserDto.from(user), csrfToken, accessTokenExpiresInSeconds());
     }
 
     /**
@@ -230,7 +332,7 @@ public class AuthService {
         String email = profile.email().toLowerCase();
         UserAccount user = userRepository.findByEmailIgnoreCase(email).orElseGet(() -> {
             String name = profile.fullName() == null || profile.fullName().isBlank()
-                    ? "Cliente NorteShop"
+                    ? "Cliente NorteShopMoz"
                     : profile.fullName().trim();
             UserAccount created = UserAccount.builder()
                     .email(email)
@@ -253,12 +355,14 @@ public class AuthService {
             user.setVerificationTokenExpiry(null);
         }
         userRepository.save(user);
-        String accessToken = jwtService.generateToken(user);
-        String refreshToken = jwtService.generateRefreshToken(user);
-        refreshTokenService.store(user.getId(), refreshToken);
-        setAuthCookies(response, accessToken, refreshToken, false);
+        // Sessão com id próprio (sid): a partir daqui o SERVIDOR mede a
+        // inatividade desta sessão (ver SessionIdleService).
+        IssuedSession session = issueSession(user);
+        String accessToken = session.accessToken();
+        String refreshToken = session.refreshToken();
+        String csrfToken = setAuthCookies(response, accessToken, refreshToken, false);
         auditService.logAuthEvent(AuditService.AuthEvent.SOCIAL_LOGIN, email, clientIp, userAgent, true, "Provider: " + request.provider());
-        return new AuthResponse(accessToken, refreshToken, UserDto.from(user));
+        return new AuthResponse(UserDto.from(user), csrfToken, accessTokenExpiresInSeconds());
     }
 
     @Transactional(readOnly = true)
@@ -332,12 +436,14 @@ public class AuthService {
             throw ApiException.unauthorized("Refresh token em falta");
         }
         String userId;
+        String sessionId;
         try {
             var claims = jwtService.parseClaims(refreshToken);
             if (!"refresh".equals(claims.get("typ"))) {
                 throw ApiException.unauthorized("Token inválido — não é um refresh token");
             }
             userId = claims.get("uid", String.class);
+            sessionId = claims.get("sid", String.class);
         } catch (Exception e) {
             auditService.logAuthEvent(AuditService.AuthEvent.TOKEN_REFRESH, "unknown", clientIp, userAgent, false, "Invalid refresh token");
             throw ApiException.unauthorized("Refresh token inválido ou expirado");
@@ -346,19 +452,28 @@ public class AuthService {
             auditService.logAuthEvent(AuditService.AuthEvent.TOKEN_REFRESH, userId, clientIp, userAgent, false, "Revoked or non-existent refresh token");
             throw ApiException.unauthorized("Refresh token revogado ou inexistente");
         }
+        // Inatividade: o refresh token vive 30 dias, mas não pode reviver uma
+        // sessão que ficou ociosa. Sem esta verificação, o idle timeout do
+        // servidor contornava-se com um simples refresh.
+        if (sessionIdleService.isExpired(sessionId)) {
+            refreshTokenService.revoke(userId, refreshToken);
+            auditService.logAuthEvent(AuditService.AuthEvent.TOKEN_REFRESH, userId, clientIp, userAgent, false, "Session idle timeout");
+            throw ApiException.unauthorized("Sessão expirada por inatividade — inicie sessão novamente");
+        }
         UserAccount user = userRepository.findById(userId)
                 .orElseThrow(() -> ApiException.unauthorized("Utilizador não encontrado"));
-        String newAccessToken = jwtService.generateToken(user);
-        String newRefreshToken = jwtService.generateRefreshToken(user);
+        // Mantém o mesmo sid: a sessão (e a sua janela de inatividade) continua.
+        String newAccessToken = jwtService.generateToken(user, sessionId);
+        String newRefreshToken = jwtService.generateRefreshToken(user, sessionId);
+        sessionIdleService.touch(sessionId);
         refreshTokenService.rotate(userId, refreshToken, newRefreshToken);
         // rememberMe=false para refresh — o cookie de sessão mantém o access token
         jwtCookieService.setAccessToken(response, newAccessToken, false);
         jwtCookieService.setRefreshToken(response, newRefreshToken);
-        // Novo CSRF token na rotação
-        String csrfToken = generateCsrfToken();
-        jwtCookieService.setCsrfToken(response, csrfToken);
+        // Novo CSRF token na rotação (também vai no corpo — ver AuthResponse).
+        String csrfToken = jwtCookieService.issueCsrfToken(response);
         auditService.logAuthEvent(AuditService.AuthEvent.TOKEN_REFRESH, user.getEmail(), clientIp, userAgent, true, "Token rotated");
-        return new AuthResponse(newAccessToken, newRefreshToken, UserDto.from(user));
+        return new AuthResponse(UserDto.from(user), csrfToken, accessTokenExpiresInSeconds());
     }
 
     /**
@@ -369,16 +484,39 @@ public class AuthService {
         refreshTokenService.revoke(userId, refreshToken);
     }
 
-    /** Define cookies de autenticação + CSRF token. */
-    private void setAuthCookies(HttpServletResponse response, String accessToken, String refreshToken, boolean rememberMe) {
-        jwtCookieService.setAccessToken(response, accessToken, rememberMe);
-        jwtCookieService.setRefreshToken(response, refreshToken);
-        String csrfToken = generateCsrfToken();
-        jwtCookieService.setCsrfToken(response, csrfToken);
+    /** Par de tokens de uma sessão nova, com o respectivo id. */
+    private record IssuedSession(String accessToken, String refreshToken, String sessionId) {}
+
+    /**
+     * Abre uma sessão: cria o {@code sid}, regista-o para o controlo de
+     * inatividade e emite o par de tokens com esse {@code sid}.
+     */
+    private IssuedSession issueSession(UserAccount user) {
+        String sessionId = UUID.randomUUID().toString();
+        sessionIdleService.start(sessionId);
+        String accessToken = jwtService.generateToken(user, sessionId);
+        String refreshToken = jwtService.generateRefreshToken(user, sessionId);
+        refreshTokenService.store(user.getId(), refreshToken);
+        return new IssuedSession(accessToken, refreshToken, sessionId);
     }
 
-    /** Gera CSRF token aleatório (32 bytes hex). */
-    private String generateCsrfToken() {
-        return UUID.randomUUID().toString().replace("-", "") + UUID.randomUUID().toString().replace("-", "");
+    /**
+     * Define cookies de autenticação + CSRF token e devolve o token CSRF, para
+     * ser incluído no corpo da resposta (o frontend pode estar noutro domínio,
+     * onde o cookie não é legível por JavaScript).
+     */
+    private String setAuthCookies(HttpServletResponse response, String accessToken, String refreshToken,
+            boolean rememberMe) {
+        jwtCookieService.setAccessToken(response, accessToken, rememberMe);
+        jwtCookieService.setRefreshToken(response, refreshToken);
+        return jwtCookieService.issueCsrfToken(response);
+    }
+
+    /**
+     * Validade do access token, em segundos, para o frontend agendar a renovação.
+     * É apenas um número — os tokens em si nunca saem no corpo (ver AuthResponse).
+     */
+    private long accessTokenExpiresInSeconds() {
+        return props.jwt().expiration().toSeconds();
     }
 }

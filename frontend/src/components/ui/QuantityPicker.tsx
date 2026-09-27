@@ -46,7 +46,7 @@ export function QuantityPicker({
   return (
     <div
       className={cn(
-        "inline-flex items-center rounded-xl border border-slate-300 bg-white",
+        "inline-flex items-center rounded-xl border border-slate-300 bg-surface",
         s.container,
         className,
       )}
@@ -56,7 +56,9 @@ export function QuantityPicker({
         onClick={() => onChange(clamp(value - 1))}
         disabled={value <= min}
         className={cn(
-          "flex items-center justify-center text-slate-500 transition hover:text-primary-700 disabled:opacity-30 active:scale-95",
+          // `self-stretch`: o contentor tem h-10/12/14 mas o botão só define
+          // largura — sem isto o alvo clicável ficava com a altura do ícone (20px).
+          "flex items-center justify-center self-stretch text-slate-500 transition hover:text-primary-700 disabled:opacity-30 active:scale-95",
           s.button,
         )}
         aria-label="Diminuir quantidade"
@@ -77,7 +79,7 @@ export function QuantityPicker({
         onClick={() => onChange(clamp(value + 1))}
         disabled={value >= max}
         className={cn(
-          "flex items-center justify-center text-slate-500 transition hover:text-primary-700 disabled:opacity-30 active:scale-95",
+          "flex items-center justify-center self-stretch text-slate-500 transition hover:text-primary-700 disabled:opacity-30 active:scale-95",
           s.button,
         )}
         aria-label="Aumentar quantidade"

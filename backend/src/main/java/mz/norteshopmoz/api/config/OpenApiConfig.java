@@ -69,7 +69,7 @@ public class OpenApiConfig {
                                 """)
                         .contact(new Contact()
                                 .name("Equipe NorteShopMoz")
-                                .email("apoio@norteshop.com")
+                                .email("apoio@norteshopmoz.com")
                                 .url(frontendUrl))
                         .license(new License()
                                 .name("Proprietário")

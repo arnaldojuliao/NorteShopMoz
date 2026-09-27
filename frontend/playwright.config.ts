@@ -38,7 +38,9 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // Em local: 2 workers equilibram paralelismo e carga (o dev server do Next
+  // compila rotas a pedido; workers a mais atrasam tudo e causam timeouts).
+  workers: process.env.CI ? 1 : 2,
   // Timeout folgado: o dev server do Next compila rotas a pedido e a máquina
   // pode estar sob carga (builds simultâneos).
   timeout: 90_000,
@@ -61,9 +63,13 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev',
+    // Servidor de produção: sem compilação on-demand (o dev server compila
+    // rotas a pedido e, sob carga, excede o timeout de 4s da api.ts → login
+    // fallback local → falhas em cascata nos testes). O build é feito antes
+    // (npm run build) — aqui apenas arranca o servidor.
+    command: 'npm run start',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
-    timeout: 120000,
+    timeout: 180000,
   },
 });

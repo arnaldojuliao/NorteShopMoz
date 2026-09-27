@@ -23,6 +23,14 @@ public class CartService {
 
     private static final int MAX_QTY = 99;
 
+    /**
+     * Teto de itens por carrinho. Cada item despoleta uma leitura do catálogo, e
+     * o endpoint é público (convidado): sem limite, um payload enorme gerava
+     * milhares de SELECTs num só pedido (amplificação) e inchava a linha do
+     * carrinho na base de dados. 100 itens já ultrapassa qualquer carrinho real.
+     */
+    private static final int MAX_ITEMS = 100;
+
     private final CartRepository cartRepository;
     private final ProductRepository productRepository;
 
@@ -46,6 +54,9 @@ public class CartService {
     @Transactional
     public List<CartItem> replaceCart(String cartKey, List<CartItemRequest> requests) {
         List<CartItemRequest> input = requests == null ? List.of() : requests;
+        if (input.size() > MAX_ITEMS) {
+            throw ApiException.badRequest("Carrinho com demasiados itens (máx. " + MAX_ITEMS + ")");
+        }
 
         // Colapsa por (productId, variant) para não duplicar linhas.
         Map<String, CartItemRequest> collapsed = new LinkedHashMap<>();

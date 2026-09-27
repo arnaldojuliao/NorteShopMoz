@@ -18,15 +18,31 @@ RUN npm ci
 FROM base AS builder
 WORKDIR /app
 
-# Build arguments for environment variables
+# Build arguments for environment variables.
+#
+# IMPORTANTE: os valores NEXT_PUBLIC_* são inlined no bundle do browser em tempo
+# de build — têm de ser declarados como ARG aqui e passados em build.args (ver
+# docker-compose.prod.yml). Um ARG passado pelo compose mas não declarado é
+# ignorado silenciosamente.
+#
+# O código consome NEXT_PUBLIC_API_BASE_URL (lib/api.ts) e NEXT_PUBLIC_SITE_URL
+# (config/site.ts, proxy.ts); NEXT_PUBLIC_API_URL/APP_URL existem por
+# compatibilidade e servem de fallback.
+ARG NEXT_PUBLIC_API_BASE_URL
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_APP_URL
+ARG NEXT_PUBLIC_SITE_URL
 ARG NEXT_PUBLIC_GOOGLE_CLIENT_ID
+ARG NEXT_PUBLIC_FACEBOOK_APP_ID
+ARG NEXT_PUBLIC_SESSION_TIMEOUT_MINUTES
 
-# Set as env so they're available at build time
+ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL:-$NEXT_PUBLIC_API_URL}
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+ENV NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL:-$NEXT_PUBLIC_APP_URL}
 ENV NEXT_PUBLIC_GOOGLE_CLIENT_ID=$NEXT_PUBLIC_GOOGLE_CLIENT_ID
+ENV NEXT_PUBLIC_FACEBOOK_APP_ID=$NEXT_PUBLIC_FACEBOOK_APP_ID
+ENV NEXT_PUBLIC_SESSION_TIMEOUT_MINUTES=$NEXT_PUBLIC_SESSION_TIMEOUT_MINUTES
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

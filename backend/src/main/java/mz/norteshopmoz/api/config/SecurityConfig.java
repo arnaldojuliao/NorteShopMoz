@@ -1,15 +1,20 @@
 package mz.norteshopmoz.api.config;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
+import mz.norteshopmoz.api.security.ClientIpResolver;
 import mz.norteshopmoz.api.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.authorization.AuthorizationDecision;
+import org.springframework.security.authorization.AuthorizationManager;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -45,13 +50,19 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/social",
                                 "/api/auth/verify-email", "/api/auth/refresh", "/api/auth/revoke-refresh",
-                                "/api/auth/forgot-password", "/api/auth/reset-password", "/error").permitAll()
+                                "/api/auth/forgot-password", "/api/auth/reset-password",
+                                // Entrega o token CSRF no corpo (o cookie é host-only:
+                                // com a API num subdomínio o JS do frontend não o lê).
+                                "/api/auth/csrf",
+                                "/error").permitAll()
                         // Newsletter — subscrição pública; lista de subscritores apenas admin.
                         .requestMatchers(HttpMethod.POST, "/api/newsletter/subscribe").permitAll()
                         // ── Área de administração (rotas /api/admin) ─────────────────────
+                        // Cupões — gestão apenas para admin (tem de vir antes do denyAll).
+                        .requestMatchers("/api/admin/coupons", "/api/admin/coupons/**").hasRole("ADMIN")
                         .requestMatchers("/api/admin/**").denyAll()
-                        // Lista de todos os pedidos e transição de estado — apenas admin.
-                        .requestMatchers("/api/orders/admin/all").hasRole("ADMIN")
+                        // Lista de todos os pedidos, estatísticas e transição de estado — apenas admin.
+                        .requestMatchers("/api/orders/admin/all", "/api/orders/admin/stats").hasRole("ADMIN")
                         .requestMatchers("/api/orders/*/status").hasRole("ADMIN")
                         // Subscritores da newsletter — apenas admin.
                         .requestMatchers("/api/newsletter/subscribers").hasRole("ADMIN")
@@ -62,6 +73,13 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/api/products/**").hasRole("ADMIN")
                         // Upload de imagens — apenas admin (qualquer método).
                         .requestMatchers("/api/upload").hasRole("ADMIN")
+                        // Actuator: health/info são públicos (abaixo). Prometheus e
+                        // métricas só são acessíveis de rede interna (ex.: o
+                        // container do Prometheus) ou por um admin autenticado —
+                        // antes, qualquer utilizador autenticado podia fazer
+                        // scraping do estado interno.
+                        .requestMatchers("/actuator/prometheus", "/actuator/metrics", "/actuator/metrics/**")
+                        .access(actuatorAccess())
                         // Imagens enviadas pelos admins — públicas.
                         .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
                         .requestMatchers(HttpMethod.GET,
@@ -70,8 +88,16 @@ public class SecurityConfig {
                                 "/api/orders/*",
                                 "/api/shipping",
                                 "/api/cart",
+                                // /actuator/health/** cobre as sondas liveness/readiness
+                                // usadas pelo healthcheck do contentor e pelo deploy.sh.
                                 "/actuator/health",
+                                "/actuator/health/**",
                                 "/actuator/info").permitAll()
+                        // Métodos de pagamento disponíveis — público (o checkout
+                        // desativa no UI os métodos que o servidor não consegue cobrar).
+                        .requestMatchers(HttpMethod.GET, "/api/payments/methods").permitAll()
+                        // Validação de cupão no checkout — pública (guest checkout).
+                        .requestMatchers(HttpMethod.POST, "/api/orders/validate-coupon").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/orders").permitAll()
                         // Carrinho de convidado (X-Guest-Id) sem conta.
                         .requestMatchers(HttpMethod.PUT, "/api/cart").permitAll()
@@ -94,6 +120,25 @@ public class SecurityConfig {
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    /**
+     * Acesso aos endpoints de métricas do Actuator: permitido a pedidos de rede
+     * interna (loopback/privados — o Prometheus corre no host/rede Docker) ou a
+     * qualquer cliente autenticado com role ADMIN.
+     */
+    private static AuthorizationManager<RequestAuthorizationContext> actuatorAccess() {
+        return (authentication, context) -> {
+            HttpServletRequest request = context.getRequest();
+            String ip = ClientIpResolver.resolve(request);
+            if (ClientIpResolver.isPrivate(ip)) {
+                return new AuthorizationDecision(true);
+            }
+            var current = authentication == null ? null : authentication.get();
+            boolean admin = current != null && current.getAuthorities().stream()
+                    .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+            return new AuthorizationDecision(admin);
+        };
     }
 
     @Bean

@@ -57,7 +57,7 @@ function ForgotPasswordContent() {
   };
 
   return (
-    <div className="container-nsm flex justify-center py-12">
+    <div className="container-nsm flex justify-center py-16">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center text-center">
           <LogoMark className="size-14 rounded-2xl text-lg" />
@@ -71,11 +71,11 @@ function ForgotPasswordContent() {
           </p>
         </div>
 
-        <div className="mt-6 rounded-2xl border border-slate-100 bg-white p-6 shadow-card">
+        <div className="mt-6 rounded-2xl border border-slate-100 bg-surface p-6 shadow-card">
           {done ? (
             <div className="flex flex-col items-center py-4 text-center">
               <span className="flex size-16 items-center justify-center rounded-full bg-emerald-100">
-                <CheckCircle2 className="size-9 text-emerald-600" aria-hidden />
+                <CheckCircle2 className="size-9 text-emerald-700" aria-hidden />
               </span>
               <h3 className="mt-4 font-display text-lg font-extrabold text-slate-900">Tudo pronto!</h3>
               <p className="mt-1.5 max-w-xs text-sm leading-relaxed text-slate-500">{done}</p>

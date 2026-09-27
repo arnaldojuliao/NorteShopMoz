@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { InfoPage } from "@/components/layout/InfoPage";
+import { serializeJsonLd } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Perguntas frequentes",
-  description: "Respostas às perguntas mais comuns sobre a NorteShop: entregas, pagamentos, devoluções e mais.",
+  description: "Respostas às perguntas mais comuns sobre a NorteShopMoz: entregas, pagamentos, devoluções e mais.",
 };
 
 const faqs = [
@@ -48,7 +49,7 @@ export default function AjudaPage() {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(faqJsonLd) }}
       />
       <InfoPage
       crumb="Ajuda"

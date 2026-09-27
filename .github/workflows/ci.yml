@@ -110,22 +110,11 @@ jobs:
       run:
         working-directory: ./backend
 
-    # Os testes @SpringBootTest usam as portas padrão do application.yaml
-    # (Postgres 5434 / Redis 6381), alinhadas com o docker-compose local.
+    # Os testes @SpringBootTest correm no perfil `unit-test`, que usa H2 em
+    # memória (src/test/resources/application-unit-test.properties) — não é
+    # necessário PostgreSQL. O Redis (6381) continua a ser usado pelo rate
+    # limiting, pela cache do catálogo e pela idempotência de pedidos.
     services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: norteshopmoz
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5434:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 12
       redis:
         image: redis:7-alpine
         ports:
@@ -315,8 +304,12 @@ jobs:
 
       - name: Build application
         env:
+          # O código consome NEXT_PUBLIC_API_BASE_URL (lib/api.ts) e
+          # NEXT_PUBLIC_SITE_URL (config/site.ts, proxy.ts).
+          NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
           NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
           NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
+          NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
           NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}
         run: npm run build
 
@@ -430,10 +423,18 @@ jobs:
           labels: ${{ steps.meta-frontend.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # Os ARGs têm de estar declarados no frontend/Dockerfile. O código
+          # consome NEXT_PUBLIC_API_BASE_URL (lib/api.ts) e NEXT_PUBLIC_SITE_URL
+          # (config/site.ts, proxy.ts) — sem eles o bundle cai no fallback
+          # http://localhost:8081 e o login/pedidos falham no browser.
           build-args: |
+            NEXT_PUBLIC_API_BASE_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
             NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
             NEXT_PUBLIC_APP_URL=${{ secrets.NEXT_PUBLIC_APP_URL }}
+            NEXT_PUBLIC_SITE_URL=${{ secrets.NEXT_PUBLIC_APP_URL }}
             NEXT_PUBLIC_GOOGLE_CLIENT_ID=${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}
+            NEXT_PUBLIC_FACEBOOK_APP_ID=${{ secrets.NEXT_PUBLIC_FACEBOOK_APP_ID }}
+            NEXT_PUBLIC_SESSION_TIMEOUT_MINUTES=30
 
   # ════════════════════════════════════════════════════════════════════════════
   # DOCKER COMPOSE VALIDATION
@@ -454,7 +455,22 @@ jobs:
           docker compose -f docker-compose.yml --profile full config --quiet
 
       - name: Validate docker-compose.prod.yml
+        # O ficheiro exige segredos via `${VAR:?…}` (comportamento desejado em
+        # produção). Aqui só se valida a interpolação/estrutura, com valores
+        # descartáveis — sem isto o `config` falhava sempre no CI.
+        env:
+          DB_PASSWORD: ci-placeholder
+          REDIS_PASSWORD: ci-placeholder
+          JWT_SECRET: ci-placeholder-ci-placeholder-ci-placeholder
+          ADMIN_PASSWORD: ci-placeholder-admin-password
+          CORS_ALLOWED_ORIGINS: http://localhost:3000
+          APP_BASE_URL: http://localhost:3000
         run: docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile full config --quiet
+
+      - name: Validate production hardening invariants
+        # Falha se alguém reabrir a monitorização para a internet, tirar o backup
+        # pré-deploy, voltar a depender de /actuator/health no healthcheck, etc.
+        run: bash scripts/hardening-check.sh
 
   # ═══════════════════════════════════════════════════════════════════════════
   # SUMMARY

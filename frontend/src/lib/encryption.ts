@@ -1,14 +1,36 @@
 /**
- * Criptografia simples para dados sensíveis no localStorage.
- * Usa Web Crypto API (AES-GCM) com chave derivada de secret do servidor.
- * 
- * NOTA: Em produção, a chave mestra deve vir do backend via endpoint seguro
- * ou ser derivada de segredo compartilhado. Aqui usamos uma chave derivada
- * de variável de ambiente para demonstração.
+ * Ofuscação dos dados guardados no localStorage (carrinho, favoritos).
+ * Usa Web Crypto API (AES-GCM) com chave derivada de um segredo do ambiente.
+ *
+ * ⚠️ IMPORTANTE — isto NÃO é confidencialidade. A chave é derivada de uma
+ * variável `NEXT_PUBLIC_*`, ou seja, vai dentro do bundle enviado ao browser:
+ * qualquer pessoa (ou XSS) consegue lê-la e desencriptar os dados. Serve para
+ * evitar leitura casual/inspeção trivial do localStorage, não para proteger
+ * segredos. Dados verdadeiramente sensíveis devem ficar no servidor.
+ *
+ * Nota: `crypto.subtle` só existe em contextos seguros (HTTPS ou localhost).
+ * Em HTTP sobre IP a derivação falha e o valor é guardado sem ofuscação.
  */
+
+import { envOr } from "@/lib/env";
 
 const ENCODER = new TextEncoder();
 const DECODER = new TextDecoder();
+
+/**
+ * Cache das chaves derivadas por segredo. Derivar é caro (PBKDF2, 100k
+ * iterações) — sem cache, cada gravação/leitura do carrinho repetia o cálculo.
+ */
+const derivedKeyCache = new Map<string, Promise<CryptoKey>>();
+
+function getDerivedKey(secret: string): Promise<CryptoKey> {
+  let cached = derivedKeyCache.get(secret);
+  if (!cached) {
+    cached = deriveKey(secret);
+    derivedKeyCache.set(secret, cached);
+  }
+  return cached;
+}
 
 /** Deriva chave de criptografia a partir de secret. */
 async function deriveKey(secret: string): Promise<CryptoKey> {
@@ -34,10 +56,14 @@ async function deriveKey(secret: string): Promise<CryptoKey> {
   );
 }
 
-/** Obtém secret do ambiente (em produção, viria do backend). */
+/**
+ * Segredo usado para derivar a chave. Vem de NEXT_PUBLIC_ENCRYPTION_SECRET —
+ * logo é público (ver aviso no topo do ficheiro). Serve apenas para ofuscar.
+ */
 function getSecret(): string {
-  // Em produção, usar NEXT_PUBLIC_ENCRYPTION_SECRET ou buscar do backend
-  return process.env.NEXT_PUBLIC_ENCRYPTION_SECRET ?? "dev-secret-change-in-production-32chars!!";
+  // `envOr`: um build arg ausente chega como "" — sem isto a chave seria
+  // derivada de password vazia (o default nunca se aplicaria).
+  return envOr(process.env.NEXT_PUBLIC_ENCRYPTION_SECRET, "dev-secret-change-in-production-32chars!!");
 }
 
 /** Encripta dados para armazenamento seguro no localStorage. */
@@ -46,7 +72,7 @@ export async function encryptStorage<T>(key: string, data: T): Promise<void> {
   
   try {
     const secret = getSecret();
-    const cryptoKey = await deriveKey(secret);
+    const cryptoKey = await getDerivedKey(secret);
     const iv = crypto.getRandomValues(new Uint8Array(12)); // 96-bit IV para AES-GCM
     const plaintext = ENCODER.encode(JSON.stringify(data));
     
@@ -64,8 +90,9 @@ export async function encryptStorage<T>(key: string, data: T): Promise<void> {
     const stored = btoa(String.fromCharCode(...combined));
     window.localStorage.setItem(`enc:${key}`, stored);
   } catch (error) {
-    console.warn("Falha ao encriptar localStorage:", error);
-    // Fallback: armazena sem criptografia (melhor que perder dados)
+    console.warn("Falha ao ofuscar localStorage (a usar texto simples):", error);
+    // Fallback: armazena sem ofuscação (melhor que perder dados). Acontece em
+    // contextos sem crypto.subtle (HTTP sobre IP, fora de localhost).
     window.localStorage.setItem(key, JSON.stringify(data));
   }
 }
@@ -83,7 +110,7 @@ export async function decryptStorage<T>(key: string): Promise<T | null> {
     }
     
     const secret = getSecret();
-    const cryptoKey = await deriveKey(secret);
+    const cryptoKey = await getDerivedKey(secret);
     const combined = Uint8Array.from(atob(stored), c => c.charCodeAt(0));
     
     const iv = combined.slice(0, 12);
@@ -97,8 +124,8 @@ export async function decryptStorage<T>(key: string): Promise<T | null> {
     
     return JSON.parse(DECODER.decode(plaintext));
   } catch (error) {
-    console.warn("Falha ao desencriptar localStorage:", error);
-    // Tenta ler versão não encriptada
+    console.warn("Falha ao desofuscar localStorage:", error);
+    // Tenta ler versão não ofuscada (migração/contexto sem crypto.subtle)
     const plain = window.localStorage.getItem(key);
     return plain ? JSON.parse(plain) : null;
   }
@@ -111,7 +138,7 @@ export function removeEncryptedStorage(key: string): void {
   window.localStorage.removeItem(key); // Também remove versão não encriptada
 }
 
-/** Chaves que devem ser encriptadas. */
+/** Chaves cujo valor é ofuscado antes de ir para o localStorage. */
 export const ENCRYPTED_KEYS = {
   USER_PROFILE: "nsm:profile",
   CART: "nsm:cart",

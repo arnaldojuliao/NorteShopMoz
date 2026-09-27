@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/context/AuthContext";
 import { useLoginModal } from "@/context/LoginModalContext";
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
@@ -62,15 +62,40 @@ export function useRequireAuth() {
   const { user, initializing } = useAuth();
   const { openLogin } = useLoginModal();
 
-  const checkAuth = (onAuthenticated: () => void) => {
-    if (initializing) return false; // Ainda a carregar, não faz nada
-    if (!user) {
-      openLogin();
-      return false;
+  // Valores atuais via ref — o poll pós-clique lê o estado mais recente,
+  // não o capturado no render em que o utilizador clicou.
+  const stateRef = useRef({ user, initializing });
+  const openLoginRef = useRef(openLogin);
+  useEffect(() => {
+    stateRef.current = { user, initializing };
+    openLoginRef.current = openLogin;
+  }, [user, initializing, openLogin]);
+
+  /**
+   * Executa a ação quando autenticado; se a sessão ainda estiver a carregar,
+   * espera pela inicialização e repete a decisão (o clique não se perde).
+   */
+  const checkAuth = useCallback((onAuthenticated: () => void): boolean => {
+    const decide = () => {
+      const { user: u, initializing: init } = stateRef.current;
+      if (init) return false; // continua a esperar
+      if (!u) {
+        openLoginRef.current();
+      } else {
+        onAuthenticated();
+      }
+      return true; // decisão tomada
+    };
+    if (!stateRef.current.initializing) {
+      return decide();
     }
-    onAuthenticated();
-    return true;
-  };
+    const poll = () => {
+      if (decide()) return;
+      setTimeout(poll, 50);
+    };
+    queueMicrotask(poll);
+    return false;
+  }, []);
 
   return { checkAuth, isAuthenticated: !!user, initializing };
 }

@@ -8,8 +8,11 @@ export function LogoMark({ className }: { className?: string }) {
       className={cn("relative block shrink-0 overflow-hidden", className)}
       aria-hidden
     >
+      {/* Fonte de 512px (e não o master de 1254px/1,3 MB): o `next/image`
+          redimensiona para o tamanho real e o ficheiro é servido diretamente a
+          motores de busca pelo JSON-LD/Og. */}
       <Image
-        src="/logo.png"
+        src="/logo-512.png"
         alt=""
         fill
         sizes="128px"
@@ -34,7 +37,7 @@ export function Logo({
     <Link
       href="/"
       className={cn("flex items-center gap-2.5", className)}
-      aria-label="NorteShop — página inicial"
+      aria-label="NorteShopMoz — página inicial"
     >
       <LogoMark className="size-9" />
       {!compact && (
@@ -45,11 +48,15 @@ export function Logo({
               light ? "text-white" : "text-navy-900 dark:text-white",
             )}
           >
-            Norte<span className="text-primary-600">Shop</span>
+            Norte
+            {/* Sobre fundos escuros (rodapé navy) o `primary-600` dava 2,8:1;
+                `primary-300` dá 9,3:1. */}
+            <span className={light ? "text-primary-300" : "text-primary-600"}>Shop</span>
+            Moz
           </span>
           <span
             className={cn(
-              "mt-0.5 text-[10px] font-medium uppercase tracking-[0.18em]",
+              "mt-0.5 text-xs font-medium uppercase tracking-[0.18em]",
               light ? "text-white/60" : "text-slate-400",
             )}
           >

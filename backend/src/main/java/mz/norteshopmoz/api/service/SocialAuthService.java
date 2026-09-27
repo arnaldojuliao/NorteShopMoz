@@ -95,18 +95,22 @@ public class SocialAuthService {
         if (appId == null || appId.isBlank()) {
             throw ApiException.badRequest("Login com Facebook não configurado");
         }
-        // Confirma que o token pertence à nossa app (debug_token exige o app secret;
-        // sem secret, a validação do /me abaixo é a única barreira).
-        if (appSecret != null && !appSecret.isBlank()) {
-            Map<?, ?> debug = graphGet("/debug_token", Map.of(
-                    "input_token", accessToken,
-                    "access_token", appId + "|" + appSecret));
-            Object data = debug != null ? debug.get("data") : null;
-            if (!(data instanceof Map<?, ?> info)
-                    || !Boolean.TRUE.equals(info.get("is_valid"))
-                    || !appId.equals(String.valueOf(info.get("app_id")))) {
-                throw ApiException.unauthorized("Token do Facebook inválido");
-            }
+        // Sem app secret não é possível confirmar que o token pertence à nossa app
+        // (o debug_token exige-o) — qualquer access token de outra aplicação
+        // passaria. Falha em vez de degradar para a validação mais fraca do /me.
+        if (appSecret == null || appSecret.isBlank()) {
+            throw ApiException.badRequest(
+                    "Login com Facebook não configurado (falta FACEBOOK_APP_SECRET)");
+        }
+        // Confirma que o token pertence à nossa app.
+        Map<?, ?> debug = graphGet("/debug_token", Map.of(
+                "input_token", accessToken,
+                "access_token", appId + "|" + appSecret));
+        Object data = debug != null ? debug.get("data") : null;
+        if (!(data instanceof Map<?, ?> info)
+                || !Boolean.TRUE.equals(info.get("is_valid"))
+                || !appId.equals(String.valueOf(info.get("app_id")))) {
+            throw ApiException.unauthorized("Token do Facebook inválido");
         }
         Map<?, ?> me = graphGet("/me", Map.of(
                 "fields", "id,name,email,picture.type(large)",

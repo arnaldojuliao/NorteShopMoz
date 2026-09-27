@@ -13,6 +13,10 @@ export function useEncryptedStorageState<T>(key: string, initial: T) {
   const initialRef = useRef(initial);
   const [state, setState] = useState<T>(initial);
   const [hydrated, setHydrated] = useState(false);
+  // Marca updates locais feitos antes de o valor guardado ser carregado —
+  // evita que a hidratação assíncrona (descriptografia) sobrescreva o que o
+  // utilizador já mudou (ex.: clique em "adicionar ao carrinho" no arranque).
+  const mutatedBeforeHydration = useRef(false);
 
   // Carrega valor encriptado na montagem
   useEffect(() => {
@@ -28,7 +32,9 @@ export function useEncryptedStorageState<T>(key: string, initial: T) {
       }
       // microtask para não disparar setState síncrono dentro do efeito
       queueMicrotask(() => {
-        setState(value);
+        if (!mutatedBeforeHydration.current) {
+          setState(value);
+        }
         setHydrated(true);
       });
     };
@@ -69,13 +75,14 @@ export function useEncryptedStorageState<T>(key: string, initial: T) {
   }, [key]);
 
   const setEncryptedState = useCallback((newState: T | ((prev: T) => T)) => {
+    if (!hydrated) mutatedBeforeHydration.current = true;
     setState(prev => {
       const next = typeof newState === "function" ? (newState as (prev: T) => T)(prev) : newState;
       // Salva assincronamente
       encryptStorage(key, next).catch(() => {});
       return next;
     });
-  }, [key]);
+  }, [key, hydrated]);
 
   const clearEncryptedState = useCallback(() => {
     setState(initialRef.current);

@@ -1,11 +1,14 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, Loader2, MailCheck, XCircle, RotateCcw, Mail } from "lucide-react";
 import { apiPost, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
+import { OtpInput } from "@/components/ui/OtpInput";
+import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
+import { useEmailVerificationCode } from "@/lib/useEmailVerificationCode";
 import { cn } from "@/lib/utils";
 
 type State =
@@ -18,9 +21,34 @@ function VerifyEmailContent() {
   const params = useSearchParams();
   const token = params.get("token") ?? "";
   const { notify } = useToast();
+  const { user } = useAuth();
   const [state, setState] = useState<State>({ status: "verifying" });
   const [resendLoading, setResendLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
+
+  // Confirmação pelo código de 6 dígitos do email — alternativa ao link, útil
+  // quando ele expira ou se abre a página sem link. O endpoint identifica a
+  // conta pela sessão (é autenticado), por isso sem sessão só resta o link.
+  const {
+    code,
+    setCode,
+    error,
+    verifying,
+    submit: submitCode,
+    resend: resendCode,
+  } = useEmailVerificationCode();
+  const canUseCode = Boolean(user && user.emailVerified !== true);
+
+  /** Confirma pelo código e passa para o estado de sucesso. */
+  const confirmWithCode = async () => {
+    if (!user) return;
+    if (await submitCode()) setState({ status: "success", email: user.email });
+  };
+
+  const handleCodeSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    void confirmWithCode();
+  };
 
   // Auto-redirect after successful verification
   useEffect(() => {
@@ -39,22 +67,6 @@ function VerifyEmailContent() {
       return () => clearTimeout(timer);
     }
   }, [countdown]);
-
-  const verify = async () => {
-    if (!token) {
-      setState({ status: "error", message: "Link de verificação inválido — falta o token.", canResend: false });
-      return;
-    }
-    try {
-      const { data } = await apiPost<{ data: { email: string } }>("/api/auth/verify-email", { token });
-      setState({ status: "success", email: data.email });
-    } catch (err) {
-      const message = err instanceof ApiError ? err.message : "Não foi possível verificar o email.";
-      // Check if it's an expired token (can resend)
-      const canResend = err instanceof ApiError && err.message.includes("expirado");
-      setState({ status: "error", message, canResend });
-    }
-  };
 
   const resendVerification = async () => {
     if (resendLoading) return;
@@ -97,7 +109,7 @@ function VerifyEmailContent() {
 
   return (
     <div className="container-nsm flex justify-center py-16">
-      <div className="w-full max-w-md rounded-2xl border border-slate-100 bg-white p-8 text-center shadow-card">
+      <div className="w-full max-w-md rounded-2xl border border-slate-100 bg-surface p-8 text-center shadow-card">
         {state.status === "verifying" && (
           <>
             <Loader2 className="mx-auto size-12 animate-spin text-primary-600" aria-hidden />
@@ -111,7 +123,7 @@ function VerifyEmailContent() {
         {state.status === "success" && (
           <>
             <span className="mx-auto flex size-16 items-center justify-center rounded-full bg-emerald-100">
-              <CheckCircle2 className="size-9 text-emerald-600" aria-hidden />
+              <CheckCircle2 className="size-9 text-emerald-700" aria-hidden />
             </span>
             <h1 className="mt-4 font-display text-xl font-extrabold text-slate-900">
               Email confirmado com sucesso!
@@ -143,8 +155,46 @@ function VerifyEmailContent() {
               Não foi possível confirmar o email
             </h1>
             <p className="mt-1.5 text-sm leading-relaxed text-slate-500">{state.message}</p>
-            
-            {state.canResend && (
+
+            {canUseCode && (
+              <form
+                onSubmit={handleCodeSubmit}
+                className="mt-5 w-full rounded-xl border border-slate-200 bg-slate-50 p-4 text-left"
+              >
+                <p className="text-xs font-semibold text-slate-600">
+                  Ou insira o código de 6 dígitos que enviámos para o seu email:
+                </p>
+                <OtpInput
+                  label="Código de verificação"
+                  value={code}
+                  onChange={setCode}
+                  onComplete={() => void confirmWithCode()}
+                  disabled={verifying}
+                  required
+                  error={error ?? undefined}
+                  hint={error ? undefined : "Válido por 24 horas · verifique também o spam."}
+                  className="mt-3"
+                />
+                <Button
+                  type="submit"
+                  fullWidth
+                  loading={verifying}
+                  disabled={code.length !== 6}
+                  className="mt-3"
+                >
+                  Confirmar com o código
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => void resendCode()}
+                  className="mx-auto mt-3 block text-xs font-semibold text-primary-700 transition hover:text-primary-800 hover:underline"
+                >
+                  Não recebeu? Enviar novo código
+                </button>
+              </form>
+            )}
+
+            {state.canResend && !canUseCode && (
               <div className="mt-4 p-4 rounded-xl bg-amber-50 border border-amber-200">
                 <p className="flex items-center justify-center gap-1.5 text-xs text-amber-700 mb-3">
                   <Mail className="size-3.5" />

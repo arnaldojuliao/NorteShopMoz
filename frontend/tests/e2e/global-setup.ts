@@ -29,9 +29,22 @@ function apiBase(): string {
 
 const API_BASE = apiBase();
 
-/** Utilizadores criados a partir do registo público (POST /api/auth/register). */
+/**
+ * Utilizadores criados a partir do registo público (POST /api/auth/register).
+ * Um utilizador por worker do Playwright — evita corridas no carrinho do
+ * servidor quando os testes correm em paralelo (cada worker tem a sua conta
+ * e, portanto, o seu carrinho).
+ */
+const WORKER_USERS = Array.from({ length: 8 }, (_, i) => ({
+  fullName: `Utilizador E2E ${i + 1}`,
+  email: `e2e-worker${i + 1}@test.com`,
+  password: 'Teste@123',
+  phone: `84${String(12345600 + i).slice(0, 7)}`,
+}));
+
 const TEST_USERS = [
   { fullName: 'Utilizador A', email: 'usera@test.com', password: 'Teste@123', phone: '841234567' },
+  ...WORKER_USERS,
 ];
 
 async function waitFor(url: string, label: string, maxRetries = 45): Promise<void> {

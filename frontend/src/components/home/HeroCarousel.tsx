@@ -14,8 +14,8 @@ type HeroSlide = {
   cta: string;
   href: string;
   discount: string;
-  left: { src: string; alt: string }[];
-  right: { src: string; alt: string }[];
+  left: { src: string }[];
+  right: { src: string }[];
 };
 
 const heroSlides: HeroSlide[] = [
@@ -23,17 +23,17 @@ const heroSlides: HeroSlide[] = [
     title: "Oferta de boas-vindas",
     subtitle: "Oferta especial para novos clientes",
     cta: "Compre agora",
-    href: "/procurar?deal=1",
+    href: "/explore?deal=1",
     discount: "-84%",
     left: [
-      { src: products[0].images[0], alt: products[0].name },
-      { src: products[6].images[0], alt: products[6].name },
-      { src: products[2].images[0], alt: products[2].name },
+      { src: products[0].images[0] },
+      { src: products[6].images[0] },
+      { src: products[2].images[0] },
     ],
     right: [
-      { src: products[3].images[0], alt: products[3].name },
-      { src: products[23].images[0], alt: products[23].name },
-      { src: products[24].images[0], alt: products[24].name },
+      { src: products[3].images[0] },
+      { src: products[23].images[0] },
+      { src: products[24].images[0] },
     ],
   },
   {
@@ -43,50 +43,51 @@ const heroSlides: HeroSlide[] = [
     href: "/categoria/eletronicos",
     discount: "-50%",
     left: [
-      { src: products[5].images[0], alt: products[5].name },
-      { src: products[14].images[0], alt: products[14].name },
-      { src: products[8].images[0], alt: products[8].name },
+      { src: products[5].images[0] },
+      { src: products[14].images[0] },
+      { src: products[8].images[0] },
     ],
     right: [
-      { src: products[7].images[0], alt: products[7].name },
-      { src: products[4].images[0], alt: products[4].name },
-      { src: products[10].images[0], alt: products[10].name },
+      { src: products[7].images[0] },
+      { src: products[4].images[0] },
+      { src: products[10].images[0] },
     ],
   },
   {
     title: "Moda e estilo",
-    subtitle: "Novas coleções a chegar à NorteShop",
+    subtitle: "Novas coleções a chegar à NorteShopMoz",
     cta: "Descobrir moda",
     href: "/categoria/moda",
     discount: "-30%",
     left: [
-      { src: products[23].images[0], alt: products[23].name },
-      { src: products[25].images[0], alt: products[25].name },
-      { src: products[26].images[0], alt: products[26].name },
+      { src: products[23].images[0] },
+      { src: products[25].images[0] },
+      { src: products[26].images[0] },
     ],
     right: [
-      { src: products[27].images[0], alt: products[27].name },
-      { src: products[32].images[0], alt: products[32].name },
-      { src: products[29].images[0], alt: products[29].name },
+      { src: products[27].images[0] },
+      { src: products[32].images[0] },
+      { src: products[29].images[0] },
     ],
   },
 ];
 
 function ProductFloat({
   src,
-  alt,
   className,
   delay = 0,
   slow,
 }: {
   src: string;
-  alt: string;
   className?: string;
   delay?: number;
   slow?: boolean;
 }) {
   return (
     <div
+      // Decoração do hero: sem isto cada leitor de ecrã anuncia os 18 nomes de
+      // produto (3 slides × 6 imagens) antes do título.
+      aria-hidden
       className={cn(
         "absolute overflow-hidden rounded-xl bg-white shadow-xl ring-2 ring-white/20",
         slow ? "animate-float-slow" : "animate-float",
@@ -96,7 +97,7 @@ function ProductFloat({
     >
       <Image
         src={src}
-        alt={alt}
+        alt=""
         width={320}
         height={320}
         className="aspect-square w-full object-cover"
@@ -124,20 +125,17 @@ function HeroSlideContent({ s }: { s: HeroSlide }) {
       <div className="absolute inset-y-0 left-0 block w-[28%]">
         <ProductFloat
           src={s.left[0].src}
-          alt={s.left[0].alt}
           className="left-0 top-[30%] w-14 -rotate-6 sm:left-2 sm:w-40 lg:left-6 lg:w-52"
           delay={0}
         />
         <ProductFloat
           src={s.left[1].src}
-          alt={s.left[1].alt}
           className="left-5 top-[4%] w-11 rotate-3 sm:left-14 sm:w-28 lg:left-24 lg:w-36"
           delay={900}
           slow
         />
         <ProductFloat
           src={s.left[2].src}
-          alt={s.left[2].alt}
           className="bottom-[-12%] left-4 w-10 -rotate-3 sm:left-6 sm:w-24 lg:left-10 lg:w-32"
           delay={1800}
         />
@@ -147,20 +145,17 @@ function HeroSlideContent({ s }: { s: HeroSlide }) {
       <div className="absolute inset-y-0 right-0 block w-[28%]">
         <ProductFloat
           src={s.right[0].src}
-          alt={s.right[0].alt}
           className="right-0 top-[30%] w-14 rotate-6 sm:right-2 sm:w-40 lg:right-6 lg:w-52"
           delay={400}
         />
         <ProductFloat
           src={s.right[1].src}
-          alt={s.right[1].alt}
           className="right-5 top-[4%] w-11 -rotate-3 sm:right-14 sm:w-28 lg:right-24 lg:w-36"
           delay={1300}
           slow
         />
         <ProductFloat
           src={s.right[2].src}
-          alt={s.right[2].alt}
           className="bottom-[-12%] right-4 w-10 rotate-3 sm:right-6 sm:w-24 lg:right-10 lg:w-32"
           delay={2200}
         />
@@ -192,7 +187,7 @@ function HeroSlideContent({ s }: { s: HeroSlide }) {
             <span className="font-display text-2xl font-extrabold leading-none text-red-600 lg:text-3xl">
               {s.discount}
             </span>
-            <span className="mt-1 text-[9px] font-bold uppercase tracking-[0.18em] text-red-500/80">
+            <span className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-red-600">
               Desconto
             </span>
           </span>
@@ -203,11 +198,16 @@ function HeroSlideContent({ s }: { s: HeroSlide }) {
 }
 
 export function HeroCarousel() {
+  // `theme-inverse`: o hero é vermelho nos dois temas, por isso o conteúdo
+  // (branco + `text-red-600` + `hover:bg-red-50`) mantém a paleta clara.
   return (
-    <div className="relative">
-      {/* Fundo vermelho full-bleed (de ponta a ponta) */}
-      <div className="absolute inset-0 bg-gradient-to-r from-red-500 via-red-600 to-red-700">
-        <div className="absolute inset-0 bg-[radial-gradient(50%_120%_at_50%_50%,rgb(255_255_255/0.15),transparent_70%)]" />
+    <div className="theme-inverse relative">
+      {/* Fundo vermelho full-bleed (de ponta a ponta). O vermelho é um passo
+          mais escuro do que o original (red-500/600/700): sobre ele o texto
+          branco do hero fica em ~6,5:1 e o subtítulo (`text-white/85`) em
+          ~5,4:1 — antes ficavam em 4,1:1 e 3,3:1 (abaixo de AA). */}
+      <div className="absolute inset-0 bg-gradient-to-r from-red-600 via-red-700 to-red-800">
+        <div className="absolute inset-0 bg-[radial-gradient(50%_120%_at_50%_50%,rgb(255_255_255/0.10),transparent_70%)]" />
       </div>
 
       {/* Carrossel alinhado ao container do site — itens e setas */}

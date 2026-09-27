@@ -86,14 +86,14 @@ export function Carousel({
         <>
           <button
             onClick={() => go(index - 1)}
-            className="absolute left-3 top-1/2 z-20 hidden size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-slate-700 shadow-card backdrop-blur transition hover:bg-white hover:text-primary-700 active:scale-95 sm:flex"
+            className="absolute left-3 top-1/2 z-20 hidden size-10 -translate-y-1/2 items-center justify-center rounded-full bg-surface/90 text-slate-700 shadow-card backdrop-blur transition hover:bg-surface hover:text-primary-700 active:scale-95 sm:flex"
             aria-label="Slide anterior"
           >
             <ChevronLeft className="size-5" />
           </button>
           <button
             onClick={() => go(index + 1)}
-            className="absolute right-3 top-1/2 z-20 hidden size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-slate-700 shadow-card backdrop-blur transition hover:bg-white hover:text-primary-700 active:scale-95 sm:flex"
+            className="absolute right-3 top-1/2 z-20 hidden size-10 -translate-y-1/2 items-center justify-center rounded-full bg-surface/90 text-slate-700 shadow-card backdrop-blur transition hover:bg-surface hover:text-primary-700 active:scale-95 sm:flex"
             aria-label="Próximo slide"
           >
             <ChevronRight className="size-5" />
@@ -102,19 +102,29 @@ export function Carousel({
       )}
 
       {showIndicators && count > 1 && (
-        <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5">
+        // O ponto visível tem 6px, mas o alvo de toque é o botão (24×24) —
+        // abaixo disso não se acerta num ecrã tátil (WCAG 2.5.8).
+        <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 items-center">
           {slides.map((_, i) => (
             <button
               key={i}
               onClick={() => go(i)}
               aria-label={`Ir para o slide ${i + 1}`}
+              aria-current={i === index}
               className={cn(
-                "h-1.5 rounded-full transition-all duration-300",
-                i === index
-                  ? "w-6 bg-white"
-                  : "w-1.5 bg-white/50 hover:bg-white/80",
+                "group/dot flex h-6 items-center justify-center rounded-full transition-all duration-300",
+                i === index ? "w-8" : "w-6",
               )}
-            />
+            >
+              <span
+                className={cn(
+                  "block h-1.5 rounded-full transition-all duration-300",
+                  i === index
+                    ? "w-6 bg-white"
+                    : "w-1.5 bg-white/50 group-hover/dot:bg-white/80",
+                )}
+              />
+            </button>
           ))}
         </div>
       )}

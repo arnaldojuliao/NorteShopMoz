@@ -16,15 +16,31 @@ test.describe('Admin Dashboard', () => {
   test('should display orders section when logged in as admin', async ({ adminPage }) => {
     const ordersTab = adminPage.locator('button:has-text("Pedidos")').first();
     await expect(ordersTab).toBeVisible({ timeout: 10000 });
-    // Filtros por estado visíveis (chips "Todos", "Pedido recebido", …).
-    await expect(adminPage.locator('button:has-text("Todos")').first()).toBeVisible({
-      timeout: 10000,
-    });
+    // Filtros por estado visíveis (chips "Pedido recebido", "Pagamento confirmado", …).
+    // Nota: não existe chip "Todos" — a vista padrão mostra as pastas semanais.
+    await expect(
+      adminPage.locator('button:has-text("Pedido recebido")').first(),
+    ).toBeVisible({ timeout: 10000 });
+    await expect(
+      adminPage.locator('button:has-text("Pagamento confirmado")').first(),
+    ).toBeVisible({ timeout: 10000 });
   });
 
   test('should show products tab when admin', async ({ adminPage }) => {
     const productsTab = adminPage.locator('button:has-text("Publicar produto")').first();
     await expect(productsTab).toBeVisible({ timeout: 10000 });
+  });
+
+  test('should show the aggregated sales statistics panel', async ({ adminPage }) => {
+    await adminPage.getByRole('button', { name: 'Estatísticas' }).first().click();
+
+    await expect(
+      adminPage.getByRole('heading', { name: 'Estatísticas de vendas' }),
+    ).toBeVisible({ timeout: 15000 });
+    // Números agregados no servidor (GET /api/orders/admin/stats).
+    await expect(adminPage.getByText('Receita confirmada').first()).toBeVisible({ timeout: 15000 });
+    await expect(adminPage.getByText('Produtos mais vendidos')).toBeVisible({ timeout: 15000 });
+    await expect(adminPage.getByText('Vendas por dia')).toBeVisible({ timeout: 15000 });
   });
 });
 

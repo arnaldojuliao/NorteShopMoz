@@ -54,6 +54,23 @@ public class UserAccount {
     @Column
     private Instant verificationTokenExpiry;
 
+    /**
+     * Código numérico de 6 dígitos para confirmar o email (alternativa ao link,
+     * colado em /configuracoes). Vale o mesmo prazo que o token —
+     * {@link #verificationTokenExpiry}.
+     */
+    @Column(length = 6)
+    private String verificationCode;
+
+    /**
+     * Tentativas falhadas com o código. Ao atingir o limite, o código é
+     * invalidado (6 dígitos são só 1M de combinações — sem isto, a janela de
+     * validade permitia tentativa exaustiva).
+     */
+    @Column(nullable = false, columnDefinition = "int default 0")
+    @Builder.Default
+    private int verificationCodeAttempts = 0;
+
     /** Token de recuperação de palavra-passe (UUID, de uso único). */
     @Column(length = 64)
     private String resetToken;

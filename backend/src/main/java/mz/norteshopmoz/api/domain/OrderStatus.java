@@ -10,7 +10,8 @@ public enum OrderStatus {
     EM_PREPARACAO("Em preparação"),
     ENVIADO("Enviado"),
     EM_TRANSITO("Em trânsito"),
-    ENTREGUE("Entregue");
+    ENTREGUE("Entregue"),
+    CANCELADO("Cancelado");
 
     private final String label;
 

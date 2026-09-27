@@ -31,7 +31,9 @@ export function Newsletter() {
 
   return (
     <section aria-label="Newsletter" className="container-nsm">
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary-600 via-primary-700 to-navy-900 px-6 py-10 text-center sm:px-10">
+      {/* `theme-inverse`: painel sempre azul-marinho — o input branco com texto
+          escuro mantém-se como no tema claro. */}
+      <div className="theme-inverse relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary-600 via-primary-700 to-navy-900 px-6 py-10 text-center sm:px-10">
         <div
           aria-hidden
           className="pointer-events-none absolute -right-16 -top-16 size-56 rounded-full bg-white/10 blur-2xl"

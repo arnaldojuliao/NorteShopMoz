@@ -88,28 +88,70 @@ public class EmailService {
     /* ── Verificação de email (registo) ─────────────────────────── */
 
     /**
-     * Email de boas-vindas com o link de confirmação do email.
+     * Email de boas-vindas com o link de confirmação e o código de 6 dígitos.
      * Assíncrono — o registo não espera pelo envio.
+     *
+     * <p>O email apresenta as duas opções em paralelo: o botão/link e o código de 6
+     * dígitos a inserir na página de configurações da conta. Qualquer uma confirma o
+     * email por si só.
      */
     @Async
-    public void sendVerification(UserAccount user, String verifyUrl) {
+    public void sendVerification(UserAccount user, String verifyUrl, String code) {
         String firstName = escapeHtml(user.getFullName().split(" ")[0]);
         String html = """
                 %s
                 <h2 style="margin:0 0 8px;font-size:18px">Bem-vindo(a), %s! 🎉</h2>
                 <p style="margin:0 0 16px;font-size:14px;line-height:1.6">
                   A sua conta foi criada com sucesso. Para confirmar o seu email e ficar com tudo
-                  pronto para comprar, guardar favoritos e acompanhar pedidos, confirme o endereço:
+                  pronto para comprar, guardar favoritos e acompanhar pedidos, escolha uma das duas
+                  opções — qualquer uma delas confirma o endereço:
+                </p>
+
+                <p style="margin:0 0 8px;font-size:13px;color:#334155">
+                  <strong>1. Clicar no link</strong> (mais rápido, neste ou noutro dispositivo):
                 </p>
                 <a href="%s" style="%s">Confirmar o meu email</a>
+
+                <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#334155">
+                  <strong>2. Inserir o código de 6 dígitos</strong> na página de confirmação de email do
+                  site (ou em <strong>Configurações → Email não verificado</strong>):
+                </p>
+                %s
+                <p style="margin:14px 0 0;font-size:12px;color:#64748b">
+                  O link e o código são válidos por 24 horas e cada um confirma o email por si só.
+                  Não partilhe este código com ninguém.
+                </p>
                 <p style="margin:18px 0 0;font-size:12px;color:#64748b">
                   Se o botão não funcionar, copie e cole este link no navegador:<br>
                   <span style="color:#1f46e6;word-break:break-all">%s</span>
                 </p>
                 %s
-                """.formatted(header(), firstName, verifyUrl, buttonStyle(), verifyUrl, footer());
+                """.formatted(header(), firstName, verifyUrl, buttonStyle(), codeBoxes(code), verifyUrl, footer());
 
-        sendHtml(user.getEmail(), "Bem-vindo(a) à NorteShop — confirme o seu email", html, verifyUrl);
+        sendHtml(user.getEmail(), "Bem-vindo(a) à NorteShopMoz — confirme o seu email", html, verifyUrl);
+    }
+
+    /**
+     * Código de verificação em "quadradinhos" — uma caixa por dígito, igual ao
+     * campo do formulário no site.
+     *
+     * <p>Tabela com um {@code <td>} por dígito e {@code border-spacing} como
+     * espaçamento: os clientes de email (Gmail, Outlook, Apple Mail) não suportam
+     * flex/grid e ignoram parte do CSS de blocos, mas renderizam tabelas de forma
+     * consistente. O tamanho é fixo para as caixas não colapsarem no Outlook.
+     */
+    private static String codeBoxes(String code) {
+        StringBuilder boxes = new StringBuilder();
+        for (char digit : code.toCharArray()) {
+            boxes.append("""
+                    <td style="width:38px;height:46px;border:1px solid #cbd5e1;border-radius:12px;background:#f8fafc;color:#1f46e6;font-family:'Courier New',Courier,monospace;font-size:22px;font-weight:bold;text-align:center;vertical-align:middle">%s</td>
+                    """.formatted(digit));
+        }
+        return """
+                <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate;border-spacing:8px 0;margin:10px 0 0">
+                  <tr>%s</tr>
+                </table>
+                """.formatted(boxes);
     }
 
     /* ── Recuperação de palavra-passe ──────────────────────────── */
@@ -122,7 +164,7 @@ public class EmailService {
                 %s
                 <h2 style="margin:0 0 8px;font-size:18px">Recupere a sua palavra-passe, %s 🔑</h2>
                 <p style="margin:0 0 16px;font-size:14px;line-height:1.6">
-                  Recebemos um pedido para repor a palavra-passe da sua conta NorteShop.
+                  Recebemos um pedido para repor a palavra-passe da sua conta NorteShopMoz.
                   O link é válido por <strong>1 hora</strong> e só pode ser usado uma vez.
                 </p>
                 <a href="%s" style="%s">Repor palavra-passe</a>
@@ -132,7 +174,7 @@ public class EmailService {
                 %s
                 """.formatted(header(), firstName, resetUrl, buttonStyle(), footer());
 
-        sendHtml(user.getEmail(), "Repor a sua palavra-passe — NorteShop", html, resetUrl);
+        sendHtml(user.getEmail(), "Repor a sua palavra-passe — NorteShopMoz", html, resetUrl);
     }
 
     /* ── Newsletter ─────────────────────────────────────────────── */
@@ -153,12 +195,12 @@ public class EmailService {
                 </p>
                 <p style="margin:0;font-size:13px;color:#334155">
                   Enquanto isso, veja as novidades da loja:
-                  <a href="%s" style="color:#1f46e6;font-weight:bold">NorteShop</a>
+                  <a href="%s" style="color:#1f46e6;font-weight:bold">NorteShopMoz</a>
                 </p>
                 %s
                 """.formatted(header(), firstName, baseUrl, footer());
 
-        sendHtml(subscriber.getEmail(), "Bem-vindo(a) à newsletter NorteShop 🎉", html, baseUrl);
+        sendHtml(subscriber.getEmail(), "Bem-vindo(a) à newsletter NorteShopMoz 🎉", html, baseUrl);
     }
 
     /* ── Pedidos ────────────────────────────────────────────────── */
@@ -237,7 +279,7 @@ public class EmailService {
                 buttonStyle(),
                 footer());
 
-        sendHtml(a.getEmail(), "Pedido " + order.getId() + " confirmado — NorteShop", html,
+        sendHtml(a.getEmail(), "Pedido " + order.getId() + " confirmado — NorteShopMoz", html,
                 trackingUrl(order));
     }
 
@@ -267,8 +309,64 @@ public class EmailService {
                 footer());
 
         sendHtml(order.getAddress().getEmail(),
-                "Pedido " + order.getId() + " · " + order.getStatus().getLabel() + " — NorteShop",
+                "Pedido " + order.getId() + " · " + order.getStatus().getLabel() + " — NorteShopMoz",
                 html, trackingUrl(order));
+    }
+
+    /** Email de cancelamento do pedido (envia o dono / admin cancelou). */
+    @Async
+    public void sendOrderCancellation(Order order) {
+        if (order.getAddress() == null || isBlank(order.getAddress().getEmail())) {
+            log.info("Email de cancelamento não enviado para o pedido {} — endereço em falta", order.getId());
+            return;
+        }
+        OrderAddress a = order.getAddress();
+        String firstName = escapeHtml(a.getFullName().split(" ")[0]);
+
+        StringBuilder items = new StringBuilder();
+        for (OrderItem it : order.getItems()) {
+            String line = it.getName() + (it.getVariant() != null ? " · " + it.getVariant() : "");
+            items.append("""
+                    <tr>
+                      <td style="padding:8px 0;border-bottom:1px solid #e2e8f0;font-size:13px;color:#334155">
+                        %d × %s
+                      </td>
+                      <td style="padding:8px 0;border-bottom:1px solid #e2e8f0;font-size:13px;color:#334155;text-align:right">
+                        %s
+                      </td>
+                    </tr>
+                    """.formatted(it.getQty(), escapeHtml(line), formatMeticais(it.getPrice().multiply(BigDecimal.valueOf(it.getQty())))));
+        }
+
+        String html = """
+                %s
+                <h2 style="margin:0 0 8px;font-size:18px">O seu pedido foi cancelado, %s ❌</h2>
+                <p style="margin:0 0 16px;font-size:14px;line-height:1.6">
+                  O pedido <strong>%s</strong> foi cancelado. Desculpe pelo incómodo.
+                  Se tiver dúvidas, poderá entrar em contacto connosco.
+                </p>
+                <table style="width:100%%;border-collapse:collapse">%s</table>
+                <p style="margin:16px 0 0;font-size:13px;color:#334155">
+                  <strong>Pagamento:</strong> %s<br>
+                  <strong>Entrega para:</strong> %s · %s<br>
+                  &nbsp;&nbsp;%s, %s — %s
+                </p>
+                %s
+                """.formatted(
+                header(),
+                firstName,
+                order.getId(),
+                items,
+                escapeHtml(order.getPaymentMethod()),
+                escapeHtml(a.getFullName()),
+                escapeHtml(a.getPhone()),
+                escapeHtml(a.getAddress()),
+                escapeHtml(a.getCity() != null ? a.getCity() : ""),
+                escapeHtml(a.getProvince()),
+                footer());
+
+        sendHtml(a.getEmail(), "Pedido " + order.getId() + " cancelado — NorteShopMoz", html,
+                trackingUrl(order));
     }
 
     /* ── Envio comum ────────────────────────────────────────────── */
@@ -309,7 +407,7 @@ public class EmailService {
     private static String header() {
         return """
                 <div style="background:#1f46e6;border-radius:12px 12px 0 0;padding:24px 28px">
-                  <h1 style="margin:0;color:#ffffff;font-size:20px">NorteShop</h1>
+                  <h1 style="margin:0;color:#ffffff;font-size:20px">NorteShopMoz</h1>
                 </div>
                 <div style="border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:28px">
                 """;
@@ -318,7 +416,7 @@ public class EmailService {
     private static String footer() {
         return """
                 <p style="margin:20px 0 0;font-size:12px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:14px">
-                  NorteShop — Entregas para todo Moçambique · Suporte: +258 84 123 4567
+                  NorteShopMoz — Entregas para todo Moçambique · Suporte: +258 84 123 4567
                 </p>
                 </div>
                 """;
@@ -338,8 +436,19 @@ public class EmailService {
                 """.formatted(label, value);
     }
 
+    /**
+     * URL de acompanhamento do pedido. Inclui o email do comprador como prova
+     * de contacto: para pedidos de convidado (sem conta) o backend exige-o,
+     * além do ID, para não expor nome/morada/telefone a quem só tenha o link.
+     * A página (e o proxy do frontend) reencaminha-o para a API.
+     */
     private String trackingUrl(Order order) {
-        return baseUrl + "/pedido/" + order.getId();
+        String url = baseUrl + "/pedido/" + order.getId();
+        String email = order.getAddress() == null ? null : order.getAddress().getEmail();
+        if (email != null && !email.isBlank()) {
+            url += "?email=" + java.net.URLEncoder.encode(email, java.nio.charset.StandardCharsets.UTF_8);
+        }
+        return url;
     }
 
     private String deliveryEstimate(String province) {
@@ -358,7 +467,17 @@ public class EmailService {
         return value == null || value.isBlank();
     }
 
+    /**
+     * Escapa para HTML. Inclui aspas (" e ') para que um valor continue
+     * seguro mesmo se algum dia for interpolado dentro de um atributo
+     * ({@code href="%s"}); hoje todos os valores entram em conteúdo de
+     * elementos, onde as aspas são apenas cosméticas.
+     */
     private static String escapeHtml(String value) {
-        return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+        return value.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
     }
 }

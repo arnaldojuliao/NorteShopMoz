@@ -14,11 +14,12 @@ export function Breadcrumbs({ items }: { items: Crumb[] }) {
         const last = i === crumbs.length - 1;
         return (
           <span key={i} className="flex items-center gap-1">
-            {i > 0 && <ChevronRight className="size-3.5 text-slate-300" aria-hidden />}
+            {i > 0 && <ChevronRight className="size-3.5 text-slate-400" aria-hidden />}
             {c.href && !last ? (
               <Link
                 href={c.href}
-                className="flex items-center gap-1 text-slate-500 transition hover:text-primary-700"
+                // `-my-1 py-1`: alvo de 24px sem mexer no ritmo vertical da barra.
+                className="-my-1 flex items-center gap-1 py-1 text-slate-500 transition hover:text-primary-700"
               >
                 {i === 0 && <Home className="size-3.5" aria-hidden />}
                 {c.label}

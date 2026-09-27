@@ -6,6 +6,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.AllArgsConstructor;
@@ -107,4 +108,16 @@ public class Product {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb", nullable = false)
     private List<String> tags = new ArrayList<>();
+
+    /**
+     * Momento em que o produto entrou no catálogo. É a chave de ordenação por
+     * omissão (mais recente primeiro), para que um produto acabado de publicar
+     * apareça no topo da loja e os antigos fiquem em baixo.
+     *
+     * <p>Os produtos do seed recebem um carimbo determinístico (ordem do
+     * ficheiro `seed/catalog.json`), sempre anterior ao de qualquer produto
+     * publicado pelo painel — ver {@code DataSeeder}.
+     */
+    @Builder.Default
+    private Instant createdAt = Instant.now();
 }

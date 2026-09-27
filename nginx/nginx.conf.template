@@ -1,0 +1,218 @@
+# NorteShopMoz - Nginx Reverse Proxy Configuration (SSL termination)
+#
+# TEMPLATE — NÃO montar este ficheiro diretamente no contentor.
+#
+# O placeholder ${APP_DOMAIN} é substituído pelo deploy.sh, que escreve o
+# resultado em nginx/.generated/default.conf e o monta como conf.d/default.conf.
+# Era este o ficheiro que tinha caminhos de certificado fixos para
+# `norteshopmoz.com`: com qualquer outro domínio o nginx não arrancava (ficheiro
+# inexistente) e, quando os nomes divergiam, servia o certificado errado. Agora o
+# domínio vem de APP_DOMAIN (derivado de APP_BASE_URL se não for definido).
+#
+# Rate limiting, upstreams e cabeçalhos de proxy.
+
+# Rate limiting zones
+# 30r/s (e não 10r/s) no balde de autenticação: em Moçambique milhares de
+# clientes partilham o mesmo IP público (CGNAT) e o nginx limita por IP — a
+# 10r/s, um pico de logins legítimos atrás de um único IP devolvia 503 a todos.
+limit_req_zone $binary_remote_addr zone=api:10m rate=100r/s;
+limit_req_zone $binary_remote_addr zone=auth:10m rate=30r/s;
+limit_req_zone $binary_remote_addr zone=upload:10m rate=5r/s;
+
+# Upstream definitions
+upstream backend {
+    server api:8080;
+    keepalive 32;
+}
+
+upstream frontend {
+    server frontend:3000;
+    keepalive 32;
+}
+
+# HTTP -> HTTPS redirect
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${APP_DOMAIN} www.${APP_DOMAIN};
+
+    # Sonda interna do contentor (healthcheck do compose). Sem isto o
+    # healthcheck apontava para http://localhost:80/, que neste modo responde 301
+    # para https://localhost/ — e o certificado é de ${APP_DOMAIN}, pelo que o
+    # contentor ficava permanentemente unhealthy.
+    location = /healthz {
+        access_log off;
+        return 200;
+    }
+
+    # ACME challenge for Let's Encrypt
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        try_files $uri =404;
+    }
+
+    # Redirect all other traffic to HTTPS
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# HTTPS server
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name ${APP_DOMAIN} www.${APP_DOMAIN};
+
+    # 429 (Too Many Requests) e não o 503 por omissão: um limite de tráfego não é
+    # uma avaria do servidor — o 503 fazia o frontend marcar a API como
+    # indisponível e cair para os dados locais.
+    limit_req_status 429;
+
+    # Upload de imagens de produto: o limite por omissão do nginx é 1 MB e
+    # rejeitava com 413 qualquer foto acima disso, apesar de o backend aceitar
+    # até 10 MB (spring.servlet.multipart.max-file-size). Tem de ser >= a esse
+    # valor (12m = 10 MB de ficheiro + overhead do formulário).
+    client_max_body_size 12m;
+
+    # Sonda interna do contentor (healthcheck do compose).
+    location = /healthz {
+        access_log off;
+        return 200;
+    }
+
+    # SSL certificates (managed by certbot)
+    ssl_certificate /etc/letsencrypt/live/${APP_DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${APP_DOMAIN}/privkey.pem;
+    # Sem ssl_trusted_certificate/stapling de propósito: cada ficheiro extra
+    # referenciado aqui é mais um motivo para o nginx não arrancar. O deploy.sh
+    # valida apenas os dois que são obrigatórios para servir TLS.
+
+    # SSL security settings
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    # HSTS. Só aqui (no `server` de TLS): um header HSTS recebido por HTTP é
+    # ignorado pelo browser, e este `server` é o único que serve HTTPS.
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+
+    # Cabeçalhos de segurança comuns — definidos num só ficheiro (ver o snippet).
+    include /etc/nginx/snippets/security-headers.conf;
+
+    # SEM Content-Security-Policy aqui, de propósito.
+    #
+    # O CSP é definido num só sítio: o middleware do Next (frontend/src/proxy.ts),
+    # que deriva as origens da API de NEXT_PUBLIC_API_* e por isso sabe que
+    # `connect-src`/`img-src` têm de incluir o host do backend.
+    #
+    # Com DOIS cabeçalhos CSP o browser aplica a INTERSEÇÃO das políticas: o que
+    # não estiver autorizado nos DOIS fica bloqueado. O CSP que aqui existia tinha
+    # `connect-src 'self' https://api.stripe.com …` — sem a origem da API — pelo que
+    # bastava a API passar para um subdomínio (api.loja.mz) para o browser bloquear
+    # TODAS as chamadas à API: a loja abria com o catálogo do SSR e o login/checkout
+    # falhavam como se a rede estivesse em baixo. Também autorizava o Stripe, que
+    # esta loja não usa.
+
+    # Gzip compression
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css text/xml text/javascript application/javascript application/xml application/json application/x-javascript application/font-woff application/font-woff2;
+
+    # Proxy settings
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    # $remote_addr (e não $proxy_add_x_forwarded_for): o nginx é a fronteira e não
+    # deve confiar/repassar um X-Forwarded-For vindo do cliente — senão o rate
+    # limit e o bloqueio por brute-force do backend podiam ser forjados.
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header X-Forwarded-Port $server_port;
+    proxy_cache_bypass $http_upgrade;
+    proxy_read_timeout 90s;
+    proxy_send_timeout 90s;
+
+    # Frontend (Next.js)
+    location / {
+        limit_req zone=api burst=200 nodelay;
+        proxy_pass http://frontend;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+
+    # API endpoints
+    location /api/ {
+        limit_req zone=api burst=100 nodelay;
+
+        # Stricter rate limit for auth endpoints
+        location ~* ^/api/(auth|login|register|password) {
+            limit_req zone=auth burst=20 nodelay;
+        }
+
+        proxy_pass http://backend;
+    }
+
+    # Upload de imagens de produto (POST /api/upload) — limite estrito.
+    # Exact match: os headers de proxy do server são herdados.
+    location = /api/upload {
+        limit_req zone=upload burst=10 nodelay;
+        proxy_pass http://backend;
+    }
+
+    # Imagens guardadas localmente pelo backend (fallback sem Cloudinary).
+    # `^~` impede que a location de regex de extensões as capture e vá ao frontend.
+    location ^~ /uploads/ {
+        proxy_pass http://backend;
+        expires 1d;
+    }
+
+    # Actuator health checks (internal only - restrict in production)
+    location /actuator/health {
+        allow 10.0.0.0/8;
+        allow 172.16.0.0/12;
+        allow 192.168.0.0/16;
+        deny all;
+        proxy_pass http://backend;
+    }
+
+    # Static assets - serve directly with caching.
+    # Atenção: um `add_header` numa location substitui os herdados do `server` —
+    # por isso cada uma destas locations volta a incluir o snippet dos cabeçalhos
+    # de segurança (senão os assets ficavam sem `nosniff`).
+    location /_next/static/ {
+        include /etc/nginx/snippets/security-headers.conf;
+        proxy_pass http://frontend;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
+    location /static/ {
+        include /etc/nginx/snippets/security-headers.conf;
+        proxy_pass http://frontend;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
+    # Favicon and public assets
+    location ~* \.(ico|png|jpg|jpeg|gif|webp|svg|woff|woff2)$ {
+        include /etc/nginx/snippets/security-headers.conf;
+        proxy_pass http://frontend;
+        add_header Cache-Control "public, max-age=86400";
+    }
+
+    # Robots.txt and sitemap
+    location = /robots.txt {
+        include /etc/nginx/snippets/security-headers.conf;
+        proxy_pass http://frontend;
+        add_header Cache-Control "public, max-age=86400";
+    }
+
+    location = /sitemap.xml {
+        include /etc/nginx/snippets/security-headers.conf;
+        proxy_pass http://frontend;
+        add_header Cache-Control "public, max-age=86400";
+    }
+}

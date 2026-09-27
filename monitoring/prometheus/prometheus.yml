@@ -5,6 +5,18 @@ global:
     environment: 'development'
     application: 'norteshopmoz-api'
 
+# Regras de alerta (ver o porquê de existirem em rules/nsm-alerts.yml).
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+# Para onde vão os alertas quando disparam. O Alertmanager é o componente que
+# decide o destino (webhook/email/Slack/Telegram) — sem ele as regras disparam
+# mas ninguém é avisado, que é o mesmo que não existirem.
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
 scrape_configs:
   - job_name: 'norteshopmoz-api'
     metrics_path: '/actuator/prometheus'
@@ -13,6 +25,26 @@ scrape_configs:
         labels:
           application: 'norteshopmoz-api'
           environment: 'development'
+
+  # Sonda da API do lado de fora: é a ÚNICA que vê o /actuator/health/readiness
+  # (o scrape acima só lê /actuator/prometheus, que não expõe a saúde das
+  # dependências). `probe_success == 0` = a API está de pé mas não alcança o
+  # Redis/BD, ou seja, a loja está a vender com as proteções desligadas.
+  - job_name: 'nsm-readiness'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets: ['http://host.docker.internal:8080/actuator/health/readiness']
+        labels:
+          application: 'norteshopmoz-api'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
 
   - job_name: 'prometheus'
     static_configs:

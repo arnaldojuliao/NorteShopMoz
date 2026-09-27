@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -17,16 +17,16 @@ import {
   Moon,
   Package,
   Plus,
-  RotateCcw,
   Star,
   Sun,
   Trash2,
 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
+import { OtpInput } from "@/components/ui/OtpInput";
 import { Toggle } from "@/components/ui/Toggle";
 import { Avatar } from "@/components/ui/Avatar";
 import { AvatarEditor } from "@/components/ui/AvatarEditor";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth, useAvatarSrc } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
 import { useCurrency } from "@/context/CurrencyContext";
 import { isCurrencyCode } from "@/lib/currency";
@@ -34,10 +34,11 @@ import { useFavorites } from "@/context/FavoritesContext";
 import { useLoginModal } from "@/context/LoginModalContext";
 import { useTheme, type Theme } from "@/context/ThemeContext";
 import { useToast } from "@/context/ToastContext";
-import { apiPatch, apiPost, clearApiCache } from "@/lib/api";
+import { apiPatch, ApiError, clearApiCache } from "@/lib/api";
 import { useLocalStorageState } from "@/lib/hooks";
+import { useEmailVerificationCode } from "@/lib/useEmailVerificationCode";
 import { fetchMyAddresses, saveMyAddresses } from "@/lib/addresses";
-import { fetchMyOrders, fetchOrderStatus, getOrdersKey, ORDERS_KEY } from "@/lib/orders";
+import { cancelOrder, fetchMyOrders, fetchOrderStatus, getOrdersKey, ORDERS_KEY } from "@/lib/orders";
 import { formatDate } from "@/lib/format";
 import { provinces } from "@/lib/data/provinces";
 import { StatusTimeline } from "@/components/checkout/StatusTimeline";
@@ -47,7 +48,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import type { AddressBookEntry, Order, UserProfile } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const APP_NAME = "NorteShop";
+const APP_NAME = "NorteShopMoz";
 const APP_VERSION = "1.0.0";
 const EMPTY_USER = { email: "", name: "" };
 const GMAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
@@ -153,6 +154,7 @@ const STATUS_PILL: Record<string, string> = {
   Enviado: "bg-violet-50 text-violet-700",
   "Em trânsito": "bg-blue-50 text-blue-700",
   Entregue: "bg-emerald-50 text-emerald-700",
+  Cancelado: "bg-red-50 text-red-700",
 };
 
 /** Rótulos do método de entrada da conta (cartão de perfil). */
@@ -167,8 +169,8 @@ const PROVIDER_LABEL: Record<string, string> = {
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="mt-9">
-      <h2 className="px-1 text-[11px] font-bold uppercase tracking-widest text-slate-400">{title}</h2>
-      <div className="mt-2.5 divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+      <h2 className="px-1 text-xs font-bold uppercase tracking-widest text-slate-400">{title}</h2>
+      <div className="mt-2.5 divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-100 bg-surface shadow-sm">
         {children}
       </div>
     </section>
@@ -195,7 +197,7 @@ function SettingsRow({
       {value != null && (
         <span className="flex shrink-0 items-center gap-1.5 text-sm text-slate-400">{value}</span>
       )}
-      {!last && <ChevronRight className="size-4 shrink-0 text-slate-300" aria-hidden />}
+      {!last && <ChevronRight className="size-4 shrink-0 text-slate-400" aria-hidden />}
     </>
   );
   const cls =
@@ -317,7 +319,16 @@ export default function SettingsPage() {
   const [locating, setLocating] = useState(false);
 
   // Perfil do utilizador (mesmos dados da área de cliente — nsm:profile/nsm:user).
-  const { user: authUser, initializing, sessionExpired, logout: authLogout, updateAvatar } = useAuth();
+  const {
+    user: authUser,
+    initializing,
+    sessionExpired,
+    logout: authLogout,
+    updateAvatar,
+  } = useAuth();
+  // Foto de perfil: do servidor quando há sessão (cada conta tem a sua), para a
+  // cópia local de outra conta nunca aparecer aqui.
+  const avatarSrc = useAvatarSrc();
 
   // Preferências de notificação: guardadas localmente (instantâneo) e sincronizadas
   // com a conta no servidor (PATCH /api/auth/me/notification-prefs) quando há sessão.
@@ -373,6 +384,30 @@ export default function SettingsPage() {
   const [user, setUser] = useLocalStorageState("nsm:user", EMPTY_USER);
   const [profile, setProfile] = useLocalStorageState<UserProfile | null>("nsm:profile", null);
   const [editorOpen, setEditorOpen] = useState(false);
+
+  // Confirmação de email por código (o aviso do perfil abre este modal).
+  const [verifyOpen, setVerifyOpen] = useState(false);
+  const {
+    code: verifyCode,
+    setCode: setVerifyCode,
+    error: verifyError,
+    verifying,
+    submit: verifyCodeSubmit,
+    resend: resendVerificationCode,
+  } = useEmailVerificationCode();
+
+  /**
+   * Confirma o email com o código de 6 dígitos que foi enviado no email e fecha o
+   * modal — usado pelo envio do formulário e pela auto-submissão aos 6 dígitos.
+   */
+  const confirmWithCode = async () => {
+    if (await verifyCodeSubmit()) setVerifyOpen(false);
+  };
+
+  const submitVerificationCode = (event: FormEvent) => {
+    event.preventDefault();
+    void confirmWithCode();
+  };
 
   const logged = Boolean(authUser || user.email || user.name);
   const displayName =
@@ -431,6 +466,12 @@ export default function SettingsPage() {
   useEffect(() => {
     let alive = true;
     const load = async () => {
+      // Sem sessão não existem pedidos no servidor: um GET /api/orders anónimo
+      // responde sempre 401 (pedido desperdiçado + ruído na consola).
+      if (!authUser?.id) {
+        setOrders(localOrders);
+        return;
+      }
       const server = await fetchMyOrders();
       if (!alive) return;
       if (server && server.length > 0) {
@@ -465,6 +506,28 @@ export default function SettingsPage() {
 
   /** Estado exibido: o real (backend) quando disponível, senão o local. */
   const statusOf = (o: Order) => live[o.id]?.status ?? o.status;
+
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+
+  /** Cancela um pedido do utilizador — o servidor valida a propriedade e repõe o stock. */
+  const handleCancelOrder = async (o: Order) => {
+    if (cancellingId) return;
+    if (!window.confirm(`Cancelar o pedido ${o.id}? O stock será reposto.`)) return;
+    setCancellingId(o.id);
+    try {
+      const updated = await cancelOrder(o.id);
+      setLive((prev) => ({ ...prev, [updated.id]: updated }));
+      setOrders((prev) => prev.map((x) => (x.id === updated.id ? { ...x, status: updated.status } : x)));
+      notify("Pedido cancelado.");
+    } catch (err) {
+      notify(
+        err instanceof ApiError ? err.message : "Não foi possível cancelar o pedido.",
+        "error",
+      );
+    } finally {
+      setCancellingId(null);
+    }
+  };
 
   // Sessão terminada (logout) — o redirecionamento para a home é tratado no próprio
   // botão; este ref impede o guard de o sobrepor com o modal de login.
@@ -559,7 +622,9 @@ export default function SettingsPage() {
       </div>
 
       {/* Cartão de perfil — boas-vindas, foto com edição e sair */}
-      <div className="relative mt-4 overflow-hidden rounded-3xl bg-gradient-to-br from-navy-900 via-primary-800 to-primary-600 p-5 text-white shadow-card sm:p-6">
+      {/* `theme-inverse`: cartão de perfil sempre navy — o seu conteúdo (texto
+          branco, chips claros) mantém a paleta do tema claro. */}
+      <div className="theme-inverse relative mt-4 overflow-hidden rounded-2xl bg-gradient-to-br from-navy-900 via-primary-800 to-primary-600 p-5 text-white shadow-card sm:p-6">
         <div
           aria-hidden
           className="pointer-events-none absolute -right-16 -top-16 size-56 rounded-full bg-sky-400/20 blur-2xl"
@@ -573,7 +638,7 @@ export default function SettingsPage() {
             <div className="relative shrink-0">
               <span className="block rounded-full bg-gradient-to-br from-white/60 to-white/20 p-[3px]">
                 <Avatar
-                  src={profile?.avatar}
+                  src={avatarSrc}
                   name={profile?.fullName || user.name}
                   className="size-16 sm:size-20"
                   textClassName="text-2xl sm:text-3xl"
@@ -583,59 +648,50 @@ export default function SettingsPage() {
                 type="button"
                 onClick={() => setEditorOpen(true)}
                 aria-label="Alterar foto de perfil"
-                className="absolute -bottom-1 -right-1 flex size-8 items-center justify-center rounded-full bg-white text-primary-700 shadow-md ring-2 ring-navy-900 transition hover:bg-primary-50 active:scale-95"
+                className="absolute -bottom-1 -right-1 flex size-8 items-center justify-center rounded-full bg-surface text-primary-700 shadow-md ring-2 ring-navy-900 transition hover:bg-primary-50 active:scale-95"
               >
                 <Camera className="size-4" />
               </button>
             </div>
             <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-widest text-sky-200">
+              <p className="text-xs font-bold uppercase tracking-widest text-sky-200">
                 A minha conta
               </p>
-              <h1 className="mt-0.5 truncate font-display text-xl font-extrabold text-white sm:text-2xl">
+              {/* h2: o h1 da página é o título "Configurações", acima. */}
+              <h2 className="mt-0.5 truncate font-display text-xl font-extrabold text-white sm:text-2xl">
                 Olá, {displayName}
-              </h1>
+              </h2>
               {email && <p className="mt-0.5 truncate text-sm text-white/75">{email}</p>}
 {authUser?.emailVerified === false && (
-                <div className="mt-2 p-3 rounded-xl bg-amber-50/50 border border-amber-200">
-                  <div className="flex items-center gap-2">
-                    <span className="flex size-7 items-center justify-center rounded-full bg-amber-100">
-                      <Mail className="size-4 text-amber-600" aria-hidden />
+                // Bloco inteiro clicável (sem botões): abre o modal onde se cola o
+                // código de 6 dígitos enviado no email.
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVerifyCode("");
+                    setVerifyOpen(true);
+                  }}
+                  className="group mt-2 flex w-full items-center gap-2 rounded-xl border border-amber-200 bg-amber-50/50 p-3 text-left transition hover:bg-amber-50 active:scale-[0.99]"
+                >
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-amber-100">
+                    <Mail className="size-4 text-amber-600" aria-hidden />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-semibold text-amber-700">
+                      Email não verificado
                     </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-amber-700">Email não verificado</p>
-                      <p className="text-[10px] text-amber-600">Confirme o seu email para aceder a todas as funcionalidades.</p>
-                    </div>
-                  </div>
-                  <div className="mt-2 flex gap-2">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="gap-1.5"
-                      onClick={async () => {
-                        try {
-                          await apiPost("/api/auth/resend-verification", {});
-                          notify("Novo link de verificação enviado! Verifique o seu email.");
-                        } catch {
-                          notify("Não foi possível reenviar. Tente novamente.", "error");
-                        }
-                      }}
-                    >
-                      <RotateCcw className="size-3.5" />
-                      Reenviar email
-                    </Button>
-                    <Button
-                      onClick={openLogin}
-                      variant="outline"
-                      size="sm"
-                    >
-                      Entrar / Verificar
-                    </Button>
-                  </div>
-                </div>
+                    <span className="block text-xs text-amber-600">
+                      Toque aqui e insira o código que enviámos para o seu email.
+                    </span>
+                  </span>
+                  <ChevronRight
+                    className="size-4 shrink-0 text-amber-600 transition-transform group-hover:translate-x-0.5"
+                    aria-hidden
+                  />
+                </button>
               )}
               {authUser?.authProvider && authUser.authProvider !== "EMAIL" && (
-                <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-sky-200 ring-1 ring-white/15">
+                <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-sky-200 ring-1 ring-white/15">
                   <span className="size-1.5 rounded-full bg-sky-300" aria-hidden />
                   Conta {PROVIDER_LABEL[authUser.authProvider] ?? authUser.authProvider}
                 </span>
@@ -672,7 +728,7 @@ export default function SettingsPage() {
       {editorOpen && (
         <AvatarEditor
           onClose={() => setEditorOpen(false)}
-          current={profile?.avatar}
+          current={avatarSrc}
           onSave={saveAvatar}
           onRemove={removeAvatar}
         />
@@ -760,7 +816,7 @@ export default function SettingsPage() {
               {addresses.map((a) => (
                 <div key={a.id} className="relative rounded-xl border border-slate-100 bg-slate-50/60 p-4">
                   {a.isDefault && (
-                    <span className="absolute right-3 top-3 rounded-full bg-primary-50 px-2 py-0.5 text-[10px] font-bold text-primary-700">
+                    <span className="absolute right-3 top-3 rounded-full bg-primary-50 px-2 py-0.5 text-xs font-bold text-primary-700">
                       PADRÃO
                     </span>
                   )}
@@ -983,7 +1039,7 @@ export default function SettingsPage() {
                     </div>
                     <span
                       className={cn(
-                        "inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold",
+                        "inline-flex rounded-full px-2.5 py-1 text-xs font-bold",
                         STATUS_PILL[statusOf(o)] ?? "bg-slate-100 text-slate-600",
                       )}
                     >
@@ -1041,7 +1097,7 @@ export default function SettingsPage() {
                       <p className="font-display font-bold text-slate-900">{o.id}</p>
                       <p className="text-xs text-slate-400">{formatDate(live[o.id]?.date ?? o.date)}</p>
                     </div>
-                    <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
+                    <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
                       {statusOf(o)}
                     </span>
                   </div>
@@ -1055,6 +1111,16 @@ export default function SettingsPage() {
                       {format(live[o.id]?.total ?? o.total)}
                     </span>
                   </div>
+                  {statusOf(o) !== "Entregue" && statusOf(o) !== "Cancelado" && (
+                    <button
+                      type="button"
+                      onClick={() => void handleCancelOrder(o)}
+                      disabled={cancellingId === o.id}
+                      className="mt-2 text-sm font-semibold text-red-600 transition hover:underline disabled:opacity-50"
+                    >
+                      {cancellingId === o.id ? "A cancelar…" : "Cancelar pedido"}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -1069,7 +1135,7 @@ export default function SettingsPage() {
                   <p className="mt-0.5 text-sm text-slate-500">{m.description}</p>
                 </div>
                 {!m.available && (
-                  <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-500">
+                  <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-500">
                     Em breve
                   </span>
                 )}
@@ -1145,7 +1211,7 @@ export default function SettingsPage() {
                 >
                   <span className="min-w-0 flex-1 text-[15px] font-medium text-slate-800">{l}</span>
                   {comingSoon ? (
-                    <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-500">
+                    <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-500">
                       Em breve
                     </span>
                   ) : (
@@ -1181,7 +1247,7 @@ export default function SettingsPage() {
                     {r.flag} {r.name}
                   </span>
                   {!available ? (
-                    <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-500">
+                    <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-500">
                       Em breve
                     </span>
                   ) : (
@@ -1317,14 +1383,14 @@ export default function SettingsPage() {
                         closeSheet();
                         notify("Dados locais apagados.");
                       }}
-                      className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 active:scale-95"
+                      className="rounded-xl bg-danger px-4 py-2 text-sm font-semibold text-white transition hover:bg-danger-strong active:scale-95"
                     >
                       Sim, apagar tudo
                     </button>
                     <button
                       type="button"
                       onClick={() => setConfirmClearAll(false)}
-                      className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 active:scale-95"
+                      className="rounded-xl border border-slate-200 bg-surface px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 active:scale-95"
                     >
                       Cancelar
                     </button>
@@ -1357,7 +1423,7 @@ export default function SettingsPage() {
                 closeSheet();
                 notify("Cache limpa com sucesso.");
               }}
-              className="mt-5 w-full rounded-xl bg-primary-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-700 active:scale-[0.98]"
+              className="mt-5 w-full rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-strong active:scale-[0.98]"
             >
               Limpar cache
             </button>
@@ -1393,12 +1459,60 @@ export default function SettingsPage() {
                 notify("Obrigado pela sua avaliação! ⭐");
                 closeSheet();
               }}
-              className="mt-5 w-full rounded-xl bg-primary-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-700 active:scale-[0.98] disabled:opacity-40"
+              className="mt-5 w-full rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-strong active:scale-[0.98] disabled:opacity-40"
             >
               Enviar avaliação
             </button>
           </div>
         )}
+      </Modal>
+
+      {/* Modal: confirmar o email com o código de 6 dígitos recebido no email. */}
+      <Modal
+        open={verifyOpen}
+        onClose={() => {
+          setVerifyOpen(false);
+          setVerifyCode("");
+        }}
+        title="Confirmar email"
+        size="sm"
+      >
+        <form onSubmit={submitVerificationCode} className="space-y-4">
+          <p className="text-sm leading-relaxed text-slate-600">
+            Enviámos um código de 6 dígitos para{" "}
+            <strong className="font-semibold text-slate-900">{email}</strong>. Cole-o aqui para
+            confirmar a sua conta.
+          </p>
+          {/* Um dígito por quadradinho — colar/autofill, avanço automático e
+              Backspace a recuar são tratados pelo próprio componente. */}
+          <OtpInput
+            label="Código de verificação"
+            value={verifyCode}
+            onChange={setVerifyCode}
+            onComplete={() => void confirmWithCode()}
+            autoFocus
+            required
+            disabled={verifying}
+            error={verifyError ?? undefined}
+            hint={verifyError ? undefined : "Válido por 24 horas · verifique também o spam."}
+          />
+          <Button
+            type="submit"
+            fullWidth
+            size="lg"
+            loading={verifying}
+            disabled={verifyCode.length !== 6}
+          >
+            Confirmar email
+          </Button>
+          <button
+            type="button"
+            onClick={() => void resendVerificationCode()}
+            className="mx-auto block text-xs font-semibold text-primary-700 transition hover:text-primary-800 hover:underline"
+          >
+            Não recebeu? Enviar novo código
+          </button>
+        </form>
       </Modal>
     </div>
   );

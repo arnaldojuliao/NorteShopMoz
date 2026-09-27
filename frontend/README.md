@@ -41,6 +41,18 @@ npm test           # Vitest (unitários em src/lib/*.test.ts)
 - **Design system**: `Button`, `Input`, `Badge`, `Rating`, `Price`,
   `ProductCard`, `Carousel`, `Modal`, `Dropdown`, `Skeleton`, `Breadcrumbs`,
   etc. — todos em `src/components`.
+- **Preloader de entrada**: `DeliveryLoader` (SVG + CSS, sem vídeo) — um camião
+  de contentor atravessa o ecrã a transportar a logomarca (no painel do
+  contentor) até ao destino. A estrada **é** a barra de progresso, com o
+  contador de percentagem por baixo; ao chegar ao fim, camião e estrada saem de
+  cena e entra um círculo grande com o visto e "Entrega concluída!", seguido de
+  fade-out para a loja. Duas durações: viagem completa na primeira visita do dia
+  e versão curta (~1s) nas seguintes (validade de ~20h em `localStorage`), nunca
+  com `prefers-reduced-motion`; pode ser saltado com um clique, desligado com
+  `<DeliveryLoader enabled={false} />` e ajustado com `NEXT_PUBLIC_PRELOADER_MS`.
+  A decisão é tomada antes da primeira pintura (script `/preloader-init.js`,
+  como o `theme-init.js`), pelo que não há flash de conteúdo nem erro de
+  hidratação.
 - **Performance**: SSG, `next/image` (AVIF/WebP, responsive), lazy loading,
   skeleton loading, zero bibliotecas pesadas, animações CSS leves.
 - **SEO**: metadata dinâmica, Open Graph, sitemap, robots, manifest,
@@ -112,6 +124,18 @@ verificada” é atribuído automaticamente se o cliente já comprou o produto.
 
 **Endereços de entrega** — sincronizados com o servidor quando há sessão
 (`GET/PUT /api/addresses`); sem sessão ficam apenas em `localStorage`.
+
+**Cupões** — o checkout tem um campo de cupão que valida o código no servidor
+(`POST /api/orders/validate-coupon`) antes de o aplicar; o desconto é revalidado
+no servidor ao criar o pedido (`couponCode` no payload). A gestão de cupões
+(criar/listar/remover) está no painel `/admin`, secção **Cupões**
+(`GET/POST/DELETE /api/admin/coupons`).
+
+**Cancelamento de pedidos** — o cliente pode cancelar um pedido em curso na
+página de acompanhamento (`/pedido/{id}`) e na área de conta
+(`DELETE /api/orders/{id}`); o admin também tem o botão **Cancelar** em cada
+pedido. O estado terminal `Cancelado` aparece na timeline com aviso próprio e
+já não avança para os passos seguintes.
 
 **Testes** — `npm test` corre Vitest (**16 testes**: format, utils e shipping,
 incluindo o fallback API↔local da config de envio). O contrato REST é validado

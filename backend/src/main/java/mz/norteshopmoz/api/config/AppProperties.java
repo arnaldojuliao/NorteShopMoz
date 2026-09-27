@@ -32,6 +32,6 @@ public record AppProperties(Jwt jwt, Cors cors, Mail mail, Social social, Cookie
     /** Configuração de cookies seguros para JWT. */
     public record Cookie(boolean secure, String domain) {
         // secure=true em produção (HTTPS), false em dev (HTTP localhost)
-        // domain=vazio para localhost, ex: ".norteshop.com" para subdomínios em produção
+        // domain=vazio para localhost, ex: ".norteshopmoz.com" para subdomínios em produção
     }
 }

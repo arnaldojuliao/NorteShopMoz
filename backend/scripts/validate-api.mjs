@@ -6,8 +6,10 @@
  *   API_BASE=http://localhost:8081 node backend/scripts/validate-api.mjs
  *
  * Cobre: catálogo (filtros/pesquisa/ordenação/limit), categorias, reviews,
- * autenticação JWT (registo/login/me) e pedidos (totais recalculados no servidor,
- * guest checkout e isolamento por utilizador).
+ * autenticação JWT (registo/login/me), pedidos (totais recalculados no servidor,
+ * guest checkout e isolamento por utilizador), pagamentos online, transições de
+ * estado (admin), **cupões** (validação pública + CRUD admin) e **cancelamento**
+ * de pedidos (dono/admin, repor stock, estados terminais).
  */
 
 const B = process.env.API_BASE ?? "http://localhost:8081";
@@ -41,8 +43,8 @@ console.log("\n📦 Catálogo");
 }
 
 {
-  const { status, body } = await api("/api/products/smartphone-nsm-x10-128gb");
-  check("GET /api/products/{slug} → {data}", status === 200 && body?.data?.name === "Smartphone NSM X10 · 128 GB");
+  const { status, body } = await api("/api/products/capa-para-iphone");
+  check("GET /api/products/{slug} → {data}", status === 200 && body?.data?.name === "Capa para iPhone");
   check("isNew vem do seed", typeof body?.data?.isNew === "boolean");
   const { status: s404 } = await api("/api/products/nao-existe");
   check("slug inexistente → 404 {error}", s404 === 404);
@@ -51,9 +53,9 @@ console.log("\n📦 Catálogo");
 {
   const { status, body } = await api("/api/products?category=telemoveis&sort=price-asc");
   const sorted = body?.data?.every((p, i, a) => i === 0 || a[i - 1].price <= p.price);
-  check("filtro category + sort=price-asc", status === 200 && body?.data?.length === 4 && sorted, `n=${body?.data?.length}`);
+  check("filtro category + sort=price-asc", status === 200 && body?.data?.length === 15 && sorted, `n=${body?.data?.length}`);
   const deal = await api("/api/products?deal=1");
-  check("filtro deal=1 (Ofertas)", deal.body?.data?.length === 4, `n=${deal.body?.data?.length}`);
+  check("filtro deal=1 (Ofertas)", deal.body?.data?.length === 5, `n=${deal.body?.data?.length}`);
   const q = await api("/api/products?q=auscultadores");
   check("pesquisa q=auscultadores", q.body?.data?.length >= 2, `n=${q.body?.data?.length}`);
 }
@@ -63,14 +65,14 @@ console.log("\n🗂️  Categorias");
 {
   const { status, body } = await api("/api/categories");
   check("GET /api/categories → {data} com productCount",
-        status === 200 && body?.data?.length === 10 && typeof body.data[0].productCount === "number",
+        status === 200 && body?.data?.length === 7 && typeof body.data[0].productCount === "number",
         `n=${body?.data?.length}`);
 }
 
 // ── 3. Reviews ─────────────────────────────────────────────────────
 console.log("\n⭐ Reviews");
 {
-  const { status, body } = await api("/api/products/smartphone-nsm-x10-128gb/reviews");
+  const { status, body } = await api("/api/products/capa-para-iphone/reviews");
   check("GET /api/products/{slug}/reviews → {data[]}", status === 200 && body?.data?.length > 0 && body.data[0].author && body.data[0].comment);
   check("review tem verified/rating/title/date", body?.data?.length > 0 && ["verified", "rating", "title", "date"].every(k => k in body.data[0]));
 }
@@ -114,26 +116,26 @@ let token = null, userId = null;
 // ── 3b. Submissão de reviews (cliente autenticado) ─────────────────
 console.log("\n✍️  Submeter avaliação");
 {
-  const anon = await api("/api/products/smartphone-nsm-x10-128gb/reviews", {
+  const anon = await api("/api/products/capa-para-iphone/reviews", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ rating: 5, title: "Teste", comment: "Muito bom!" }),
   });
   check("POST review sem token → 401", anon.status === 401, `status=${anon.status}`);
 
-  const bad = await api("/api/products/smartphone-nsm-x10-128gb/reviews", {
+  const bad = await api("/api/products/capa-para-iphone/reviews", {
     method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ rating: 9, comment: "" }),
   });
   check("review inválida (rating>5, comentário vazio) → 400", bad.status === 400, `status=${bad.status}`);
 
-  const created = await api("/api/products/smartphone-nsm-x10-128gb/reviews", {
+  const created = await api("/api/products/capa-para-iphone/reviews", {
     method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ rating: 4, title: "Boa compra", comment: "Chegou rápido e funciona bem." }),
   });
   check("POST review (autenticado) → 201 {data}",
         created.status === 201 && created.body?.data?.rating === 4 && created.body?.data?.comment?.includes("Chegou rápido"),
         `status=${created.status}`);
-  const list = await api("/api/products/smartphone-nsm-x10-128gb/reviews");
+  const list = await api("/api/products/capa-para-iphone/reviews");
   check("GET reviews inclui a nova (no topo)",
         list.status === 200 && list.body?.data?.[0]?.comment?.includes("Chegou rápido"),
         `n=${list.body?.data?.length}`);
@@ -170,7 +172,7 @@ console.log("\n🛒 Carrinho");
   const empty = await api("/api/cart", { headers: { Authorization: `Bearer ${token}` } });
   check("GET /api/cart (novo utilizador) → []", empty.status === 200 && empty.body?.data?.length === 0, `status=${empty.status}`);
 
-  const f1 = await api("/api/products/smartphone-nsm-x10-128gb");
+  const f1 = await api("/api/products/capa-para-iphone");
   const p1 = f1.body.data;
   const put = await api("/api/cart", {
     method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -208,8 +210,8 @@ console.log("\n🧾 Pedidos");
 // Regras do servidor (espelham o frontend): subtotal/desconto do catálogo,
 // envio grátis ≥ 5000 MT, senão taxa da província.
 async function computeExpected(province) {
-  const f1 = await api("/api/products/smartphone-nsm-x10-128gb");
-  const f2 = await api("/api/products/coluna-bluetooth-boom");
+  const f1 = await api("/api/products/capa-para-iphone");
+  const f2 = await api("/api/products/coluna-bluetooth-portatil");
   const p1 = f1.body.data, p2 = f2.body.data;
   const items = [
     { p: p1, qty: 1 },
@@ -230,8 +232,8 @@ async function computeExpected(province) {
   const province = "Maputo Cidade";
   const order = {
     items: [
-      { productId: "p-001", slug: "smartphone-nsm-x10-128gb", name: "Smartphone NSM X10 · 128 GB", image: "img1", price: 1, qty: 1 },
-      { productId: "p-006", slug: "coluna-bluetooth-boom", name: "Coluna Bluetooth Boom 360°", image: "img2", price: 1, qty: 2 },
+      { productId: "p-001", slug: "capa-para-iphone", name: "Capa para iPhone", image: "img1", price: 1, qty: 1 },
+      { productId: "p-006", slug: "coluna-bluetooth-portatil", name: "Coluna Bluetooth portátil", image: "img2", price: 1, qty: 2 },
     ],
     subtotal: 99999, shipping: 999, discount: 999, total: 1, // valores do cliente — devem ser ignorados
     address: { fullName: "Anabela Teste", phone: "+258840000000", email, address: "Av. 24 de Julho, 100",
@@ -283,7 +285,7 @@ async function computeExpected(province) {
 console.log("\n💳 Pagamentos online");
 {
   const base = {
-    items: [{ productId: "p-001", slug: "smartphone-nsm-x10-128gb", name: "Smartphone", image: "i", price: 15900, qty: 1 }],
+    items: [{ productId: "p-001", slug: "capa-para-iphone", name: "Capa para iPhone", image: "i", price: 15900, qty: 1 }],
     subtotal: 0, shipping: 0, discount: 0, total: 0,
     address: { fullName: "Cliente Teste", phone: "+258840000000", email: "guest@teste.com",
                address: "Av. 1", city: "Maputo", province: "Maputo Cidade" },
@@ -345,7 +347,7 @@ console.log("\n🛡️ Admin — estado dos pedidos");
         admin.status === 200 && admin.body?.data?.user?.role === "ADMIN", `status=${admin.status}`);
 
   const adminOrder = {
-    items: [{ productId: "p-001", slug: "smartphone-nsm-x10-128gb", name: "Smartphone", image: "i", price: 15900, qty: 1 }],
+    items: [{ productId: "p-001", slug: "capa-para-iphone", name: "Capa para iPhone", image: "i", price: 15900, qty: 1 }],
     subtotal: 0, shipping: 0, discount: 0, total: 0,
     address: { fullName: "Cliente Teste", phone: "+258840000000", email: "guest@teste.com",
                address: "Av. 1", city: "Maputo", province: "Maputo Cidade" },
@@ -372,21 +374,44 @@ console.log("\n🛡️ Admin — estado dos pedidos");
   const lookup = await api(`/api/orders/${oid}`);
   check("estado real refletido no lookup (Entregue)", lookup.body?.data?.status === "Entregue", `status=${lookup.body?.data?.status}`);
 
-  // Lista admin de todos os pedidos + filtro por estado
-  const all = await api("/api/orders/admin/all", { headers: { Authorization: `Bearer ${adminToken}` } });
-  check("GET /api/orders/admin/all (admin) → lista todos",
-        all.status === 200 && all.body?.data?.length >= 3 && all.body.data.some((o) => o.id === oid),
-        `status=${all.status} n=${all.body?.data?.length}`);
-  const byStatus = await api("/api/orders/admin/all?status=Entregue", { headers: { Authorization: `Bearer ${adminToken}` } });
-  check("filtro ?status=Entregue",
-        byStatus.status === 200 && byStatus.body?.data?.every((o) => o.status === "Entregue"),
-        `status=${byStatus.status}`);
+  // Página admin de pedidos (paginada NO SERVIDOR) + filtro por estado
+  const all = await api("/api/orders/admin/all?size=100", { headers: { Authorization: `Bearer ${adminToken}` } });
+  check("GET /api/orders/admin/all (admin) → página (items/page/totalItems/statusCounts)",
+        all.status === 200 && Array.isArray(all.body?.data?.items)
+          && all.body.data.items.length <= all.body.data.size
+          && typeof all.body.data.totalItems === "number"
+          && all.body.data.totalItems >= 3
+          && all.body.data.items.some((o) => o.id === oid)
+          && typeof all.body.data.statusCounts === "object",
+        `status=${all.status} n=${all.body?.data?.items?.length} total=${all.body?.data?.totalItems}`);
+  const hugeSize = await api("/api/orders/admin/all?size=100000", { headers: { Authorization: `Bearer ${adminToken}` } });
+  check("teto do tamanho de página (?size=100000 → 100)",
+        hugeSize.status === 200 && hugeSize.body?.data?.size === 100,
+        `size=${hugeSize.body?.data?.size}`);
+  const byStatus = await api("/api/orders/admin/all?status=Entregue&size=100", { headers: { Authorization: `Bearer ${adminToken}` } });
+  check("filtro ?status=Entregue (no SQL, e o total é o do filtro)",
+        byStatus.status === 200 && byStatus.body?.data?.items?.every((o) => o.status === "Entregue")
+          && byStatus.body.data.totalItems <= all.body.data.totalItems,
+        `status=${byStatus.status} n=${byStatus.body?.data?.items?.length} total=${byStatus.body?.data?.totalItems}`);
   const badStatus = await api("/api/orders/admin/all?status=NaoExiste", { headers: { Authorization: `Bearer ${adminToken}` } });
   check("filtro com estado inválido → 400", badStatus.status === 400, `status=${badStatus.status}`);
   const customerList = await api("/api/orders/admin/all", { headers: { Authorization: `Bearer ${token}` } });
   check("cliente a listar todos → 403", customerList.status === 403, `status=${customerList.status}`);
   const anonList = await api("/api/orders/admin/all");
   check("admin/all sem token → 401", anonList.status === 401, `status=${anonList.status}`);
+
+  // Estatísticas agregadas no SQL (admin)
+  const stats = await api("/api/orders/admin/stats", { headers: { Authorization: `Bearer ${adminToken}` } });
+  check("GET /api/orders/admin/stats (admin) → agrega no SQL",
+        stats.status === 200 && typeof stats.body?.data?.totalOrders === "number"
+          && typeof stats.body?.data?.revenue === "number"
+          && Array.isArray(stats.body?.data?.topProducts)
+          && Array.isArray(stats.body?.data?.days),
+        `status=${stats.status}`);
+  const customerStats = await api("/api/orders/admin/stats", { headers: { Authorization: `Bearer ${token}` } });
+  check("stats para cliente → 403", customerStats.status === 403, `status=${customerStats.status}`);
+  const anonStats = await api("/api/orders/admin/stats");
+  check("stats sem token → 401", anonStats.status === 401, `status=${anonStats.status}`);
 
   const back = await api(`/api/orders/${oid}/status`, {
     method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
@@ -472,6 +497,200 @@ console.log("\n📍 Endereços");
   check("PUT com província inválida → 400", badProv.status === 400, `status=${badProv.status}`);
   const anon = await api("/api/addresses");
   check("GET /api/addresses sem token → 401", anon.status === 401, `status=${anon.status}`);
+}
+
+// ── 9. Cupões ─────────────────────────────────────────────────────
+console.log("\n🎟️  Cupões");
+{
+  const admin = await api("/api/auth/login", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: "admin@norteshopmoz.com", password: "Admin@2026" }),
+  });
+  const at = admin.body?.data?.token;
+  const authJson = { "Content-Type": "application/json", Authorization: `Bearer ${at}` };
+  // Código único por execução (a base é reutilizada entre corridas).
+  const code = `TESTE${Date.now().toString().slice(-6)}`;
+  const payload = { code, discountType: "PERCENT", discountValue: 10, minimumSubtotal: 1000, usageLimit: 0, active: true };
+
+  const created = await api("/api/admin/coupons", {
+    method: "POST", headers: authJson, body: JSON.stringify(payload),
+  });
+  const couponId = created.body?.data?.id;
+  check("POST /api/admin/coupons (admin) → 201",
+        created.status === 201 && created.body?.data?.code === code,
+        `status=${created.status} code=${created.body?.data?.code}`);
+
+  const dup = await api("/api/admin/coupons", {
+    method: "POST", headers: authJson, body: JSON.stringify(payload),
+  });
+  check("código de cupão duplicado → 409", dup.status === 409, `status=${dup.status}`);
+
+  const badType = await api("/api/admin/coupons", {
+    method: "POST", headers: authJson,
+    body: JSON.stringify({ ...payload, code: `${code}X`, discountType: "BRINDE" }),
+  });
+  check("tipo de desconto inválido → 400", badType.status === 400, `status=${badType.status}`);
+
+  const list = await api("/api/admin/coupons", { headers: { Authorization: `Bearer ${at}` } });
+  check("GET /api/admin/coupons (admin) → lista com o novo cupão",
+        list.status === 200 && (list.body?.data ?? []).some((c) => c.code === code),
+        `status=${list.status} n=${list.body?.data?.length}`);
+
+  const customer = await api("/api/admin/coupons", { headers: { Authorization: `Bearer ${token}` } });
+  check("cupões com token de cliente → 403", customer.status === 403, `status=${customer.status}`);
+  const anonCoupons = await api("/api/admin/coupons");
+  check("cupões sem token → 401", anonCoupons.status === 401, `status=${anonCoupons.status}`);
+
+  // Validação pública usada pelo checkout (guest checkout incluído).
+  const valid = await api("/api/orders/validate-coupon", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code, subtotal: 15900 }),
+  });
+  check("POST /api/orders/validate-coupon (público) → 10% de 15900",
+        valid.status === 200 && Number(valid.body?.data?.discount) === 1590,
+        `status=${valid.status} discount=${valid.body?.data?.discount}`);
+
+  const unknownCoupon = await api("/api/orders/validate-coupon", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code: `NAOEXISTE${Date.now()}`, subtotal: 15900 }),
+  });
+  check("cupão inexistente → 400", unknownCoupon.status === 400, `status=${unknownCoupon.status}`);
+
+  const belowMin = await api("/api/orders/validate-coupon", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code, subtotal: 500 }),
+  });
+  check("subtotal abaixo do mínimo → 400", belowMin.status === 400, `status=${belowMin.status}`);
+
+  // Cupão aplicado ao pedido: grava o código e desconta no total.
+  const couponOrder = {
+    items: [{ productId: "p-003", slug: "power-bank-20000-mah", name: "Power Bank", image: "i", price: 1150, qty: 1 }],
+    subtotal: 0, shipping: 0, discount: 0, total: 0,
+    address: { fullName: "Cli Cupão", phone: "+258840000000", email: "cupao@teste.com",
+               address: "Av. 1", city: "Maputo", province: "Maputo Cidade" },
+    paymentMethod: "Pagamento na entrega",
+  };
+  const plain = await api("/api/orders", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(couponOrder),
+  });
+  const withCoupon = await api("/api/orders", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...couponOrder, couponCode: code }),
+  });
+  check("pedido com couponCode → 201 + código gravado",
+        withCoupon.status === 201 && withCoupon.body?.data?.couponCode === code,
+        `status=${withCoupon.status} couponCode=${withCoupon.body?.data?.couponCode}`);
+  check("desconto do cupão reduz o total do pedido",
+        plain.status === 201 && Number(withCoupon.body?.data?.total) < Number(plain.body?.data?.total),
+        `sem=${plain.body?.data?.total} com=${withCoupon.body?.data?.total}`);
+
+  const disabled = await api(`/api/admin/coupons/${couponId}`, {
+    method: "PUT", headers: authJson, body: JSON.stringify({ ...payload, active: false }),
+  });
+  check("PUT /api/admin/coupons/{id} → 200 (inativo)",
+        disabled.status === 200 && disabled.body?.data?.active === false,
+        `status=${disabled.status} active=${disabled.body?.data?.active}`);
+  const inactive = await api("/api/orders/validate-coupon", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code, subtotal: 15900 }),
+  });
+  check("cupão inativo → 400", inactive.status === 400, `status=${inactive.status}`);
+
+  const removed = await api(`/api/admin/coupons/${couponId}`, {
+    method: "DELETE", headers: { Authorization: `Bearer ${at}` },
+  });
+  check("DELETE /api/admin/coupons/{id} → 200", removed.status === 200, `status=${removed.status}`);
+  const removedAgain = await api(`/api/admin/coupons/${couponId}`, {
+    method: "DELETE", headers: { Authorization: `Bearer ${at}` },
+  });
+  check("DELETE repetido → 404", removedAgain.status === 404, `status=${removedAgain.status}`);
+}
+
+// ── 10. Cancelamento de pedidos ───────────────────────────────────
+console.log("\n🚫 Cancelamento de pedidos");
+{
+  const admin = await api("/api/auth/login", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: "admin@norteshopmoz.com", password: "Admin@2026" }),
+  });
+  const at = admin.body?.data?.token;
+
+  const orderBody = {
+    items: [{ productId: "p-003", slug: "power-bank-20000-mah", name: "Power Bank", image: "i", price: 1150, qty: 1 }],
+    subtotal: 0, shipping: 0, discount: 0, total: 0,
+    address: { fullName: "Cli Cancelamento", phone: "+258840000000", email: "cancel@teste.com",
+               address: "Av. 1", city: "Maputo", province: "Maputo Cidade" },
+    paymentMethod: "Pagamento na entrega",
+  };
+  const createOrder = (headers = {}) =>
+    api("/api/orders", {
+      method: "POST", headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify(orderBody),
+    });
+
+  // O dono autenticado cancela o próprio pedido.
+  const mine = await createOrder({ Authorization: `Bearer ${token}` });
+  const mineId = mine.body?.data?.id;
+  check("pedido do cliente criado para cancelar", mine.status === 201 && Boolean(mineId),
+        `status=${mine.status}`);
+  const cancelled = await api(`/api/orders/${mineId}`, {
+    method: "DELETE", headers: { Authorization: `Bearer ${token}` },
+  });
+  check("DELETE /api/orders/{id} (dono) → 200 Cancelado",
+        cancelled.status === 200 && cancelled.body?.data?.status === "Cancelado",
+        `status=${cancelled.status} estado=${cancelled.body?.data?.status}`);
+  const lookup = await api(`/api/orders/${mineId}`);
+  check("estado Cancelado refletido no lookup público",
+        lookup.body?.data?.status === "Cancelado", `estado=${lookup.body?.data?.status}`);
+  const twice = await api(`/api/orders/${mineId}`, {
+    method: "DELETE", headers: { Authorization: `Bearer ${token}` },
+  });
+  check("cancelar um pedido já cancelado → 400", twice.status === 400, `status=${twice.status}`);
+
+  // Outro cliente não pode cancelar pedidos alheios.
+  const other = await api("/api/auth/register", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fullName: "Outro Cliente", email: `outro-${Date.now()}@teste.com`,
+                           password: "segredo123", phone: "+258841111111" }),
+  });
+  const otherId = (await createOrder({ Authorization: `Bearer ${token}` })).body?.data?.id;
+  const forbidden = await api(`/api/orders/${otherId}`, {
+    method: "DELETE", headers: { Authorization: `Bearer ${other.body?.data?.token}` },
+  });
+  check("outro cliente a cancelar → 403", forbidden.status === 403, `status=${forbidden.status}`);
+
+  const anonCancel = await api(`/api/orders/${otherId}`, { method: "DELETE" });
+  check("DELETE sem token → 401", anonCancel.status === 401, `status=${anonCancel.status}`);
+
+  const missing = await api("/api/orders/NSM-NAOEXISTE000", {
+    method: "DELETE", headers: { Authorization: `Bearer ${at}` },
+  });
+  check("cancelar pedido inexistente → 404", missing.status === 404, `status=${missing.status}`);
+
+  // Admin cancela um pedido de convidado (sem dono a validar).
+  const guest = await createOrder();
+  const guestId = guest.body?.data?.id;
+  const adminCancel = await api(`/api/orders/${guestId}`, {
+    method: "DELETE", headers: { Authorization: `Bearer ${at}` },
+  });
+  check("admin cancela pedido de convidado → 200",
+        adminCancel.status === 200 && adminCancel.body?.data?.status === "Cancelado",
+        `status=${adminCancel.status}`);
+
+  // Pedido entregue não pode ser cancelado.
+  const delivered = await createOrder();
+  const deliveredId = delivered.body?.data?.id;
+  for (const step of ["Pagamento confirmado", "Em preparação", "Enviado", "Em trânsito", "Entregue"]) {
+    await api(`/api/orders/${deliveredId}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${at}` },
+      body: JSON.stringify({ status: step }),
+    });
+  }
+  const deliveredCancel = await api(`/api/orders/${deliveredId}`, {
+    method: "DELETE", headers: { Authorization: `Bearer ${at}` },
+  });
+  check("cancelar um pedido entregue → 400", deliveredCancel.status === 400, `status=${deliveredCancel.status}`);
 }
 
 console.log(`\n📊 RESULTADO: ${pass} ✅ | ${fail} ❌`);

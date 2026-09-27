@@ -139,7 +139,7 @@ export function ProductTabs({ product }: { product: Product }) {
           >
             {t.label}
             {t.id === "avaliacoes" && (
-              <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px]">
+              <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
                 {reviews.length}
               </span>
             )}
@@ -168,7 +168,7 @@ export function ProductTabs({ product }: { product: Product }) {
                 key={s.label}
                 className={cn(
                   "grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-4 px-5 py-3.5 text-sm",
-                  i % 2 === 0 ? "bg-slate-50/70" : "bg-white",
+                  i % 2 === 0 ? "bg-slate-50/70" : "bg-surface",
                 )}
               >
                 <span className="font-semibold text-slate-700">{s.label}</span>
@@ -271,7 +271,7 @@ export function ProductTabs({ product }: { product: Product }) {
                       </div>
                     </div>
                     {r.verified && (
-                      <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600">
+                      <span className="flex items-center gap-1 text-xs font-semibold text-emerald-700">
                         <BadgeCheck className="size-4" /> Compra verificada
                       </span>
                     )}

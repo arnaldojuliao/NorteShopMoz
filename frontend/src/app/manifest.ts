@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "NorteShop — Loja online em Moçambique",
+    name: "NorteShopMoz — Loja online em Moçambique",
     short_name: "NS",
     description:
       "Compras simples, seguras e acessíveis. Eletrónica, moda, casa e mais com entrega para todo Moçambique.",

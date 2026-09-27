@@ -47,7 +47,7 @@ export function ProductRail({ products, id }: { products: Product[]; id?: string
           return (
             <article
               key={p.id}
-              className="group w-44 shrink-0 snap-start overflow-hidden rounded-2xl border border-slate-100 bg-white transition-all hover:border-slate-200 hover:shadow-card-hover sm:w-52"
+              className="group w-44 shrink-0 snap-start overflow-hidden rounded-2xl border border-slate-100 bg-surface transition-all hover:border-slate-200 hover:shadow-card-hover sm:w-52"
             >
               <Link href={`/produto/${p.slug}`} className="block">
                 <div className="relative aspect-square overflow-hidden bg-slate-100">
@@ -84,14 +84,14 @@ export function ProductRail({ products, id }: { products: Product[]; id?: string
                     {format(p.price)}
                   </span>
                   {p.oldPrice && (
-                    <span className="text-[11px] text-slate-400 line-through">
+                    <span className="text-xs text-slate-400 line-through">
                       {format(p.oldPrice)}
                     </span>
                   )}
                 </div>
                 <button
                   onClick={() => handleAddToCart(p)}
-                  className="mt-1 flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-primary-50 text-xs font-semibold text-primary-700 transition hover:bg-primary-600 hover:text-white active:scale-[0.98]"
+                  className="mt-1 flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-primary-50 text-xs font-semibold text-primary-700 transition hover:bg-brand hover:text-white active:scale-[0.98]"
                 >
                   <ShoppingCart className="size-3.5" /> Adicionar
                 </button>
@@ -106,14 +106,14 @@ export function ProductRail({ products, id }: { products: Product[]; id?: string
           <button
             onClick={() => scrollBy(-1)}
             aria-label="Deslocar para trás"
-            className="absolute -left-3 top-1/2 hidden size-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-card transition hover:text-primary-700 lg:flex"
+            className="absolute -left-3 top-1/2 hidden size-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-surface text-slate-600 shadow-card transition hover:text-primary-700 lg:flex"
           >
             <ChevronLeft className="size-5" />
           </button>
           <button
             onClick={() => scrollBy(1)}
             aria-label="Deslocar para a frente"
-            className="absolute -right-3 top-1/2 hidden size-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-card transition hover:text-primary-700 lg:flex"
+            className="absolute -right-3 top-1/2 hidden size-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-surface text-slate-600 shadow-card transition hover:text-primary-700 lg:flex"
           >
             <ChevronRight className="size-5" />
           </button>

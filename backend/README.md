@@ -160,10 +160,10 @@ curl "http://localhost:8081/api/products?category=telemoveis&sort=price-asc&limi
 
 ```json
 {
-  "data": [ { "id": "p-001", "slug": "smartphone-nsm-x10-128gb", "name": "Smartphone NSM X10 · 128 GB",
+  "data": [ { "id": "p-001", "slug": "capa-para-iphone", "name": "Capa para iPhone",
               "price": 15900.00, "oldPrice": 18500.00, "rating": 4.7, "isNew": true,
               "deliveryDays": [3, 7], "badges": ["OFERTA"], "images": [...], "specs": [...], ... } ],
-  "meta": { "total": 44 }
+  "meta": { "total": 100 }
 }
 ```
 
@@ -211,6 +211,18 @@ pedido já entra com estado **"Pagamento confirmado"** + `paymentReference`
 (ex.: `MP-4F3K9Q2X7Z` ou `CARD-••••1234`). Pagamento na entrega/transferência
 continuam a começar em "Pedido recebido" e sem referência.
 
+**Ordem das operações** (importante em incidentes): validar o pedido e recalcular
+os totais (só leituras) → **cobrar no gateway** → transação curta de escrita
+(reservar stock, consumir o cupão e gravar o pedido). A cobrança é uma chamada
+externa e corre **fora** da transação de escrita: dentro dela, cada checkout online
+segurava uma ligação do pool JDBC e o *lock* da linha do cupão
+(`findByCodeForUpdate`) durante toda a latência do gateway — com um gateway lento
+isso esgota o pool e derruba a API inteira, não só o checkout. Se a transação
+falhar (última unidade levada por outro checkout, cupão que atingiu o limite,
+falha ao gravar ou no commit), tudo é revertido e a cobrança é **estornada** — o
+cliente nunca fica cobrado sem pedido. Os casos óbvios (produto já esgotado,
+cupão inválido, província inválida) são rejeitados **antes** da cobrança.
+
 Os totais são **sempre recalculados no servidor a partir do catálogo** — os valores do cliente são ignorados:
 
 - `subtotal` = Σ preço real × quantidade;
@@ -225,14 +237,15 @@ pedidos de convidados não aparecem na lista de nenhum utilizador e só são con
 
 ```json
 {
-  "items": [ { "productId": "p-001", "slug": "smartphone-nsm-x10-128gb", "name": "Smartphone NSM X10 · 128 GB",
+  "items": [ { "productId": "p-001", "slug": "capa-para-iphone", "name": "Capa para iPhone",
                "image": "https://…", "price": 15900.00, "qty": 1, "variant": "128 GB" } ],
   "subtotal": 15900, "shipping": 0, "discount": 1000, "total": 14900,
   "paymentMethod": "M-Pesa",
   "paymentInfo": { "phone": "+258 84 123 4567" },   // ou { "cardLast4": "1234" } para cartão
   "address": { "fullName": "Maria João", "phone": "+258 84 000 0000", "email": "maria@exemplo.co.mz",
                "address": "Av. Julius Nyerere 1234", "city": "Maputo",
-               "province": "Maputo Cidade", "notes": "Ligar antes de entregar" }
+               "province": "Maputo Cidade", "notes": "Ligar antes de entregar" },
+  "couponCode": "NSM10"   // opcional — revalidado no servidor
 }
 
 Resposta: `{ "data": { ..., "status": "Pagamento confirmado", "paymentReference": "MP-4F3K9Q2X7Z" } }`
@@ -257,10 +270,83 @@ O pedido guarda `status` inicial **"Pedido recebido"** e segue a timeline do fro
 - Estado fora do enum → 400; pedido inexistente → 404.
 - Requer **`Authorization: Bearer <token de admin>`** (role `ADMIN`): cliente → 403, sem token → 401.
 
-**`GET /api/orders/admin/all`** → lista **todos** os pedidos (**admin apenas**), do mais
-recente ao mais antigo → `{ "data": [...] }`. Filtro opcional:
-`?status=Enviado` (estado inválido → 400). Requer token de admin (cliente → 403,
-sem token → 401).
+**`GET /api/orders/admin/all`** → **página** de pedidos (**admin apenas**), do mais
+recente ao mais antigo →
+`{ "data": { "items": [...], "page", "size", "totalItems", "totalPages", "hasNext", "statusCounts" } }`.
+
+- `?status=Enviado` (opcional; estado inválido → 400), `?page=0` e `?size=20`
+  (teto 100 — acima disso é clampado).
+- Filtro, ordenação e limite são resolvidos **no SQL** (a resposta antiga trazia
+  o histórico completo, com os itens de cada pedido). O desempate é por `id`
+  descendente, para dois pedidos com a mesma data não trocarem de página.
+- `statusCounts` traz o total por estado (uma query `group by`) para os filtros
+  do painel mostrarem números reais, e não os da página atual.
+- Requer token de admin (cliente → 403, sem token → 401).
+
+**`GET /api/orders/admin/stats`** → estatísticas de vendas (**admin apenas**), com
+**toda a agregação feita no SQL** →
+`{ "data": { "totalOrders", "deliveredOrders", "cancelledOrders", "inProgressOrders",
+"revenue", "shippingCollected", "discountsGiven", "cancelledValue", "avgOrderValue",
+"topProducts": [{ "productId", "revenue" }], "days": [{ "date", "orders", "revenue" }] } }`.
+
+- `revenue`, `shippingCollected` e `discountsGiven` somam apenas estados com
+  pagamento confirmado (`Pagamento confirmado` → `Entregue`); cancelados ficam em
+  `cancelledValue`.
+- `topProducts` exclui pedidos cancelados (máx. 5); `days` traz os 30 dias mais
+  recentes com pedidos.
+- Agregação via `COUNT`/`SUM`/`GROUP BY` (sem carregar pedidos para memória) —
+  suportada pelos índices da migração `V3`.
+- Requer token de admin (cliente → 403, sem token → 401).
+
+**`DELETE /api/orders/{id}`** → cancela o pedido (**dono ou admin**) → `{ "data": { …, "status": "Cancelado" } }`
+
+- Pede **autenticação** (`Authorization: Bearer`): pedidos de convidado só são
+  canceláveis por um admin (sem conta não há dono a validar).
+- Um pedido já **entregue** ou **cancelado** → 400; pedido inexistente → 404;
+  outro cliente → 403.
+- Repõe o **stock** e ajusta o contador `sold` de cada item, e envia o email de
+  cancelamento. `Cancelado` é um estado **terminal** — não volta à timeline.
+
+### Cupões
+
+Os cupões aplicam desconto ao subtotal e são **sempre revalidados no servidor**
+na criação do pedido (o valor enviado pelo cliente é ignorado).
+
+**`POST /api/orders/validate-coupon`** → valida sem aplicar (**público**) →
+`{ "data": { "code", "discountType", "discountValue", "discount", "minimumSubtotal" } }`,
+onde `discount` já é o valor em MT para o subtotal enviado.
+
+```json
+{ "code": "NSM10", "subtotal": 15900 }
+```
+
+- Código inexistente/inativo/expirado, limite de utilizações atingido ou
+  subtotal abaixo do mínimo → **400** com a razão na mensagem.
+- No checkout, o pedido leva `"couponCode": "NSM10"`; o desconto do cupão
+  acumula com o desconto de preços riscados e entra em `order.discount`/
+  `order.total`, e o código fica gravado em `order.couponCode`.
+
+Gestão (todas **admin apenas** — role `ADMIN`, caso contrário 403/401):
+
+| Método | Rota | Descrição |
+|---|---|---|
+| `GET` | `/api/admin/coupons` | lista os cupões (mais recentes primeiro) |
+| `POST` | `/api/admin/coupons` | cria → 201 (código duplicado → 409) |
+| `PUT` | `/api/admin/coupons/{id}` | atualiza |
+| `DELETE` | `/api/admin/coupons/{id}` | remove |
+
+```json
+{ "code": "NSM10", "discountType": "PERCENT", "discountValue": 10,
+  "minimumSubtotal": 5000, "expiresAt": "2026-12-31T00:00:00Z",
+  "active": true, "usageLimit": 100 }
+```
+
+- `discountType` é `PERCENT` (%) ou `FIXED` (MT); outro valor → 400.
+- `usageLimit` `0` = sem limite; `usedCount` é incrementado a cada pedido que
+  usa o cupão.
+- O `DataSeeder` cria dois cupões de demonstração (idempotente) para testar o
+  checkout sem passar pelo painel: `BEMVINDO10` (10%, mínimo 1.000 MT) e
+  `ENTREGA500` (500 MT, mínimo 5.000 MT).
 
 ### Avaliações (autenticado)
 
@@ -334,12 +420,23 @@ via Resend (ignorado em dev sem `RESEND_API_KEY`).
 
 ### Credenciais de administrador (seed)
 
+Em desenvolvimento:
+
 ```
 Email:    admin@norteshopmoz.com
 Password: Admin@2026
 ```
 
 O `DataSeeder` garante a existência da conta (corre sempre, mesmo com catálogo já semeado).
+
+**Em produção (`prod`) não há password por omissão:** o arranque falha se
+`ADMIN_PASSWORD` não estiver definida, se tiver menos de 12 caracteres, ou se a
+conta já existir na base de dados com a password de desenvolvimento (pública no
+repositório). Nesse último caso, elimine a conta antiga e volte a arrancar:
+
+```sql
+DELETE FROM users WHERE email = 'admin@norteshopmoz.com';
+```
 
 ---
 
@@ -350,7 +447,34 @@ O `DataSeeder` garante a existência da conta (corre sempre, mesmo com catálogo
 - Chaves: `products::<ProductQuery>`, `product::<slug>`, `categories::all`, `reviews::<productId>`.
 - O serializer usa `DefaultTyping.EVERYTHING` + `As.PROPERTY` (hint `@class`) e regista o
   `JavaTimeModule` — necessário para campos `Instant` (ex.: `Review.date`).
+- **Falha aberta**: a cache tem um `CacheErrorHandler` próprio — com o Redis em baixo,
+  ou perante uma entrada que já não desserialize (ex.: campo novo numa entidade), a
+  falha é tratada como *cache miss* (a query vai à base de dados e o resultado volta a
+  ser guardado). Sem isto, o `SimpleCacheErrorHandler` do Spring relançava a exceção e
+  **todo o catálogo respondia 500**, com o contentor saudável (o healthcheck usa o
+  liveness, que não vê o Redis).
 - ⚠️ Após atualizar o modelo de dados, limpe o cache: `docker exec nsm-redis redis-cli FLUSHDB`.
+
+### Redis em baixo: o que continua a funcionar
+
+Todo o estado auxiliar no Redis falha aberto, com aviso em log — uma dependência em
+baixo não pode expulsar utilizadores nem derrubar a loja:
+
+| Estado no Redis | Comportamento com o Redis indisponível |
+|---|---|
+| Cache do catálogo | *cache miss* (vai à BD) |
+| Rate limit | pedido passa (sem limite) |
+| Idempotência do checkout | pedido é criado normalmente |
+| Bloqueio por brute-force | login não é bloqueado |
+| Refresh tokens | token assinado válido é aceite (não se revoga em massa) |
+| Inatividade de sessão | sessão permitida |
+| Revogação de sessões | pedido permitido |
+
+O **login e o checkout continuam a funcionar** neste cenário (coberto por
+`LoginWithRedisDownTest` e `OrderCheckoutFlowTest`). O que se perde é a proteção
+extra: sem rate limit, sem lockout e sem revogação — o idle timeout volta a falhar
+aberto. Daí o access token de 1 hora e o `/actuator/health/readiness` (que inclui o
+Redis) para alertar a operação.
 
 ---
 
@@ -380,7 +504,11 @@ node --input-type=module -e "import { products } from './src/lib/data/products.t
 - **UserAccount** — `id` (UUID), `email` (único), `password` (BCrypt), `fullName`, `phone`, `role` (`CUSTOMER` | `ADMIN`)
 - **Order / OrderItem / OrderAddress** — itens com snapshot de preço/nome/imagem,
   endereço, `paymentMethod`, `status`, `date` (Instant), `paymentReference`
-  (referência da cobrança online — null em pagamento na entrega/transferência)
+  (referência da cobrança online — null em pagamento na entrega/transferência),
+  `couponCode` (código aplicado — null sem cupão)
+- **Coupon** — `code` (único), `discountType` (`PERCENT`/`FIXED`),
+  `discountValue`, `minimumSubtotal`, `expiresAt` (Instant), `active`,
+  `usageLimit` (0 = sem limite), `usedCount`
 - **NewsletterSubscriber** — `email` (único), `name`, `subscribedAt`, `active`
 - **AddressBookEntry** — `userId`, `label`, `fullName`, `phone`, `address`, `city`,
   `province`, `isDefault`, `lat`/`lng` (opcionais), `createdAt`

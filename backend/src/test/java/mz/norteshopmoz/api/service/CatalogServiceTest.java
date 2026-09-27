@@ -16,6 +16,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -244,5 +245,71 @@ class CatalogServiceTest {
 
         // There may be existing products from seeder, so check at least our 3 are there
         assertThat(products).hasSizeGreaterThanOrEqualTo(3);
+    }
+
+    /**
+     * A ordem por omissão do catálogo é do mais recente para o mais antigo: o
+     * último produto publicado fica em cima e os antigos em baixo.
+     */
+    @Test
+    void getProducts_defaultOrder_isNewestFirst() {
+        Category cat = categoryRepository.save(Category.builder()
+                .slug("test-cat-order")
+                .name("Ordem do catálogo")
+                .emoji("🧪")
+                .image("img.jpg")
+                .description("Test desc")
+                .build());
+
+        productRepository.saveAll(List.of(
+                product("p-order-old", "order-old", cat.getSlug(),
+                        Instant.parse("2026-01-01T00:00:00Z")),
+                product("p-order-new", "order-new", cat.getSlug(),
+                        Instant.parse("2026-06-01T00:00:00Z"))));
+
+        List<String> order = catalogService.getProducts(ProductQuery.empty()).stream()
+                .map(Product::getId)
+                .filter(id -> id.startsWith("p-order-"))
+                .toList();
+
+        assertThat(order).containsExactly("p-order-new", "p-order-old");
+    }
+
+    /** Um produto criado agora aparece no topo, à frente de todo o catálogo antigo. */
+    @Test
+    void createProduct_landsAtTopOfCatalog() {
+        Category cat = categoryRepository.save(Category.builder()
+                .slug("test-cat-top")
+                .name("Topo")
+                .emoji("🧪")
+                .image("img.jpg")
+                .description("Test desc")
+                .build());
+
+        Product created = catalogService.createProduct(request(cat.getSlug(), "Produto Recente"));
+
+        assertThat(created.getCreatedAt()).isNotNull();
+        assertThat(catalogService.getProducts(ProductQuery.empty()).get(0).getId())
+                .isEqualTo(created.getId());
+    }
+
+    private Product product(String id, String slug, String category, Instant createdAt) {
+        return Product.builder()
+                .id(id)
+                .slug(slug)
+                .name(slug)
+                .category(category)
+                .price(new BigDecimal("100"))
+                .stock(1)
+                .images(List.of())
+                .shortDescription("")
+                .description(List.of())
+                .specs(List.of())
+                .badges(List.of())
+                .variants(List.of())
+                .deliveryDays(List.of(1, 2))
+                .tags(List.of())
+                .createdAt(createdAt)
+                .build();
     }
 }

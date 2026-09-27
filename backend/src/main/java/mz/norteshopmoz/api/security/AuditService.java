@@ -76,17 +76,16 @@ public class AuditService {
         return str.length() > maxLen ? str.substring(0, maxLen) + "..." : str;
     }
 
-    /** Extrai IP do request (considera proxies). */
+    /**
+     * Extrai o IP do cliente para os logs de auditoria.
+     * <p>
+     * Delega no {@link ClientIpResolver}: só confia em
+     * {@code X-Forwarded-For}/{@code X-Real-IP} quando a ligação direta vem de um
+     * proxy fidedigno e usa o último elemento do XFF. Ler o header sem estas
+     * regras permite a um cliente forjar o IP e poluir a auditoria.
+     */
     public static String getClientIp(HttpServletRequest request) {
-        String xf = request.getHeader("X-Forwarded-For");
-        if (xf != null && !xf.isBlank()) {
-            return xf.split(",")[0].trim();
-        }
-        String xr = request.getHeader("X-Real-IP");
-        if (xr != null && !xr.isBlank()) {
-            return xr;
-        }
-        return request.getRemoteAddr();
+        return ClientIpResolver.resolve(request);
     }
 
     /** Extrai User-Agent do request. */

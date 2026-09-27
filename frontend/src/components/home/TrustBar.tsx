@@ -42,7 +42,7 @@ export function TrustBar() {
   return (
     <section
       aria-label="Benefícios da loja"
-      className="overflow-hidden border-y border-slate-100 bg-white"
+      className="overflow-hidden border-y border-slate-100 bg-surface"
     >
       {/* Mobile/tablet: scroll automático e infinito (marquee) */}
       <div className="flex w-max animate-marquee py-5 hover:[animation-play-state:paused] [mask-image:linear-gradient(to_right,transparent,black_48px,black_calc(100%-48px),transparent)] lg:hidden">

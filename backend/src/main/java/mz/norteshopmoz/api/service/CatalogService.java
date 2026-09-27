@@ -23,7 +23,9 @@ import mz.norteshopmoz.api.web.dto.ReviewRequest;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +36,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional(readOnly = true)
 public class CatalogService {
+
+    /** Teto do parâmetro `?limit=` — evita pedidos de catálogo inteiro em memória. */
+    private static final int MAX_LIMIT = 200;
 
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
@@ -77,6 +82,7 @@ public class CatalogService {
 
         Product product = Product.builder()
                 .id("p-" + UUID.randomUUID().toString().substring(0, 8))
+                .createdAt(Instant.now())
                 .slug(slug)
                 .name(req.name().trim())
                 .brand(req.brand() == null || req.brand().isBlank() ? null : req.brand().trim())
@@ -210,14 +216,25 @@ public class CatalogService {
         productRepository.deleteById(id);
     }
 
+    /**
+     * Lista o catálogo com filtros/ordenação.
+     *
+     * <p>Com {@code limit}, o corte é feito na própria query ({@link PageRequest}) —
+     * antes trazia o catálogo inteiro para memória e só depois aplicava
+     * {@code subList}, pelo que {@code ?limit=N} não reduzia nada e um N arbitrário
+     * carregava a tabela toda. Sem {@code limit}, devolve o catálogo completo
+     * (usado pelo SSG, sitemap e contagens do frontend).
+     */
     @Cacheable(cacheNames = "products", key = "#query")
     public List<Product> getProducts(ProductQuery query) {
-        List<Product> products = productRepository.findAll(
-                ProductSpecifications.from(query), toSort(query.sort()));
-        if (query.limit() != null && query.limit() > 0 && products.size() > query.limit()) {
-            return List.copyOf(products.subList(0, query.limit()));
+        Specification<Product> spec = ProductSpecifications.from(query);
+        Sort sort = toSort(query.sort());
+        Integer limit = query.limit();
+        if (limit != null && limit > 0) {
+            int size = Math.min(limit, MAX_LIMIT);
+            return productRepository.findAll(spec, PageRequest.of(0, size, sort)).getContent();
         }
-        return products;
+        return productRepository.findAll(spec, sort);
     }
 
     /** Nº total de correspondências (para o meta.total do contrato, mesmo com limit). */
@@ -301,13 +318,20 @@ public class CatalogService {
             String description,
             long productCount) {}
 
+    /**
+     * Ordenação pedida pelo frontend. Por omissão ("relevância") o catálogo é
+     * apresentado do mais recente para o mais antigo — o último produto
+     * publicado fica em cima e os antigos em baixo. O `id` é apenas o critério
+     * de desempate (carimbos iguais ao milissegundo), não a ordem principal.
+     */
     private Sort toSort(String sort) {
         return switch (sort == null ? "relevance" : sort) {
             case "price-asc" -> Sort.by(Sort.Direction.ASC, "price");
             case "price-desc" -> Sort.by(Sort.Direction.DESC, "price");
             case "rating" -> Sort.by(Sort.Direction.DESC, "rating");
             case "sold" -> Sort.by(Sort.Direction.DESC, "sold");
-            default -> Sort.by(Sort.Direction.ASC, "id");
+            default -> Sort.by(Sort.Direction.DESC, "createdAt")
+                    .and(Sort.by(Sort.Direction.ASC, "id"));
         };
     }
 }

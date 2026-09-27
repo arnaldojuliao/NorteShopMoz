@@ -1,0 +1,41 @@
+# NorteShopMoz — Alertmanager
+#
+# O elo que faltava: as regras em prometheus/rules/nsm-alerts.yml detetam os
+# estados maus, mas é aqui que alguém é AVISADO. Sem este componente as regras
+# disparam no Prometheus e ninguém sabe — o mesmo que não existirem.
+#
+# O destino é uma única variável de ambiente, ALERT_WEBHOOK_URL: qualquer serviço
+# que aceite um POST JSON serve (Slack, Discord, Google Chat, ntfy.sh, um
+# endpoint próprio). Não é preciso mudar este ficheiro — a expansão de variáveis
+# faz-se com `--config.expand-env=true` (ver docker-compose.monitoring.yml).
+#
+#   ALERT_WEBHOOK_URL='https://hooks.slack.com/services/…' \
+#     docker compose -f monitoring/docker-compose.monitoring.yml --profile alerting up -d
+#
+# Sem a variável o Alertmanager NÃO ARRANCA (e diz porquê). É de propósito: uma
+# stack de alertas que sobe sem destino dá a falsa sensação de estar a monitorizar.
+
+global:
+  resolve_timeout: 5m
+
+route:
+  # Agrupa por alerta para não gerar uma mensagem por cada instância.
+  group_by: ['alertname', 'severity']
+  group_wait: 30s
+  group_interval: 5m
+  # Repetir a cada 4 h enquanto o problema persistir (e avisar quando resolver).
+  repeat_interval: 4h
+  receiver: 'nsm'
+
+receivers:
+  - name: 'nsm'
+    webhook_configs:
+      - url: '${ALERT_WEBHOOK_URL}'
+        send_resolved: true
+
+inhibit_rules:
+  # Se a API inteira está em baixo, não vale a pena avisar em separado da
+  # degradação/erros/latência que resultam do mesmo incidente.
+  - source_matchers: ['alertname="NsmApiDown"']
+    target_matchers: ['severity=~"warning|critical"']
+    equal: ['team']

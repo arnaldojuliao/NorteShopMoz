@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
+import { envOr } from "./src/lib/env";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8081";
+// `envOr` porque um build arg ausente chega como string vazia (não undefined).
+const API_BASE = envOr(process.env.NEXT_PUBLIC_API_BASE_URL, "http://localhost:8081");
 
 const remotePatterns: NonNullable<NextConfig["images"]>["remotePatterns"] = [
   { protocol: "https", hostname: "images.unsplash.com" },
@@ -25,6 +27,14 @@ try {
 const nextConfig: NextConfig = {
   // Enable standalone output for Docker deployment
   output: 'standalone',
+  // Não anunciar o framework/framework version a quem faz pedidos.
+  poweredByHeader: false,
+  // /procurar foi unificado em /explore (mesmos parâmetros: q, deal, new,
+  // bestseller). 308 preserva a query string e é cacheado como permanente —
+  // os URLs antigos (sitemap, SearchAction) continuam a funcionar.
+  async redirects() {
+    return [{ source: '/procurar', destination: '/explore', permanent: true }];
+  },
   images: {
     remotePatterns,
     formats: ["image/avif", "image/webp"],

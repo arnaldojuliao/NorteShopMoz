@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ApiError } from "@/lib/api";
+import { ApiError, forwardedAuthHeaders } from "@/lib/api";
 import { submitOrder, type OrderPayload } from "@/lib/orders";
 
 /**
@@ -8,6 +8,11 @@ import { submitOrder, type OrderPayload } from "@/lib/orders";
  * - Backend disponível → pedido real (totais recalculados no servidor);
  * - Erro de validação do backend → devolve o erro com o mesmo status;
  * - Backend indisponível → pedido local (fallback offline).
+ *
+ * Os headers de sessão (cookies HttpOnly, Authorization, CSRF) são encaminhados
+ * via forwardedAuthHeaders: sem isto, um utilizador LOGADO que fizesse o checkout
+ * através deste proxy chegava ao backend como anónimo — o pedido nascia guest
+ * (sem ligação à conta) e não aparecia no histórico nem em "os meus pedidos".
  */
 export async function POST(request: Request) {
   let body: OrderPayload;
@@ -24,13 +29,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Dados de entrega incompletos" }, { status: 400 });
   }
 
-  // Encaminha os headers de sessão/idempotência para o backend: sem isto, um
-  // pedido enviado pelo proxy same-origin perderia o token (ligação à conta)
-  // e a chave anti duplo-submit (Idempotency-Key).
+  // Encaminha a sessão (cookies/Authorization/CSRF) e a chave anti duplo-submit.
   const idempotencyKey = request.headers.get("idempotency-key") ?? undefined;
-  const auth = request.headers.get("authorization");
-  const headers: Record<string, string> = {};
-  if (auth) headers.Authorization = auth;
+  const headers: Record<string, string> = {
+    ...forwardedAuthHeaders(request),
+  };
   if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
 
   try {

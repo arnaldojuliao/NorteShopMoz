@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useState } from "react";
-import { cn } from "@/lib/utils";
+import { cn, isValidImageSrc } from "@/lib/utils";
 
 /** Gera um SVG placeholder com a identidade NSM caso a imagem falhe. */
 function fallbackSvg(label: string, emoji = "🛍️") {
@@ -20,7 +20,7 @@ export function ProductImage({
   label,
   imgClassName,
 }: {
-  src: string;
+  src?: string;
   alt: string;
   fill?: boolean;
   sizes?: string;
@@ -31,7 +31,11 @@ export function ProductImage({
 }) {
   const [errored, setErrored] = useState(false);
 
-  if (errored) {
+  // src inválido (undefined/vazio/caminho relativo sem slash) → placeholder
+  // direto, evitando passar "" ao next/image (re-download da página / crash).
+  const isValidSrc = isValidImageSrc(src);
+
+  if (errored || !isValidSrc) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img

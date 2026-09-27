@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 export default function NotFound() {
   return (
     <div className="container-nsm flex flex-col items-center py-24 text-center">
-      <span className="flex size-20 items-center justify-center rounded-3xl bg-primary-50 text-primary-600">
+      <span className="flex size-20 items-center justify-center rounded-2xl bg-primary-50 text-primary-600">
         <PackageSearch className="size-10" />
       </span>
       <p className="mt-6 font-display text-7xl font-extrabold text-primary-600">404</p>
@@ -20,12 +20,12 @@ export default function NotFound() {
         <Button href="/" variant="primary">
           <Home className="size-4" /> Ir para o início
         </Button>
-        <Button href="/procurar" variant="outline">
+        <Button href="/explore" variant="outline">
           Procurar produtos
         </Button>
       </div>
       <Link href="/" className="mt-8 text-xs text-slate-400">
-        NorteShop — Compras simples, seguras e acessíveis.
+        NorteShopMoz — Compras simples, seguras e acessíveis.
       </Link>
     </div>
   );

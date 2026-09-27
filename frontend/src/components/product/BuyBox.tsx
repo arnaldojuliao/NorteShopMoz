@@ -193,7 +193,7 @@ export function BuyBox({ product }: { product: Product }) {
             </strong>{" "}
             em todo Moçambique
             {product.freeShipping && (
-              <span className="ml-1 font-bold text-emerald-600">· Envio grátis</span>
+              <span className="ml-1 font-bold text-emerald-700">· Envio grátis</span>
             )}
           </span>
         </p>

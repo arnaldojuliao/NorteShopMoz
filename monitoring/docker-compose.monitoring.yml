@@ -1,26 +1,121 @@
 # Monitoring Stack - Prometheus + Grafana + Exporters
-# Usage: docker compose -f monitoring.docker-compose.yml up -d
+# Usage: GRAFANA_ADMIN_PASSWORD='...' docker compose -f monitoring/docker-compose.monitoring.yml up -d
+#
+# SEGURANÇA: esta stack corre num VPS com portas na internet. Por isso todas as
+# portas ficam ligadas a 127.0.0.1 (acesso por túnel SSH), o Grafana exige
+# password (sem valor por omissão) e o Prometheus não tem admin API nem
+# lifecycle. Não reponha bindings 0.0.0.0 sem pôr autenticação à frente.
+#
+# Os exporters apontam para a stack de desenvolvimento por omissão (via
+# host.docker.internal). Em produção, aponte-os para os serviços de produção
+# e forneça as credenciais por ambiente (nunca as deixe no ficheiro).
 
-version: '3.8'
+# Limite de logs (ver a nota longa em docker-compose.prod.yml): um contentor de
+# monitorização saudável também pode encher o disco do servidor sem isto.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
 
 services:
+  # ── Alertmanager ───────────────────────────────────────────────────────────
+  # Perfil opcional (`--profile alerting`): sem ALERT_WEBHOOK_URL o contentor não
+  # arranca, e quem só quer os dashboards não deve ficar bloqueado. Com o perfil
+  # ligado, as regras de alerta passam a avisar alguém (ver alertmanager/).
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: ns-alertmanager
+    profiles: ["alerting"]
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    environment:
+      # Obrigatório para AVISAR alguém: qualquer webhook serve (Slack, Discord,
+      # ntfy.sh, endpoint próprio) — ver alertmanager.yml.
+      #
+      # Nota: aqui usa-se `${ALERT_WEBHOOK_URL:-}` (vazio) e não `${…:?}`. O
+      # `${…:?}` aborta o `docker compose config`/`up` de TODO o ficheiro, mesmo
+      # com o perfil inativo — quem só quer dashboards deixaria de conseguir subir
+      # a monitorização. A obrigatoriedade é imposta pelo guarda abaixo, que só
+      # corre quando alguém ativa o perfil `alerting`.
+      - ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL:-}
+    # Guarda de arranque: com o perfil `alerting` ativo e sem destino, o processo
+    # termina com uma mensagem clara em vez de subir e deixar as notificações a
+    # falhar em silêncio (uma stack de alertas sem destino dá a falsa sensação de
+    # estar a monitorizar).
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        if [ -z "$$ALERT_WEBHOOK_URL" ]; then
+          echo "ALERT_WEBHOOK_URL em falta: sem destino, os alertas disparam mas ninguém é avisado." >&2
+          echo "Defina o webhook e repita (ex.: ALERT_WEBHOOK_URL='https://…')." >&2
+          exit 1
+        fi
+        exec /bin/alertmanager \
+          --config.file=/etc/alertmanager/alertmanager.yml \
+          --storage.path=/alertmanager \
+          --config.expand-env=true
+    restart: unless-stopped
+    networks:
+      - ns-monitoring
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9093/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Blackbox exporter (sondas do lado de fora) ──────────────────────────────
+  # Necessário para vigiar o /actuator/health/readiness: o scrape normal lê
+  # /actuator/prometheus, que NÃO expõe a saúde do Redis/base de dados. É a única
+  # forma de alertar sobre "a API está de pé mas vende sem as proteções".
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    container_name: ns-blackbox-exporter
+    ports:
+      - "127.0.0.1:9115:9115"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    logging: *default-logging
+    networks:
+      - ns-monitoring
+
   prometheus:
     image: prom/prometheus:v2.54.0
     container_name: ns-prometheus
     ports:
-      - "9090:9090"
+      # Só loopback: o Prometheus não precisa de ser público. Para o consultar do
+      # exterior, use um túnel SSH (`ssh -L 9090:localhost:9090 vps`).
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # Regras de alerta (ver rules/nsm-alerts.yml): sem elas o Prometheus recolhe
+      # métricas mas ninguém é avisado de nada.
+      - ./prometheus/rules:/etc/prometheus/rules:ro
       - prometheus_data:/prometheus
+    # `host.docker.internal` NÃO existe em Linux sem isto (só é automático no
+    # Docker Desktop). Sem este mapeamento, TODOS os alvos que apontam para o host
+    # (a API na 8080, os exporters, o cadvisor) falham a resolução e o Prometheus
+    # ficava com o `up` a 0 — parecia "a API em baixo" sem nada em baixo.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=30d'
-      - '--web.enable-lifecycle'
-      - '--web.enable-admin-api'
+      # SEM --web.enable-admin-api nem --web.enable-lifecycle: a admin API do
+      # Prometheus apaga séries históricas e o /-/quit desliga o servidor, e
+      # nenhum dos dois pede autenticação. Com a porta exposta, era possível a
+      # qualquer pessoa na rede desligar a monitorização ou destruir o histórico.
     restart: unless-stopped
     networks:
       - ns-monitoring
+    logging: *default-logging
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
       interval: 30s
@@ -31,10 +126,14 @@ services:
     image: grafana/grafana:11.0.0
     container_name: ns-grafana
     ports:
-      - "3001:3000"
+      # Só loopback (antes 0.0.0.0: a interface do Grafana ficava exposta e a
+      # password por omissão era conhecida).
+      - "127.0.0.1:3001:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin123}
+      # Sem valor por omissão: `${VAR:?}` falha o arranque se faltar, em vez de
+      # subir com admin/admin123 acessível.
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD em falta — defina uma password forte antes de subir a stack de monitorização}
       - GF_INSTALL_PLUGINS=grafana-piechart-panel
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_AUTH_ANONYMOUS_ENABLED=false
@@ -43,6 +142,7 @@ services:
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
     restart: unless-stopped
+    logging: *default-logging
     networks:
       - ns-monitoring
     depends_on:
@@ -57,7 +157,8 @@ services:
     image: prom/node-exporter:v1.8.1
     container_name: ns-node-exporter
     ports:
-      - "9100:9100"
+      # Só loopback: expõe todo o /proc e /sys do host (fingerprinting do servidor).
+      - "127.0.0.1:9100:9100"
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
@@ -67,6 +168,7 @@ services:
       - '--path.sysfs=/host/sys'
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
     restart: unless-stopped
+    logging: *default-logging
     networks:
       - ns-monitoring
 
@@ -74,14 +176,17 @@ services:
     image: prometheuscommunity/postgres-exporter:v0.15.0
     container_name: ns-postgres-exporter
     ports:
-      - "9187:9187"
+      - "127.0.0.1:9187:9187"
     environment:
       DATA_SOURCE_NAME: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@host.docker.internal:5434/${DB_NAME:-norteshopmoz}?sslmode=disable"
       PG_EXPORTER_DISABLE_DEFAULT_METRICS: "false"
       PG_EXPORTER_EXTEND_QUERY_PATH: "/etc/postgres-exporter/queries.yaml"
     volumes:
       - ./postgres-exporter/queries.yaml:/etc/postgres-exporter/queries.yaml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
+    logging: *default-logging
     networks:
       - ns-monitoring
     depends_on:
@@ -91,10 +196,15 @@ services:
     image: oliver006/redis_exporter:v1.61.0
     container_name: ns-redis-exporter
     ports:
-      - "9121:9121"
+      - "127.0.0.1:9121:9121"
     environment:
       REDIS_ADDR: redis://host.docker.internal:6381
+    # Ver a nota em prometheus: sem isto o nome não resolve em Linux e o exporter
+    # fica sempre em baixo (falso "Redis indisponível").
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
+    logging: *default-logging
     networks:
       - ns-monitoring
     depends_on:
@@ -104,20 +214,24 @@ services:
     image: gcr.io/cadvisor/cadvisor:v0.49.1
     container_name: ns-cadvisor
     ports:
-      - "8081:8080"
+      - "127.0.0.1:8081:8080"
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
+    logging: *default-logging
     networks:
       - ns-monitoring
 
 volumes:
   prometheus_data:
   grafana_data:
+  alertmanager_data:
 
 networks:
   ns-monitoring:

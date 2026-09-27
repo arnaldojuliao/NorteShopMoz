@@ -4,7 +4,7 @@ import { site } from "@/config/site";
 
 export const metadata: Metadata = {
   title: "Política de privacidade",
-  description: "Como a NorteShop recolhe, usa e protege os seus dados pessoais.",
+  description: "Como a NorteShopMoz recolhe, usa e protege os seus dados pessoais.",
 };
 
 export default function PrivacidadePage() {

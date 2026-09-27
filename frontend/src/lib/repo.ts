@@ -38,6 +38,29 @@ interface ApiEnvelope<T> {
   meta?: { total?: number };
 }
 
+/**
+ * Dados de teste que vivem na base de dados de desenvolvimento (criados por
+ * corridas antigas da suite da API) e que não pertencem à loja. A base de dados
+ * mantém-nos para os testes; a loja não os mostra.
+ *
+ * O filtro vive aqui porque este é o ponto único de acesso aos dados: uma só
+ * regra cobre listagens, pesquisa, categorias, recomendados, sitemap e as
+ * páginas pré-geradas no build. O painel de administração não passa pelo repo,
+ * por isso continua a ver (e a poder gerir) os produtos de teste.
+ */
+const TEST_CATEGORY_RE = /^test-cat(?:-|$)/;
+const TEST_PRODUCT_SLUGS = new Set(["cart-product", "produto-teste-admin"]);
+
+/** Categoria de teste (slugs `test-cat`, `test-cat-2`, …). */
+export function isTestCategory(slug: string): boolean {
+  return TEST_CATEGORY_RE.test(slug);
+}
+
+/** Produto de teste: ou está numa categoria de teste, ou é um slug conhecido. */
+export function isTestProduct(product: Product): boolean {
+  return isTestCategory(product.category) || TEST_PRODUCT_SLUGS.has(product.slug);
+}
+
 function toParams(query: ProductQuery): URLSearchParams {
   const p = new URLSearchParams();
   if (query.category) p.set("category", query.category);
@@ -77,12 +100,35 @@ function matchSearch(list: Product[], query: string): Product[] {
   });
 }
 
+/**
+ * Ordem por omissão do catálogo: do mais recente para o mais antigo — o último
+ * produto publicado fica em cima e os antigos em baixo. O `id` é só desempate
+ * (carimbos iguais), exatamente como no backend.
+ *
+ * A ordenação é repetida aqui (e não só no backend) para a loja continuar
+ * correta com um catálogo em cache de uma versão anterior ou servida pelo
+ * fallback local.
+ */
+export function sortByNewest(list: Product[]): Product[] {
+  // Sem carimbos (dados locais) ou com carimbos em falta (catálogo servido de
+  // cache antiga, entre deploys) mantém-se a ordem recebida: o backend já
+  // devolve a lista ordenada e não vale a pena empurrar produtos para o fim.
+  if (list.some((p) => !p.createdAt)) return list;
+  return [...list].sort(
+    (a, b) => Date.parse(b.createdAt!) - Date.parse(a.createdAt!) || a.id.localeCompare(b.id),
+  );
+}
+
 /** Aplica os filtros/ordenação ao catálogo local (fallback quando a API está em baixo). */
-function filterLocalProducts(query: ProductQuery): Product[] {
-  let list = [...localProducts];
+export function filterLocalProducts(query: ProductQuery): Product[] {
+  // O ficheiro local está por ordem de antiguidade — lê-se ao contrário para
+  // espelhar a ordem da API (mais recente primeiro).
+  const newestFirst = [...localProducts].reverse();
+  const rank = new Map(newestFirst.map((p, i) => [p.id, i]));
+  let list = newestFirst;
 
   if (query.category) list = list.filter((p) => p.category === query.category);
-  if (query.q) list = localSearch(query.q);
+  if (query.q) list = localSearch(query.q).sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
   if (query.featuredOnly) list = list.filter((p) => p.featured);
   if (query.bestsellerOnly) list = list.filter((p) => p.bestseller);
   if (query.newOnly) list = list.filter((p) => p.isNew);
@@ -116,7 +162,7 @@ export const repo = {
   async getCategories(): Promise<Category[]> {
     try {
       const { data } = await apiGet<ApiEnvelope<Category[]>>("/api/categories");
-      return data;
+      return data.filter((c) => !isTestCategory(c.slug));
     } catch {
       return localCategories;
     }
@@ -130,9 +176,23 @@ export const repo = {
   async getProducts(query: ProductQuery = {}): Promise<Product[]> {
     try {
       const { data } = await apiGet<ApiEnvelope<Product[]>>(productsPath(query));
-      let list = data;
+      let list = data.filter((p) => !isTestProduct(p));
+      // Os produtos de teste da base de dados de desenvolvimento são ocultados
+      // DEPOIS de o backend cortar pelo `limit`: como agora a ordem é do mais
+      // recente para o mais antigo (e os de teste são os últimos criados), um
+      // lote de N podia vir só com produtos ocultos — daí pedir o catálogo
+      // inteiro uma vez e aplicar aqui o corte.
+      if (query.limit && list.length < query.limit) {
+        const all = await apiGet<ApiEnvelope<Product[]>>(
+          productsPath({ ...query, limit: undefined }),
+        );
+        list = all.data.filter((p) => !isTestProduct(p));
+      }
       // O backend não filtra por badge — aplica-se localmente.
       if (query.badge) list = list.filter((p) => p.badges.includes(query.badge as Badge));
+      // Ordenações explícitas do utilizador (preço, avaliação, vendidos) vêm do
+      // backend e não são tocadas; só a ordem por omissão é garantida aqui.
+      if (!query.sort || query.sort === "relevance") list = sortByNewest(list);
       if (query.limit && list.length > query.limit) list = list.slice(0, query.limit);
       return list;
     } catch {
@@ -146,7 +206,8 @@ export const repo = {
         `/api/products/${encodeURIComponent(slug)}`,
         5 * 60_000, // TTL maior para o detalhe (estável)
       );
-      return data;
+      // Um produto de teste não tem página na loja (404), tal como um slug inválido.
+      return isTestProduct(data) ? undefined : data;
     } catch {
       return getProductBySlug(slug);
     }

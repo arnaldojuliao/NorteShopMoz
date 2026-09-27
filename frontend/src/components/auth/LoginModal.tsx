@@ -14,8 +14,6 @@ import {
   LogIn,
   Mail,
   PackageCheck,
-  RotateCcw,
-  ShoppingBag,
   User,
   UserPlus,
   X,
@@ -23,15 +21,14 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { apiPost } from "@/lib/api";
 import { LogoMark } from "@/components/ui/Logo";
 import { Modal } from "@/components/ui/Modal";
+import { OtpInput } from "@/components/ui/OtpInput";
 import { useAuth } from "@/context/AuthContext";
+import { useEmailVerificationCode } from "@/lib/useEmailVerificationCode";
 import { useLoginModal } from "@/context/LoginModalContext";
 import { useToast } from "@/context/ToastContext";
 import { ApiError } from "@/lib/api";
-import { useLocalStorageState } from "@/lib/hooks";
-import type { UserProfile } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { FacebookIcon, GoogleIcon } from "@/components/ui/SocialIcons";
 
@@ -41,6 +38,7 @@ type Mode = "login" | "register";
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
 const FACEBOOK_APP_ID = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID ?? "";
 const FACEBOOK_SDK_SRC = "https://connect.facebook.net/pt_PT/sdk.js";
+const GOOGLE_GSI_SRC = "https://accounts.google.com/gsi/client";
 
 declare global {
   interface Window {
@@ -103,23 +101,19 @@ function goHome(router: ReturnType<typeof useRouter>) {
   router.refresh();
 }
 
-/** Marca NorteShop (monograma + nome) — usada no painel de marca e no topo mobile. */
+/** Marca NorteShopMoz (monograma + nome) — usada no painel de marca e no topo mobile. */
 function BrandMark({ size = "md" }: { size?: "sm" | "md" }) {
   return (
     <span className="flex items-center gap-2.5">
-      <span
-        className={cn(
-          "flex items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/20 backdrop-blur",
-          size === "sm" ? "size-9" : "size-11",
-        )}
-      >
-        <ShoppingBag className={cn("text-white", size === "sm" ? "size-4" : "size-5")} aria-hidden />
+      <span>
+        <LogoMark className={cn("text-white", size === "sm" ? "size-10" : "size-11")}/>
+       
       </span>
       <span className="flex flex-col leading-none">
         <span className="font-display text-lg font-extrabold tracking-tight text-white">
-          Norte<span className="text-sky-400">Shop</span>
+          Norte<span className="text-sky-400">Shop</span>Moz
         </span>
-        <span className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-white/60">
+        <span className="mt-0.5 text-xs font-medium uppercase tracking-[0.18em] text-white/60">
           Compras fáceis · Moçambique
         </span>
       </span>
@@ -157,11 +151,29 @@ export function LoginModal() {
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [, setUser] = useLocalStorageState<{ email: string; name: string }>("nsm:user", {
-    email: "",
-    name: "",
-  });
-  const [, setProfile] = useLocalStorageState<UserProfile | null>("nsm:profile", null);
+
+  // Confirmação do email pelo código de 6 dígitos no próprio ecrã de registo: o
+  // `register` já deixa a sessão ativa, e o endpoint da confirmação por código
+  // identifica a conta pela sessão.
+  const {
+    code,
+    setCode,
+    error: codeError,
+    verifying,
+    submit: submitCode,
+    resend: resendCode,
+  } = useEmailVerificationCode();
+  const [codeConfirmed, setCodeConfirmed] = useState(false);
+
+  /** Confirma o código e passa a mostrar a conta como verificada. */
+  const confirmWithCode = async () => {
+    if (await submitCode()) setCodeConfirmed(true);
+  };
+
+  const handleCodeSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    void confirmWithCode();
+  };
 
   /** Credencial (ID token) do Google → valida no backend e liga/cria a conta. */
   const handleGoogleCredential = useCallback(
@@ -180,6 +192,44 @@ export function LoginModal() {
     },
     [socialLogin, router, closeLogin],
   );
+
+  /**
+   * Login com Google: carrega o GSI (Identity Services) e abre o pedido de
+   * credencial. Sem carregar o script, `window.google` é undefined e o botão
+   * não fazia nada (falha silenciosa).
+   */
+  const handleGoogleLogin = async () => {
+    if (loading) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await loadScript(GOOGLE_GSI_SRC);
+      const gsi = window.google?.accounts?.id;
+      if (!gsi) {
+        setError("Não foi possível carregar o login do Google. Tente novamente.");
+        setLoading(false);
+        return;
+      }
+      gsi.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: (resp) => {
+          if (resp.credential) {
+            void handleGoogleCredential(resp.credential);
+          } else {
+            setLoading(false);
+          }
+        },
+        auto_select: false,
+      });
+      // Se o utilizador fechar o pedido sem escolher conta, repõe o botão.
+      gsi.prompt((notification) => {
+        if (notification.isNotDisplayed() || notification.isSkippedMoment()) setLoading(false);
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível entrar com o Google.");
+      setLoading(false);
+    }
+  };
 
   /** Login com Facebook: SDK → permissão email → access token → backend. */
   const handleFacebookLogin = async () => {
@@ -251,7 +301,8 @@ export function LoginModal() {
           : await login(email, password, rememberMe);
       if (mode === "register") {
         // Confirmação visível de que a conta foi criada antes de entrar.
-        notify("Conta criada com sucesso! Verifique o seu email.");
+        notify("Conta criada com sucesso! Confirme o email com o link ou o código.");
+        setCodeConfirmed(false);
         setRegistered({ name: authUser.fullName || name, email });
       } else {
         closeLogin();
@@ -259,20 +310,14 @@ export function LoginModal() {
       }
     } catch (err) {
       if (err instanceof ApiError) {
-        // Erro de validação/credenciais do backend — mostra a mensagem real.
+        // Erro do backend ou falha de ligação (api.ts converte rede/timeout num
+        // ApiError 503 com a causa real) — mostra a mensagem verdadeira.
         setError(err.message);
       } else {
-        // Rede/backend em baixo → login local de demonstração (como o checkout offline),
-        // para a loja nunca bloquear.
-        setUser({ email, name });
-        setProfile((prev) => ({
-          fullName: name,
-          email,
-          phone: prev?.phone ?? "",
-          avatar: prev?.avatar,
-        }));
-        closeLogin();
-        goHome(router);
+        // Falha inesperada no próprio cliente. NÃO simular sessão: sem JWT do
+        // backend a conta não fica autenticada (o AuthContext continuaria com
+        // user=null e o header não mudava). Mostra o erro e deixa tentar de novo.
+        setError("Não foi possível concluir o login. Tente novamente.");
       }
     } finally {
       setLoading(false);
@@ -297,10 +342,10 @@ export function LoginModal() {
           />
 
           {/* Painel — centrado em todas as dimensões */}
-          <div className="animate-fade-up relative w-full max-w-4xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+          <div className="animate-fade-up relative w-full max-w-4xl overflow-hidden rounded-2xl bg-surface shadow-2xl">
             <div className="grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
               {/* ── Painel de marca (desktop) ─────────────────────────── */}
-              <aside className="relative hidden overflow-hidden bg-gradient-to-br from-navy-950 via-navy-900 to-primary-800 p-10 text-white sm:flex sm:flex-col">
+              <aside className="theme-inverse relative hidden overflow-hidden bg-gradient-to-br from-navy-950 via-navy-900 to-primary-800 p-10 text-white sm:flex sm:flex-col">
                 <div
                   aria-hidden
                   className="pointer-events-none absolute -right-20 -top-24 size-72 rounded-full bg-sky-400/20 blur-3xl"
@@ -317,8 +362,8 @@ export function LoginModal() {
                 <BrandMark />
 
                 <div className="relative mt-14">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-sky-300">
-                    Bem-vindo à NorteShop
+                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-sky-300">
+                    Bem-vindo à NorteShopMoz
                   </p>
                   <h2 className="mt-3 font-display text-3xl font-extrabold leading-tight text-white">
                     A sua loja,
@@ -377,7 +422,7 @@ export function LoginModal() {
                     <span
                       aria-hidden
                       className={cn(
-                        "absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-lg bg-white shadow-sm transition-transform duration-300 ease-out",
+                        "absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-lg bg-surface shadow-sm transition-transform duration-300 ease-out",
                         mode === "register" && "translate-x-full",
                       )}
                     />
@@ -507,21 +552,9 @@ export function LoginModal() {
                       {GOOGLE_CLIENT_ID && (
                         <button
                           type="button"
-                          onClick={() => {
-                            const gsi = window.google?.accounts?.id;
-                            if (gsi) {
-                              gsi.initialize({
-                                client_id: GOOGLE_CLIENT_ID,
-                                callback: (resp) => {
-                                  if (resp.credential) void handleGoogleCredential(resp.credential);
-                                },
-                                auto_select: false,
-                              });
-                              gsi.prompt();
-                            }
-                          }}
+                          onClick={() => void handleGoogleLogin()}
                           disabled={loading}
-                          className="flex items-center justify-center size-12 rounded-xl border border-slate-300 bg-white transition hover:bg-slate-50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                          className="flex items-center justify-center size-12 rounded-xl border border-slate-300 bg-surface transition hover:bg-slate-50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
                           aria-label="Continuar com o Google"
                         >
                           <GoogleIcon className="size-6" />
@@ -532,7 +565,7 @@ export function LoginModal() {
                           type="button"
                           onClick={() => void handleFacebookLogin()}
                           disabled={loading}
-                          className="flex items-center justify-center size-12 rounded-xl border border-slate-300 bg-white transition hover:bg-slate-50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                          className="flex items-center cursor-pointer justify-center size-12 rounded-xl border border-slate-300 bg-surface transition hover:bg-slate-50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                           aria-label="Continuar com o Facebook"
                         >
                           <FacebookIcon className="size-6 text-[#1877F2]" />
@@ -593,40 +626,56 @@ export function LoginModal() {
       >
         <div className="flex flex-col items-center pb-2 pt-2 text-center">
           <span className="flex size-16 items-center justify-center rounded-full bg-emerald-100">
-            <CheckCircle2 className="size-9 text-emerald-600" aria-hidden />
+            <CheckCircle2 className="size-9 text-emerald-700" aria-hidden />
           </span>
           <h3 className="mt-4 font-display text-xl font-extrabold text-slate-900">
             Conta criada com sucesso!
           </h3>
           <p className="mt-1.5 max-w-xs text-sm leading-relaxed text-slate-500">
-            Bem-vindo(a), <span className="font-semibold text-slate-700">{registered?.name}</span>!
-            Enviámos um email de boas-vindas com o link de confirmação para{" "}
-            <span className="font-semibold text-slate-700">{registered?.email}</span> — confirme para
-            ficar tudo pronto. Pode começar a comprar desde já.
+            Enviámos um código de 6 dígitos para{" "}
+            <span className="font-semibold text-slate-700">{registered?.email}</span>. Insira-o em
+            baixo para confirmar a sua conta — também pode confirmar pelo link do email.
           </p>
-          <div className="mt-4 p-4 rounded-xl bg-amber-50 border border-amber-200">
-            <p className="flex items-center justify-center gap-1.5 text-xs text-amber-700 mb-3">
-              <Mail className="size-3.5" />
-              Não recebeu o email? Verifique a caixa de spam ou peça um novo link.
+
+          {codeConfirmed ? (
+            <p className="mt-5 flex w-full items-start gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-left text-xs font-medium leading-relaxed text-emerald-700">
+              <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden />
+              Email confirmado! A sua conta está verificada — pode comprar, guardar favoritos e
+              acompanhar pedidos.
             </p>
-            <Button
-              onClick={async () => {
-                if (!registered) return;
-                try {
-                  await apiPost("/api/auth/resend-verification", {});
-                  notify("Novo link de verificação enviado! Verifique o seu email.");
-                } catch {
-                  notify("Não foi possível reenviar. Tente novamente.", "error");
-                }
-              }}
-              variant="secondary"
-              fullWidth
-              className="gap-2"
+          ) : (
+            <form
+              onSubmit={handleCodeSubmit}
+              className="mt-5 w-full rounded-xl border border-slate-200 bg-slate-50 p-4 text-left"
             >
-              <RotateCcw className="size-3.5" />
-              Reenviar email de verificação
-            </Button>
-          </div>
+              <OtpInput
+                label="Código de verificação"
+                value={code}
+                onChange={setCode}
+                onComplete={() => void confirmWithCode()}
+                disabled={verifying}
+                required
+                error={codeError ?? undefined}
+                hint={codeError ? undefined : "Válido por 24 horas · verifique também o spam."}
+              />
+              <Button
+                type="submit"
+                fullWidth
+                loading={verifying}
+                disabled={code.length !== 6}
+                className="mt-3"
+              >
+                Confirmar email
+              </Button>
+              <button
+                type="button"
+                onClick={() => void resendCode()}
+                className="mx-auto mt-3 block text-xs font-semibold text-primary-700 transition hover:text-primary-800 hover:underline"
+              >
+                Não recebeu? Enviar novo email (link e código)
+              </button>
+            </form>
+          )}
           <Button
             className="mt-6 w-full"
             onClick={() => {

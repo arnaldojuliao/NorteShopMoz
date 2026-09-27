@@ -13,7 +13,7 @@ import {
 import { useRouter } from "next/navigation";
 import { apiGet, apiPost, apiPut } from "@/lib/api";
 import { useLocalStorageState } from "@/lib/hooks";
-import { setStoredUser, clearUserOrders } from "@/lib/orders";
+import { hasStoredUser, setStoredUser, clearUserOrders } from "@/lib/orders";
 import type { UserProfile } from "@/lib/types";
 
 export interface NotificationPrefs {
@@ -35,10 +35,15 @@ export interface AuthUser {
   notificationPrefs?: NotificationPrefs;
 }
 
+/**
+ * Resposta de autenticação do backend. NÃO contém os tokens JWT: o access e o
+ * refresh token vivem em cookies HttpOnly (invisíveis ao JavaScript). O backend
+ * devolve apenas a validade do access token, para agendar a renovação.
+ */
 interface AuthResponse {
-  token: string;
-  refreshToken: string;
   user: AuthUser;
+  csrfToken?: string;
+  expiresInSeconds?: number;
 }
 
 interface AuthContextValue {
@@ -61,6 +66,8 @@ const AuthContext = createContext<AuthContextValue | null>(null);
  * Configurável via NEXT_PUBLIC_SESSION_TIMEOUT_MINUTES (padrão: 30 minutos).
  */
 const DEFAULT_SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 min
+/** Validade padrão do access token (1 hora) — usada quando o backend não a indica. */
+const DEFAULT_ACCESS_TOKEN_SECONDS = 60 * 60;
 const LAST_ACTIVE_KEY = "nsm:last-active";
 
 function readLastActive(): number {
@@ -81,18 +88,61 @@ function writeLastActive() {
   }
 }
 
+/**
+ * Existia sessão neste navegador? Um visitante anónimo também termina o arranque
+ * com 401 (`/me` e `/refresh`), e tratá-lo como "sessão expirada" expulsava-o da
+ * página onde estava (o efeito de `sessionExpired` faz `router.replace("/")`) a
+ * poucos segundos de a abrir, além de apagar o perfil local que preenche o
+ * checkout de convidado.
+ *
+ * Sinais de sessão: a marca `nsm:user` (escrita no login/refresh, removida no
+ * logout) ou o cookie `nsm_csrf` (não-HttpOnly de propósito, para o double
+ * submit).
+ */
+function hadSession(): boolean {
+  if (typeof window === "undefined") return false;
+  if (hasStoredUser()) return true;
+  return /(?:^|;\s*)nsm_csrf=/.test(document.cookie);
+}
+
 function getSessionTimeout(): number {
-  try {
-    const minutes = Number(process.env.NEXT_PUBLIC_SESSION_TIMEOUT_MINUTES ?? "30");
-    return minutes * 60 * 1000;
-  } catch {
-    return DEFAULT_SESSION_TIMEOUT_MS;
-  }
+  // A variável pode chegar vazia (build arg/env não definidos): `Number("")` é 0,
+  // o que expiraria a sessão de imediato; um valor não numérico dá NaN e a sessão
+  // nunca expirava. Em qualquer dos casos usa-se o default (30 min).
+  const minutes = Number(process.env.NEXT_PUBLIC_SESSION_TIMEOUT_MINUTES);
+  return Number.isFinite(minutes) && minutes > 0
+    ? minutes * 60 * 1000
+    : DEFAULT_SESSION_TIMEOUT_MS;
+}
+
+/**
+ * Perfil local correspondente a um utilizador autenticado.
+ *
+ * Os campos que não vêm do servidor (telefone, usado para pré-preencher o
+ * checkout) só são herdados quando o perfil guardado é do MESMO email. Antes
+ * eram herdados sempre, pelo que entrar noutra conta mostrava o telefone e a
+ * foto de perfil da conta anterior — cada conta passa a ter apenas os seus
+ * dados. A foto vem do servidor (`user.avatar`), que é a única fonte por conta.
+ */
+function profileForUser(prev: UserProfile | null, user: AuthUser): UserProfile {
+  const sameAccount = Boolean(prev?.email) && prev!.email.toLowerCase() === user.email.toLowerCase();
+  return {
+    fullName: user.fullName,
+    email: user.email,
+    phone: sameAccount ? prev!.phone ?? "" : "",
+    avatar: user.avatar ?? undefined,
+  };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
+  // Estado atual do user acessível fora do render (efeitos em voo — o boot pode
+  // terminar depois de um login ter já estabelecido a sessão).
+  const userRef = useRef<AuthUser | null>(null);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
   const [initializing, setInitializing] = useState(true);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [, setProfile] = useLocalStorageState<UserProfile | null>("nsm:profile", null);
@@ -108,23 +158,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const expireSession = useCallback(() => {
     clearRefreshTimer();
     setUser(null);
-    setStoredUser({ email: "", name: "" });
+    setStoredUser(null); // Remove a chave nsm:user (não gravar um utilizador vazio)
     setProfile(null); // Limpa avatar e dados do perfil do localStorage
     setSessionExpired(true);
   }, [clearRefreshTimer, setProfile]);
 
   const refreshTokensRef = useRef<() => Promise<void>>(async () => {});
 
-  const scheduleTokenRefresh = useCallback((token: string) => {
+  /**
+   * Agenda a renovação do access token. Recebe a validade em segundos que o
+   * backend devolve no login/refresh; sem valor (arranque a partir de /me, onde
+   * os cookies são HttpOnly e o frontend não vê o token) usa o padrão.
+   */
+  const scheduleTokenRefresh = useCallback((expiresInSeconds?: number) => {
     clearRefreshTimer();
-    const expiry = getTokenExpiry(token);
-    if (!expiry) return;
-    const now = Date.now();
-    const delay = expiry - now - 5 * 60 * 1000; // 5 min buffer
-    if (delay <= 0) {
-      void refreshTokensRef.current();
-      return;
-    }
+    const seconds = expiresInSeconds && expiresInSeconds > 0
+      ? expiresInSeconds
+      : DEFAULT_ACCESS_TOKEN_SECONDS;
+    // Renova 5 minutos antes de expirar, com um mínimo de 30s (evita um ciclo
+    // apertado se a validade configurada for muito curta).
+    const delay = Math.max(30_000, seconds * 1000 - 5 * 60 * 1000);
     refreshTimerRef.current = setTimeout(() => {
       void refreshTokensRef.current();
     }, delay);
@@ -135,13 +188,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data } = await apiPost<{ data: AuthResponse }>("/api/auth/refresh", {});
       setUser(data.user);
       setStoredUser({ email: data.user.email, name: data.user.fullName });
-      setProfile((prev: UserProfile | null) => ({
-        fullName: data.user.fullName,
-        email: data.user.email,
-        phone: prev?.phone ?? "",
-        avatar: data.user.avatar ?? prev?.avatar,
-      }));
-      scheduleTokenRefresh(data.token);
+      setProfile((prev: UserProfile | null) => profileForUser(prev, data.user));
+      scheduleTokenRefresh(data.expiresInSeconds);
     } catch {
       expireSession();
     }
@@ -156,13 +204,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (auth: AuthResponse) => {
       setUser(auth.user);
       setStoredUser({ email: auth.user.email, name: auth.user.fullName });
-      setProfile((prev: UserProfile | null) => ({
-        fullName: auth.user.fullName,
-        email: auth.user.email,
-        phone: prev?.phone ?? "",
-        avatar: auth.user.avatar ?? prev?.avatar,
-      }));
-      scheduleTokenRefresh(auth.token);
+      setProfile((prev: UserProfile | null) => profileForUser(prev, auth.user));
+      scheduleTokenRefresh(auth.expiresInSeconds);
     },
     [setProfile, scheduleTokenRefresh],
   );
@@ -187,8 +230,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const touch = () => writeLastActive();
     const onReturn = () => {
       if (document.visibilityState !== "visible") return;
-      // Verifica expiração por inatividade (apenas se houver sessão ativa via cookie)
-      if (Date.now() - readLastActive() > getSessionTimeout()) {
+      // Verifica expiração por inatividade — só com sessão para expirar
+      // (visitante anónimo não é expulso da página ao voltar ao separador).
+      if (Date.now() - readLastActive() > getSessionTimeout() && hadSession()) {
         expireSession();
       } else {
         writeLastActive();
@@ -212,40 +256,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let alive = true;
     const boot = async () => {
       if (Date.now() - readLastActive() > getSessionTimeout()) {
-        expireSession();
+        if (hadSession()) expireSession();
         queueMicrotask(() => {
           if (alive) setInitializing(false);
         });
         return;
       }
       writeLastActive();
+      // Sem qualquer sinal de sessão (marca `nsm:user` ou cookie `nsm_csrf`) não
+      // há nada para validar: sem isto, cada visitante anónimo fazia dois pedidos
+      // (me + refresh) que acabavam em 401 em todas as páginas.
+      if (!hadSession()) {
+        queueMicrotask(() => {
+          if (alive) setInitializing(false);
+        });
+        return;
+      }
       try {
-        // /api/auth/me lê o access token do cookie HttpOnly automaticamente
-        const { data } = await apiGet<{ data: AuthUser }>("/api/auth/me");
+        // /api/auth/me lê o access token do cookie HttpOnly automaticamente.
+        // Sem cache (ttl 0 + bypass): o perfil é sensível ao utilizador e um
+        // cache de 60 s podia devolver o perfil de quem estava ligado antes
+        // (ex.: após troca rápida de conta no mesmo browser).
+        const { data } = await apiGet<{ data: AuthUser }>("/api/auth/me", 0, true);
         if (!alive) return;
         setUser(data);
         setStoredUser({ email: data.email, name: data.fullName });
-        setProfile((prev) => {
-          const base = prev ?? { fullName: data.fullName, email: data.email, phone: "" };
-          return { ...base, avatar: data.avatar ?? base.avatar };
-        });
-        scheduleTokenRefresh(""); // Access token não disponível no frontend (HttpOnly)
-        // Agendamento baseado no tempo de vida conhecido (7 dias)
-        setTimeout(() => void refreshTokens(), 6 * 24 * 60 * 60 * 1000); // 6 dias
+        setProfile((prev) => profileForUser(prev, data));
+        // Tokens em cookies HttpOnly — não há token para inspecionar. Usa a
+        // validade padrão do access token para agendar a renovação.
+        scheduleTokenRefresh();
       } catch {
         if (!alive) return;
+        // Uma sessão pode ter sido estabelecida enquanto este boot estava em
+        // voo (ex.: login submetido no arranque) — não a destruir.
+        if (userRef.current) {
+          setInitializing(false);
+          return;
+        }
         // Token inválido/expirado → tenta refresh automático via cookie
         try {
           const { data } = await apiPost<{ data: AuthResponse }>("/api/auth/refresh", {});
+          if (!alive) return;
+          if (userRef.current) {
+            // Sessão entretanto estabelecida — não sobrescrever com tokens velhos.
+            setInitializing(false);
+            return;
+          }
           setUser(data.user);
           setStoredUser({ email: data.user.email, name: data.user.fullName });
-          setProfile((prev) => {
-            const base = prev ?? { fullName: data.user.fullName, email: data.user.email, phone: "" };
-            return { ...base, avatar: data.user.avatar ?? base.avatar };
-          });
-          scheduleTokenRefresh(data.token);
+          setProfile((prev) => profileForUser(prev, data.user));
+          scheduleTokenRefresh(data.expiresInSeconds);
         } catch {
-          expireSession();
+          if (!alive) return;
+          // Só expulsa a sessão se nenhuma foi estabelecida entretanto — e só
+          // se havia sessão para expirar (ver `hadSession`).
+          if (!userRef.current && hadSession()) expireSession();
         }
       } finally {
         if (alive) setInitializing(false);
@@ -256,7 +321,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       alive = false;
       clearRefreshTimer();
     };
-  }, [expireSession, setProfile, scheduleTokenRefresh, clearRefreshTimer, refreshTokens]);
+  }, [expireSession, setProfile, scheduleTokenRefresh, clearRefreshTimer]);
 
   const login = useCallback(
     async (email: string, password: string, rememberMe = false) => {
@@ -287,13 +352,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const { data } = await apiGet<{ data: AuthUser }>("/api/auth/me");
+      // `bypassCache`: o perfil tem de vir sempre fresco. Com a cache em memória
+      // (60s), um refresh logo após uma alteração (ex.: confirmar o email por
+      // código) devolvia o objeto antigo e a UI não atualizava.
+      const { data } = await apiGet<{ data: AuthUser }>("/api/auth/me", 0, true);
       setUser(data);
       setStoredUser({ email: data.email, name: data.fullName });
-      setProfile((prev) => {
-        const base = prev ?? { fullName: data.fullName, email: data.email, phone: "" };
-        return { ...base, avatar: data.avatar ?? base.avatar };
-      });
+      setProfile((prev) => profileForUser(prev, data));
     } catch {
       // Perfil inacessível — mantém o estado atual.
     }
@@ -306,10 +371,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         { avatar: avatar ?? "" },
       );
       setUser(data);
-      setProfile((prev) => {
-        const base = prev ?? { fullName: data.fullName, email: data.email, phone: "" };
-        return { ...base, avatar: data.avatar ?? undefined };
-      });
+      setProfile((prev) => profileForUser(prev, data));
       return data;
     },
     [setProfile],
@@ -349,12 +411,17 @@ export function useAuth() {
   return ctx;
 }
 
-function getTokenExpiry(token: string): number | null {
-  try {
-    const payload = token.split(".")[1];
-    const decoded = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
-    return decoded.exp * 1000;
-  } catch {
-    return null;
-  }
+/**
+ * Foto de perfil a apresentar.
+ *
+ * Com sessão iniciada vem sempre do servidor (`user.avatar`) — é o que garante
+ * que cada conta mostra apenas a sua foto, mesmo depois de outra conta ter
+ * usado o mesmo navegador. A cópia local (`nsm:profile`) só serve de apoio a
+ * quem não tem sessão (o upload otimista antes de o PUT responder).
+ */
+export function useAvatarSrc(): string | null | undefined {
+  const { user } = useAuth();
+  const [profile] = useLocalStorageState<UserProfile | null>("nsm:profile", null);
+  return user ? user.avatar : profile?.avatar;
 }
+

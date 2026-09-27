@@ -31,14 +31,14 @@ export function ProductGallery({ product }: { product: Product }) {
           <>
             <button
               onClick={() => setActive((i) => (i - 1 + images.length) % images.length)}
-              className="absolute left-3 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-slate-700 shadow-card transition hover:text-primary-700 active:scale-95"
+              className="absolute left-3 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-surface/90 text-slate-700 shadow-card transition hover:text-primary-700 active:scale-95"
               aria-label="Imagem anterior"
             >
               <ChevronLeft className="size-5" />
             </button>
             <button
               onClick={() => setActive((i) => (i + 1) % images.length)}
-              className="absolute right-3 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-slate-700 shadow-card transition hover:text-primary-700 active:scale-95"
+              className="absolute right-3 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-surface/90 text-slate-700 shadow-card transition hover:text-primary-700 active:scale-95"
               aria-label="Próxima imagem"
             >
               <ChevronRight className="size-5" />

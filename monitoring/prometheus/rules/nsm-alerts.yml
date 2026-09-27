@@ -1,0 +1,207 @@
+# NorteShopMoz — regras de alerta
+#
+# Porquê: toda a aplicação foi desenhada para DEGRADAR em vez de morrer (o rate
+# limit, a idempotência, o idle de sessão e a cache do catálogo falham abertos; a
+# liveness não vê o Redis; o frontend cai para os dados locais). Isso é a decisão
+# certa para uma loja, mas significa que uma avaria PARCIAL é invisível: sem
+# alertas, um Redis em baixo, um catálogo a servir o seed ou o pool de base de
+# dados saturado ficam só à espera de que alguém olhe para um dashboard.
+#
+# Estes alertas cobrem exactamente os estados em que a loja "parece viva mas não
+# vende". O `severity` e o `team` são usados no encaminhamento do Alertmanager.
+#
+# Carregadas por /etc/prometheus/prometheus.yml (rule_files) — ver o serviço
+# alertmanager em docker-compose.monitoring.yml para o destino das notificações.
+
+groups:
+  # ── A API não responde ──────────────────────────────────────────────────────
+  - name: nsm-disponibilidade
+    rules:
+      - alert: NsmApiDown
+        expr: up{job="norteshopmoz-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: nsm
+        annotations:
+          summary: "A API da NorteShopMoz não responde ao Prometheus"
+          description: >
+            Nenhuma métrica é recolhida há 2 minutos. A loja não consegue servir
+            catálogo nem checkout. Verifique o contentor (`docker compose -f
+            docker-compose.prod.yml ps` e `logs api`) e, se o contentor estiver
+            "Up", o estado da rede (`./scripts/docker-net-check.sh`).
+
+      # O estado que mais custou a descobrir: a API está de pé, o contentor diz
+      # "healthy" (a liveness não vê dependências) e o rate limit, o bloqueio de
+      # brute-force, o idle e a revogação de sessões estão DESLIGADOS porque a
+      # API não alcança o Redis/BD (fail-open). A loja vende, mas sem as
+      # proteções — e é exactamente o sintoma de um contentor sem endpoint de
+      # rede ("healthy mas fora da rede").
+      - alert: NsmApiDegradada
+        expr: probe_success{job="nsm-readiness"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: nsm
+        annotations:
+          summary: "A API está de pé mas não alcança o Redis ou a base de dados"
+          description: >
+            /actuator/health/readiness está DOWN há 2 minutos. Provável contentor
+            a correr SEM endpoint de rede (o Docker reverteu-o por causa de uma
+            porta já ocupada — ver README). A loja serve, mas rate limit,
+            bloqueio de brute-force e revogação de sessões estão desligados.
+            Diagnóstico e correção: ./scripts/docker-net-check.sh --fix
+
+  # ── Erros e latência ────────────────────────────────────────────────────────
+  - name: nsm-erros
+    rules:
+      - alert: NsmTaxaDeErros5xx
+        expr: >
+          sum(rate(http_server_requests_seconds_count{job="norteshopmoz-api",status=~"5.."}[5m]))
+          /
+          clamp_min(sum(rate(http_server_requests_seconds_count{job="norteshopmoz-api"}[5m])), 0.001)
+          > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          team: nsm
+        annotations:
+          summary: "Mais de 5% dos pedidos devolvem 5xx há 5 minutos"
+          description: >
+            Verifique os logs da API. Se coincidir com NsmDbPoolSaturated, a
+            causa é o esgotamento do pool JDBC (uma consulta lenta deixa as
+            restantes threads à espera).
+
+      - alert: NsmLatenciaAlta
+        expr: >
+          histogram_quantile(0.95,
+            sum(rate(http_server_requests_seconds_bucket{job="norteshopmoz-api"}[5m])) by (le)
+          ) > 2
+        for: 10m
+        labels:
+          severity: warning
+          team: nsm
+        annotations:
+          summary: "95% dos pedidos acima de 2 s há 10 minutos"
+          description: >
+            A loja está lenta de forma sustentada. Causas típicas: Redis
+            "pendurado" (cada chamada custa o timeout antes de o circuit breaker
+            abrir) ou base de dados sem folga.
+
+  # ── Base de dados ───────────────────────────────────────────────────────────
+  - name: nsm-base-de-dados
+    rules:
+      # Sintoma directo do risco de esgotamento do pool: há threads à espera de
+      # uma ligação. Poucas dezenas de segundos disto chegam para encher as 200
+      # threads do Tomcat e a API deixar de responder.
+      - alert: NsmPoolJdbcSaturado
+        expr: hikaricp_connections_pending{job="norteshopmoz-api"} > 5
+        for: 5m
+        labels:
+          severity: critical
+          team: nsm
+        annotations:
+          summary: "Pedidos à espera de uma ligação à base de dados"
+          description: >
+            Existem {{ $value }} threads à espera no pool JDBC. Verifique
+            consultas lentas/locks e considere aumentar DB_POOL_SIZE (e o
+            max_connections do PostgreSQL) — ou reduzir o trabalho por pedido.
+
+      - alert: NsmPoolJdbcTimeouts
+        expr: increase(hikaricp_connections_timeout_total{job="norteshopmoz-api"}[10m]) > 0
+        labels:
+          severity: critical
+          team: nsm
+        annotations:
+          summary: "Pedidos que desistiram por não obter ligação à base de dados"
+          description: >
+            O pool não entregou ligação dentro de DB_POOL_CONNECTION_TIMEOUT_MS:
+            esses pedidos falharam com 5xx.
+
+      - alert: NsmBaseDeDadosIndisponivel
+        expr: pg_up{job="postgres-exporter"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: nsm
+        annotations:
+          summary: "O PostgreSQL não responde"
+          description: "A loja não consegue ler nem gravar. Verifique o contentor db."
+
+  # ── Redis ───────────────────────────────────────────────────────────────────
+  - name: nsm-redis
+    rules:
+      - alert: NsmRedisIndisponivel
+        expr: redis_up{job="redis-exporter"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: nsm
+        annotations:
+          summary: "O Redis não responde"
+          description: >
+            A aplicação degrada em vez de cair (rate limit, idempotência e idle
+            de sessão passam a falhar abertos) — ou seja, a loja continua a
+            vender SEM as proteções. Restaure o Redis; se o contentor estiver
+            "healthy", verifique o endpoint de rede
+            (./scripts/docker-net-check.sh).
+
+      - alert: NsmRedisSemMemoria
+        expr: redis_memory_used_bytes{job="redis-exporter"} / clamp_min(redis_config_maxmemory{job="redis-exporter"}, 1) > 0.9
+        for: 10m
+        labels:
+          severity: warning
+          team: nsm
+        annotations:
+          summary: "O Redis de estado acima de 90% da memória (noeviction)"
+          description: >
+            Com noeviction, ao esgotar a memória TODAS as escritas falham (OOM
+            command not allowed) e as proteções desligam-se em silêncio. As
+            chaves têm TTL, mas verifique se algo está a crescer sem limite.
+
+  # ── JVM e servidor ──────────────────────────────────────────────────────────
+  - name: nsm-recursos
+    rules:
+      - alert: NsmHeapJvmAlto
+        expr: >
+          sum(jvm_memory_used_bytes{job="norteshopmoz-api",area="heap"})
+          /
+          clamp_min(sum(jvm_memory_max_bytes{job="norteshopmoz-api",area="heap"}), 1) > 0.9
+        for: 10m
+        labels:
+          severity: warning
+          team: nsm
+        annotations:
+          summary: "Heap da JVM acima de 90%"
+          description: >
+            Perto do OutOfMemoryError (que derruba a API). Verifique o limite de
+            memória do contentor e o -XX:MaxRAMPercentage.
+
+      - alert: NsmDiscoACurtas
+        expr: >
+          (node_filesystem_avail_bytes{job="node-exporter",mountpoint="/"} /
+           clamp_min(node_filesystem_size_bytes{job="node-exporter",mountpoint="/"}, 1)) < 0.15
+        for: 15m
+        labels:
+          severity: warning
+          team: nsm
+        annotations:
+          summary: "Menos de 15% de espaço livre no disco do servidor"
+          description: >
+            Sem espaço, a base de dados deixa de escrever (a loja perde pedidos)
+            e os contentores param. Verifique backups e logs antigos.
+
+      # `changes()` e não `increase()`: `container_start_time_seconds` é um gauge
+      # (o carimbo do arranque), não um contador — `increase()` sobre um gauge
+      # devolve lixo.
+      - alert: NsmContentorReinicia
+        expr: changes(container_start_time_seconds{job="cadvisor"}[1h]) > 3
+        for: 5m
+        labels:
+          severity: warning
+          team: nsm
+        annotations:
+          summary: "Contentor a reiniciar repetidamente"
+          description: >
+            Um contentor que reinicia em ciclo (OOM do kernel, healthcheck a
+            falhar, erro no arranque) degrada a loja de forma intermitente.

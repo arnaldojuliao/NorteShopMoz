@@ -5,7 +5,7 @@ import { ArrowRight, Headphones } from "lucide-react";
 export function PromoBanner() {
   return (
     <section aria-label="Promoção de áudio" className="container-nsm">
-      <div className="group relative overflow-hidden rounded-3xl bg-navy-900">
+      <div className="theme-inverse group relative overflow-hidden rounded-2xl bg-navy-900">
         <div className="absolute inset-0 opacity-40">
           <Image
             src="https://images.unsplash.com/photo-1546435770-a3e426bf472b?auto=format&fit=crop&w=1400&q=70"
@@ -28,7 +28,7 @@ export function PromoBanner() {
             exclusivos só esta semana.
           </p>
           <Link
-            href="/procurar?q=áudio"
+            href="/explore?q=áudio"
             className="group/cta mt-1 inline-flex h-11 items-center gap-2 rounded-xl bg-white px-6 text-sm font-bold text-navy-900 shadow-lg transition hover:bg-primary-50 active:scale-[0.98]"
           >
             Descobrir ofertas

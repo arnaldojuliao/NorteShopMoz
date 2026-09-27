@@ -1,0 +1,26 @@
+# Dependências e artefactos (reinstalados/gerados no build)
+node_modules
+.next
+out
+build
+coverage
+*.tsbuildinfo
+
+# Testes e relatórios (não fazem parte da imagem de produção)
+tests
+playwright-report
+test-results
+
+# Configuração/segredos locais.
+# Os NEXT_PUBLIC_* entram como build args (ver Dockerfile e
+# docker-compose.prod.yml); sem esta exclusão o frontend/.env.local de
+# desenvolvimento era copiado e inlined no bundle de produção.
+.env
+.env.*
+!.env.example
+
+# Git e editor
+.git
+.gitignore
+.vscode
+README.md

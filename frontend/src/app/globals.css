@@ -3,6 +3,10 @@
 /* Ativa a variante `dark:` (aplicada quando <html> tem a classe .dark). */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Dispositivos sem hover (tablets, telemóveis): usada para mostrar de forma
+   permanente os controlos que o desktop revela só com `group-hover`. */
+@custom-variant no-hover (@media (hover: none));
+
 @theme {
   /* ── Typography ─────────────────────────────────────────────── */
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -26,6 +30,48 @@
   --color-navy-800: #141f42;
   --color-navy-900: #0e1730;
   --color-navy-950: #090f21;
+
+  /* ── Superfícies ─────────────────────────────────────────────
+     Superfície neutra dos cartões, painéis, modais e inputs. É o token que
+     substitui `bg-white` onde o branco significava "superfície": o
+     `--color-white` do tema não pode ser remapeado por variável, porque o
+     mesmo valor serve `text-white`/`ring-white`/`bg-white/10` sobre fundos
+     escuros, que têm de continuar brancos. */
+  --color-surface: #ffffff;
+
+  /* Azul da marca como *superfície* (botões primários, badges, chips): mantém
+     o tom da marca nos dois temas — o texto branco por cima continua legível.
+     O azul como *texto* usa os shades `primary-*`, que clareiam no tema escuro. */
+  --color-brand: #1f46e6;
+  --color-brand-strong: #1b36c8;
+  --color-brand-deep: #1c30a1;
+
+  /* Texto de estado como *superfície* (badges "NOVO", toast de erro): o mesmo
+     shade em modo texto tem de clarear no escuro, daí o token separado.
+     O verde é o `emerald-700`: sobre ele o texto branco fica em 5,5:1 (o
+     `emerald-600` dava 3,8:1, abaixo de AA para o texto pequeno dos badges). */
+  --color-success: #047857;
+  --color-danger: #dc2626;
+  --color-danger-strong: #b91c1c;
+
+  /* Neutros de texto. O `slate-400` do Tailwind (#94a3b8) só dá 2,6:1 sobre
+     branco — e é usado em texto secundário (marca do produto, preço antigo,
+     breadcrumbs, rodapé dos cartões). Este tom escurecido dá 4,6:1 (AA) e
+     mantém-se visivelmente mais claro que o `slate-500`. */
+  --color-slate-400: #66768c;
+
+  /* ── Escala de forma e ritmo ─────────────────────────────────
+     Raios (usar só estes; `rounded-3xl` foi retirado para não competir com o
+     `2xl` de cartões e painéis):
+       rounded-full  pills — badges de estado, contadores, avatares, chips;
+       rounded-2xl   cartões, modais, painéis e blocos destacados;
+       rounded-xl    botões, inputs e chips grandes;
+       rounded-lg    botões/ícones pequenos dentro de cartões;
+       rounded-md    micro-badges (componente Badge).
+     Espaçamento vertical:
+       py-6 sm:py-8  conteúdo de página (container-nsm);
+       py-16          ecrãs de estado centrados (sucesso, vazio, 404);
+       space-y-12     separação entre secções dentro da mesma página. */
 
   /* ── Motion (light & performant) ────────────────────────────── */
   --animate-fade-up: fade-up 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -124,7 +170,7 @@
   }
 
   body {
-    @apply bg-white text-slate-800 antialiased;
+    @apply bg-surface text-slate-800 antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
@@ -135,13 +181,62 @@
     @apply font-display text-slate-900;
   }
 
+  /* Tailwind v4 mudou o preflight: os botões passaram a `cursor: default` (na v3
+     era `pointer`), o que fazia tudo o que é clicável — botões, separadores,
+     interruptores, acordeões (`<summary>`) e checkboxes com `<label>` — parecer
+     não interativo. Reposto aqui, uma vez, em vez de o repetir componente a
+     componente. As utilities (`cursor-*`, `disabled:cursor-*`) continuam a
+     ganhar, porque são aplicadas depois da camada base. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="tab"]:not([aria-disabled="true"]),
+  [role="radio"]:not([aria-disabled="true"]),
+  a[href],
+  area[href],
+  summary,
+  label[for],
+  label:has(input:not(:disabled)),
+  select:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  input[type="file"]:not(:disabled),
+  input[type="range"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  /* Desativado = não dá para agir: o cursor diz isso antes do clique. */
+  :disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+
   ::selection {
-    @apply bg-primary-600 text-white;
+    /* `bg-brand` (constante nos dois temas): com `bg-primary-600` a seleção
+       ficaria azul-claro no tema escuro, com texto branco por cima. */
+    @apply bg-brand text-white;
   }
 
   :focus-visible {
     outline: 2px solid var(--color-primary-600);
     outline-offset: 2px;
+  }
+
+  /* O cabeçalho é sticky (160px no telemóvel, 112 a partir de 768, 157 em lg),
+     por isso um alvo de âncora — incluindo o `#conteudo` do link "Saltar para o
+     conteúdo" — ficaria por baixo dele. `:where()` mantém especificidade 0,
+     para qualquer `scroll-mt-*` de componente continuar a ganhar. */
+  :where([id]) {
+    scroll-margin-top: 10rem;
+  }
+  @media (min-width: 768px) {
+    :where([id]) {
+      scroll-margin-top: 7rem;
+    }
+  }
+  @media (min-width: 1024px) {
+    :where([id]) {
+      scroll-margin-top: 10rem;
+    }
   }
 
   /* Respect users who prefer reduced motion */
@@ -185,16 +280,163 @@
   .container-nsm {
     @apply mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8;
   }
+
+  /* Estado inicial do componente <Reveal>: escondido até entrar no viewport.
+     Sem JavaScript (`scripting: none`) nada volta a torná-lo visível, por isso
+     aí mostramos logo o conteúdo — caso contrário a secção ficava em branco. */
+  .reveal-wait {
+    opacity: 0;
+  }
+  @media (scripting: none) {
+    .reveal-wait {
+      opacity: 1;
+    }
+  }
 }
 
 /* ── Modo escuro ───────────────────────────────────────────────
-   A classe .dark é aplicada no <html> pelo ThemeContext (com script
-   inline no <head> para evitar flash). As regras abaixo remapeiam as
-   utilidades claras para uma paleta escura (azul-marinho profundo),
-   cobrindo a app inteira sem reescrever cada componente. */
+   A classe `.dark` é aplicada em <html> pelo ThemeContext (o script em
+   /public/theme-init.js evita o flash).
+
+   O tema redefine as **variáveis de cor do tema**, não nomes de classe (como
+   antes). Os utilitários do Tailwind v4 compilam para var(--color-*), ex.:
+       .hover\:bg-slate-100:hover { background-color: var(--color-slate-100) }
+   por isso redefinir a variável alcança automaticamente tudo o que o
+   remapeamento por classe deixava de fora:
+     • variantes — `hover:`, `focus:`, `active:`, `disabled:`, `group-hover:`,
+       `sm:`/`lg:`/`supports-[…]:`: o nome da classe inclui o prefixo, logo
+       `html.dark .bg-slate-100` nunca apanhava `hover:bg-slate-100` (ficava
+       cinza-claro no escuro, com o texto já remapeado para claro = ilegível);
+     • stops de gradiente — `from-*`, `via-*`, `to-*` (também são nomes
+       diferentes: `from-slate-50` ≠ `bg-slate-50`);
+     • opacidades — `bg-slate-50/60` resolve por color-mix sobre a variável.
+
+   Dois cuidados que a paleta obriga:
+   1. `--color-white` fica intocado: o mesmo valor serve `text-white`,
+      `ring-white` e `bg-white/10` sobre fundos escuros/coloridos. Onde o
+      branco significava "superfície", usa-se `--color-surface` (`bg-surface`).
+   2. O azul da marca tem dois papéis incompatíveis: `bg-primary-600`
+      (superfície com texto branco, igual nos dois temas) e `text-primary-*`
+      (primeiro plano, que tem de clarear). As superfícies passaram a
+      `bg-brand*` e os shades `primary-*` ficam livres para o texto.
+   Ver `.theme-inverse` para os painéis que já nascem escuros. */
 
 html.dark {
   color-scheme: dark;
+
+  /* Superfícies neutras (`bg-surface`, antes `bg-white`) */
+  --color-surface: #111a2e;
+
+  /* Neutros: os tons claros viram superfícies e os escuros, texto. O slate-300
+     fica como bordo/track — como texto nunca teria contraste suficiente. */
+  --color-slate-50: #16203a;
+  --color-slate-100: #1b2740;
+  --color-slate-200: #23304f;
+  /* #586b96 ≈ 3.3:1 sobre `--color-surface`: é o tom dos bordos de input e
+     de botões `outline` (WCAG 1.4.11 pede 3:1 para o contorno de um controlo). */
+  --color-slate-300: #586b96;
+  --color-slate-400: #7c8db0;
+  --color-slate-500: #8fa0bb;
+  --color-slate-600: #a8b6cf;
+  --color-slate-700: #cbd5e1;
+  --color-slate-800: #e2e8f0;
+  --color-slate-900: #f1f5f9;
+
+  /* Marca: 50–200 são superfícies suaves (chips, linhas de tabela) e
+     500–800 são primeiro plano (links, ícones, texto de destaque). */
+  --color-primary-50: #16224a;
+  --color-primary-100: #1c2b5c;
+  --color-primary-200: #1d2d5e;
+  --color-primary-300: #2e4694;
+  --color-primary-400: #3d5bc4;
+  --color-primary-500: #8fa6ff;
+  --color-primary-600: #7d9bff;
+  --color-primary-700: #9db4ff;
+  --color-primary-800: #c0d3ff;
+
+  /* Estados: 50/100/200 são fundos e bordos de aviso, 500–700 são texto */
+  --color-emerald-50: #0b2a21;
+  --color-emerald-100: #10382c;
+  --color-emerald-600: #34d399;
+  --color-emerald-700: #6ee7b7;
+
+  --color-amber-50: #2a2110;
+  --color-amber-100: #332814;
+  --color-amber-200: #4a3a17;
+  --color-amber-500: #fbbf24;
+  --color-amber-600: #fbbf24;
+  --color-amber-700: #fcd34d;
+
+  --color-red-50: #2a1419;
+  --color-red-100: #3a1a22;
+  --color-red-200: #4a2029;
+  --color-red-500: #f87171;
+  --color-red-600: #fca5a5;
+  --color-red-700: #fecaca;
+
+  --color-sky-50: #0c2230;
+  --color-sky-200: #1e4157;
+  --color-sky-600: #38bdf8;
+  --color-sky-700: #7dd3fc;
+
+  --color-indigo-50: #191c3d;
+  --color-indigo-700: #a5b4fc;
+  --color-violet-50: #231a3f;
+  --color-violet-700: #c4b5fd;
+  --color-blue-50: #0e2433;
+  --color-blue-700: #93c5fd;
+}
+
+/* ── Painéis "inversos" ────────────────────────────────────────
+   Blocos que já nascem escuros ou coloridos no tema claro (footer navy, hero
+   vermelho, painel da newsletter, lado de marca do login, cabeçalho de perfil,
+   overlay das categorias). O seu conteúdo está escrito para fundo escuro, por
+   isso repõe a paleta do tema claro.
+
+   Aplica-se nos **dois** temas (não só em `html.dark`): no tema claro os valores
+   são os mesmos, exceto o `slate-400` — que foi escurecido para 4,6:1 sobre
+   branco e, sem esta reposição, ficaria em 4,1:1 sobre o navy do footer. */
+.theme-inverse {
+  --color-surface: #ffffff;
+  --color-slate-50: #f8fafc;
+  --color-slate-100: #f1f5f9;
+  --color-slate-200: #e2e8f0;
+  --color-slate-300: #cbd5e1;
+  --color-slate-400: #94a3b8;
+  --color-slate-500: #64748b;
+  --color-slate-600: #475569;
+  --color-slate-700: #334155;
+  --color-slate-800: #1e293b;
+  --color-slate-900: #0f172a;
+  --color-primary-50: #eef4ff;
+  --color-primary-100: #dce7ff;
+  --color-primary-200: #c0d3ff;
+  --color-primary-300: #94b4ff;
+  --color-primary-400: #618bff;
+  --color-primary-500: #3b66f8;
+  --color-primary-600: #1f46e6;
+  --color-primary-700: #1b36c8;
+  --color-primary-800: #1c30a1;
+  --color-emerald-50: #ecfdf5;
+  --color-emerald-100: #d1fae5;
+  --color-emerald-600: #059669;
+  --color-emerald-700: #047857;
+  --color-amber-50: #fffbeb;
+  --color-amber-100: #fef3c7;
+  --color-amber-200: #fde68a;
+  --color-amber-500: #f59e0b;
+  --color-amber-600: #d97706;
+  --color-amber-700: #b45309;
+  --color-red-50: #fef2f2;
+  --color-red-100: #fee2e2;
+  --color-red-200: #fecaca;
+  --color-red-500: #ef4444;
+  --color-red-600: #dc2626;
+  --color-red-700: #b91c1c;
+  --color-sky-50: #f0f9ff;
+  --color-sky-200: #bae6fd;
+  --color-sky-600: #0284c7;
+  --color-sky-700: #0369a1;
 }
 
 /* Transição suave ao alternar o tema (removida automaticamente ~350ms) */
@@ -215,198 +457,6 @@ html.dark body {
   color: #cbd5e1;
 }
 
-html.dark h1,
-html.dark h2,
-html.dark h3,
-html.dark h4 {
-  color: #f1f5f9;
-}
-
-/* Superfícies */
-html.dark .bg-white {
-  background-color: #111a2e;
-}
-html.dark .bg-white\/95 {
-  background-color: rgb(13 20 38 / 0.95);
-}
-html.dark .bg-white\/90 {
-  background-color: rgb(13 20 38 / 0.9);
-}
-html.dark .bg-white\/85 {
-  background-color: rgb(13 20 38 / 0.85);
-}
-html.dark .bg-white\/80 {
-  background-color: rgb(13 20 38 / 0.8);
-}
-html.dark .bg-slate-50 {
-  background-color: #16203a;
-}
-html.dark .bg-slate-50\/60 {
-  background-color: rgb(22 32 58 / 0.6);
-}
-html.dark .bg-slate-50\/70 {
-  background-color: rgb(22 32 58 / 0.7);
-}
-html.dark .bg-slate-100 {
-  background-color: #1b2740;
-}
-html.dark .bg-slate-200 {
-  background-color: #23304f;
-}
-html.dark .bg-slate-200\/80 {
-  background-color: rgb(35 48 79 / 0.8);
-}
-html.dark .bg-slate-300 {
-  background-color: #2f4064;
-}
-
-/* Bordas e separadores */
-html.dark .border-slate-100 {
-  border-color: #1c2947;
-}
-html.dark .border-slate-200 {
-  border-color: #243352;
-}
-html.dark .border-slate-300 {
-  border-color: #2f4064;
-}
-html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
-  border-color: #1c2947;
-}
-
-/* Texto neutro */
-html.dark .text-slate-900 {
-  color: #f1f5f9;
-}
-html.dark .text-slate-800 {
-  color: #e2e8f0;
-}
-html.dark .text-slate-700 {
-  color: #cbd5e1;
-}
-html.dark .text-slate-600 {
-  color: #a8b6cf;
-}
-html.dark .text-slate-500 {
-  color: #8fa0bb;
-}
-html.dark .text-slate-400 {
-  color: #7c8db0;
-}
-html.dark .text-slate-300 {
-  color: #64748b;
-}
-
-html.dark input::placeholder,
-html.dark textarea::placeholder {
-  color: #5d6c8f;
-}
-
-/* Fundos tingidos + texto emparelhado (badges, estados, destaques) */
-html.dark .bg-primary-50 {
-  background-color: #16224a;
-}
-html.dark .bg-primary-50\/50 {
-  background-color: rgb(22 34 74 / 0.5);
-}
-html.dark .bg-primary-50\/60 {
-  background-color: rgb(22 34 74 / 0.6);
-}
-html.dark .bg-primary-50\/70 {
-  background-color: rgb(22 34 74 / 0.7);
-}
-html.dark .bg-primary-100 {
-  background-color: #1c2b5c;
-}
-html.dark .bg-primary-200\/70 {
-  background-color: rgb(29 45 94 / 0.7);
-}
-html.dark .text-primary-500 {
-  color: #8fa6ff;
-}
-html.dark .text-primary-600 {
-  color: #7d9bff;
-}
-html.dark .text-primary-700 {
-  color: #9db4ff;
-}
-html.dark .text-primary-800 {
-  color: #c0d3ff;
-}
-
-html.dark .bg-emerald-50 {
-  background-color: #0b2a21;
-}
-html.dark .bg-emerald-100 {
-  background-color: #10382c;
-}
-html.dark .text-emerald-600 {
-  color: #34d399;
-}
-html.dark .text-emerald-700 {
-  color: #6ee7b7;
-}
-
-html.dark .bg-amber-50 {
-  background-color: #2a2110;
-}
-html.dark .text-amber-700 {
-  color: #fcd34d;
-}
-
-html.dark .bg-red-50 {
-  background-color: #2a1419;
-}
-html.dark .bg-red-50\/60 {
-  background-color: rgb(42 20 25 / 0.6);
-}
-html.dark .bg-red-100 {
-  background-color: #3a1a22;
-}
-html.dark .text-red-500 {
-  color: #f87171;
-}
-html.dark .text-red-600 {
-  color: #fca5a5;
-}
-html.dark .text-red-700 {
-  color: #fecaca;
-}
-
-html.dark .bg-sky-50 {
-  background-color: #0c2230;
-}
-html.dark .text-sky-200 {
-  color: #bae6fd;
-}
-html.dark .text-sky-600 {
-  color: #38bdf8;
-}
-html.dark .text-sky-700 {
-  color: #7dd3fc;
-}
-
-html.dark .bg-indigo-50 {
-  background-color: #191c3d;
-}
-html.dark .text-indigo-700 {
-  color: #a5b4fc;
-}
-
-html.dark .bg-violet-50 {
-  background-color: #231a3f;
-}
-html.dark .text-violet-700 {
-  color: #c4b5fd;
-}
-
-html.dark .bg-blue-50 {
-  background-color: #0e2433;
-}
-html.dark .text-blue-700 {
-  color: #93c5fd;
-}
-
 /* Elevação em modo escuro — sombras suaves para dar profundidade aos cartões */
 html.dark .shadow-card {
   box-shadow:
@@ -417,4 +467,91 @@ html.dark .shadow-card-hover {
   box-shadow:
     0 2px 6px rgb(0 0 0 / 0.3),
     0 18px 44px -14px rgb(0 0 0 / 0.6);
+}
+
+/* ── Preloader de entrada (DeliveryLoader) ────────────────────────
+   Regras sem `@layer` de propósito: o `display` tem de vencer os utilitários
+   do Tailwind (que estão em camadas) sem depender da ordem de compilação.
+
+   O overlay vem no HTML do servidor e fica escondido até o script de
+   arranque (`/preloader-init.js`) pôr `data-preloader="on"` no <html> — decisão
+   tomada antes da primeira pintura, para não haver flash do conteúdo nem
+   divergência de hidratação. Se o JavaScript falhar, nada aparece.
+   O modo (full/short) vem no atributo data-preloader-mode. */
+.nsm-preloader {
+  display: none;
+}
+html[data-preloader="on"] .nsm-preloader {
+  display: flex;
+}
+
+/* O conteúdo entra suavemente quando o camião chega: o overlay faz fade-out e o
+   <main> sobe ao mesmo tempo. A classe só é aplicada enquanto o preloader corre
+   (visitas repetidas e `prefers-reduced-motion` nunca chegam a escondê-lo). */
+body.nsm-booting #conteudo {
+  opacity: 0;
+  transform: translateY(10px);
+}
+#conteudo {
+  transition:
+    opacity 0.5s ease,
+    transform 0.5s ease;
+}
+
+/* Rodas, suspensão, chegada ao destino e rasto — tudo em `transform`/`opacity`. */
+.nsm-wheel {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: nsm-wheel 0.5s linear infinite;
+}
+@keyframes nsm-wheel {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes nsm-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-1.5px);
+  }
+}
+@keyframes nsm-check {
+  0% {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes nsm-ring {
+  from {
+    opacity: 0.5;
+    transform: scale(0.55);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.7);
+  }
+}
+@keyframes nsm-trail {
+  0% {
+    opacity: 0;
+    transform: translateX(4px);
+  }
+  45% {
+    opacity: 0.45;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
 }

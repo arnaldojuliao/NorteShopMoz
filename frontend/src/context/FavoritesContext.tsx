@@ -36,8 +36,12 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
   // (logout → login de outra conta volta a buscar os favoritos do servidor).
   const syncedForRef = useRef<string | null>(null);
 
-  // No arranque da sessão (ou troca de utilizador): funde os favoritos do
-  // servidor com os locais. A persistência da lista fica no effect de `ids`.
+  // No arranque da sessão (ou troca de utilizador): sincroniza com o servidor.
+  // O servidor é a **fonte da verdade** — uma união (como antes) ressuscitava
+  // favoritos removidos noutro dispositivo: a lista local antiga voltava a ser
+  // enviada no PUT de persistência e a remoção era desfeita. A lista local só
+  // é preservada (e enviada) quando o servidor ainda não tem favoritos — é o
+  // caso de quem adiciona favoritos antes do primeiro login.
   useEffect(() => {
     if (!user || syncedForRef.current === user.id || !hydrated) return;
     syncedForRef.current = user.id;
@@ -46,7 +50,13 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
       try {
         const { data: server } = await apiGet<{ data: string[] }>("/api/favorites", 60_000, true);
         if (!alive) return;
-        setIds((prev) => [...new Set([...server, ...prev])]);
+        if (server.length > 0) {
+          setIds([...new Set(server)]);
+        } else {
+          // Servidor ainda sem favoritos — mantém os locais; o PUT de
+          // persistência (efeito abaixo) envia-os após esta hidratação.
+          setIds((prev) => [...new Set(prev)]);
+        }
       } catch {
         // API indisponível — mantém os favoritos locais.
       }

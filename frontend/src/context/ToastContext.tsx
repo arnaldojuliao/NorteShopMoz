@@ -41,21 +41,23 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div
         aria-live="polite"
-        className="pointer-events-none fixed inset-x-0 bottom-4 z-[90] flex flex-col items-center gap-2 px-4"
+        /* No telemóvel a navegação inferior ocupa os últimos 4,5rem: sem este
+           recuo o aviso ficava por cima dos rótulos do menu. */
+        className="pointer-events-none fixed inset-x-0 bottom-20 z-[90] flex flex-col items-center gap-2 px-4 lg:bottom-4"
       >
         {toasts.map((t) => (
           <div
             key={t.id}
             role="status"
             className={cn(
-              "animate-slide-down pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-xl border bg-white px-4 py-3 shadow-card",
+              "animate-slide-down pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-xl border bg-surface px-4 py-3 shadow-card",
               t.kind === "success" && "border-emerald-200",
               t.kind === "info" && "border-sky-200",
               t.kind === "error" && "border-red-200",
             )}
           >
             {t.kind === "success" ? (
-              <CheckCircle2 className="size-5 shrink-0 text-emerald-600" aria-hidden />
+              <CheckCircle2 className="size-5 shrink-0 text-emerald-700" aria-hidden />
             ) : t.kind === "error" ? (
               <TriangleAlert className="size-5 shrink-0 text-red-600" aria-hidden />
             ) : (

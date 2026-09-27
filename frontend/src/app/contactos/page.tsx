@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Mail, MapPin, MessageCircle, Phone } from "lucide-react";
 import { InfoPage } from "@/components/layout/InfoPage";
 import { site, telHref, whatsappHref } from "@/config/site";
+import { serializeJsonLd } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Contactos",
@@ -58,7 +59,7 @@ export default function ContactosPage() {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(contactJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(contactJsonLd) }}
       />
       <InfoPage
       crumb="Contactos"
@@ -69,7 +70,7 @@ export default function ContactosPage() {
           body: (
             <div className="grid gap-3 sm:grid-cols-2">
               {items.map((i) => (
-                <div key={i.title} className="rounded-2xl border border-slate-100 bg-white p-5">
+                <div key={i.title} className="rounded-2xl border border-slate-100 bg-surface p-5">
                   <span className="flex size-10 items-center justify-center rounded-xl bg-primary-50 text-primary-700">
                     <i.icon className="size-5" />
                   </span>

@@ -18,14 +18,14 @@ function CountdownBlock({
       <span
         className={cn(
           "flex h-9 min-w-9 items-center justify-center rounded-lg px-1.5 font-display text-base font-bold tabular-nums",
-          onDark ? "bg-white/10 text-white backdrop-blur" : "bg-red-50 text-red-600",
+          onDark ? "bg-white/10 text-white backdrop-blur" : "bg-red-50 text-red-700",
         )}
       >
         {value}
       </span>
       <span
         className={cn(
-          "mt-1 text-[9px] font-semibold uppercase tracking-wider",
+          "mt-1 text-xs font-semibold uppercase tracking-wider",
           onDark ? "text-white/60" : "text-slate-400",
         )}
       >
@@ -47,14 +47,14 @@ export function CountdownTimer({ onDark = true }: { onDark?: boolean }) {
           onDark ? "text-white/80" : "text-slate-500",
         )}
       >
-        <Clock className={cn("size-4", onDark ? "text-amber-300" : "text-red-500")} /> Termina em:
+        <Clock className={cn("size-4", onDark ? "text-amber-300" : "text-red-600")} /> Termina em:
       </span>
       <CountdownBlock value={h} label="horas" onDark={onDark} />
-      <span className={cn("pb-4 font-display text-lg font-bold", onDark ? "text-white/50" : "text-slate-300")}>
+      <span className={cn("pb-4 font-display text-lg font-bold", onDark ? "text-white/50" : "text-slate-400")}>
         :
       </span>
       <CountdownBlock value={m} label="min" onDark={onDark} />
-      <span className={cn("pb-4 font-display text-lg font-bold", onDark ? "text-white/50" : "text-slate-300")}>
+      <span className={cn("pb-4 font-display text-lg font-bold", onDark ? "text-white/50" : "text-slate-400")}>
         :
       </span>
       <CountdownBlock value={s} label="seg" onDark={onDark} />

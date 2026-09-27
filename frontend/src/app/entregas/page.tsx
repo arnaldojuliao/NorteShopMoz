@@ -5,7 +5,7 @@ import { formatMZN } from "@/lib/format";
 
 export const metadata: Metadata = {
   title: "Entregas",
-  description: "Prazos e custos de entrega da NorteShop para todas as províncias de Moçambique.",
+  description: "Prazos e custos de entrega da NorteShopMoz para todas as províncias de Moçambique.",
 };
 
 export default function EntregasPage() {

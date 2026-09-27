@@ -31,7 +31,7 @@ export function Toggle({
           aria-hidden
           className={cn(
             "block h-6 w-11 rounded-full transition-colors duration-200",
-            checked ? "bg-primary-600" : "bg-slate-300",
+            checked ? "bg-brand" : "bg-slate-300",
           )}
         />
         <span

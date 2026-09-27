@@ -1,12 +1,16 @@
 package mz.norteshopmoz.api.service;
 
+import mz.norteshopmoz.api.domain.Coupon;
 import mz.norteshopmoz.api.domain.Order;
 import mz.norteshopmoz.api.domain.OrderStatus;
+import mz.norteshopmoz.api.domain.Product;
 import mz.norteshopmoz.api.domain.UserAccount;
 import mz.norteshopmoz.api.exception.ApiException;
 import mz.norteshopmoz.api.repository.OrderRepository;
+import mz.norteshopmoz.api.repository.ProductRepository;
 import mz.norteshopmoz.api.repository.UserRepository;
 import mz.norteshopmoz.api.security.UserPrincipal;
+import mz.norteshopmoz.api.web.dto.CouponRequest;
 import mz.norteshopmoz.api.web.dto.OrderRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,6 +21,13 @@ import org.springframework.test.annotation.DirtiesContext;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -34,6 +45,12 @@ class OrderServiceTest {
 
     @Autowired
     UserRepository userRepository;
+
+    @Autowired
+    ProductRepository productRepository;
+
+    @Autowired
+    CouponService couponService;
 
     private UserPrincipal createPrincipal(String userId, String role) {
         return new UserPrincipal(userId, "test@example.com", "Test User", role);
@@ -54,6 +71,11 @@ class OrderServiceTest {
     }
 
     private OrderRequest createOrderRequest(String email) {
+        return createOrderRequest(email, null);
+    }
+
+    /** O último argumento é o código do cupão (null = sem cupão). */
+    private OrderRequest createOrderRequest(String email, String couponCode) {
         return new OrderRequest(
                 List.of(new OrderRequest.ItemRequest("p-001", "product-slug", "Product", "img.jpg", new BigDecimal("1000"), 1, null)),
                 new BigDecimal("1000"),
@@ -62,7 +84,8 @@ class OrderServiceTest {
                 new BigDecimal("1100"),
                 new OrderRequest.AddressRequest("John", "+258840000000", email, "Street", "City", "Maputo Cidade", null),
                 "m-pesa",
-                new OrderRequest.PaymentInfoRequest("+258840000000", null)
+                new OrderRequest.PaymentInfoRequest("+258840000000", null),
+                couponCode
         );
     }
 
@@ -99,6 +122,87 @@ class OrderServiceTest {
         Order second = orderService.createOrder(request, null, idemKey);
 
         assertThat(second.getId()).isEqualTo(first.getId());
+    }
+
+    @Test
+    void createOrder_withCoupon_appliesDiscountAndRecordsCode() {
+        String email = "coupon-" + UUID.randomUUID() + "@example.com";
+        // Código único por execução (o cupão é persistido e o código é único).
+        String code = "TESTE" + UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
+        Coupon coupon = couponService.create(new CouponRequest(
+                code, new BigDecimal("10"), "PERCENT", null, null, true, 0));
+
+        Order withoutCoupon = orderService.createOrder(
+                createOrderRequest(email), null, "k-" + UUID.randomUUID());
+        Order withCoupon = orderService.createOrder(
+                createOrderRequest(email, coupon.getCode()), null, "k-" + UUID.randomUUID());
+
+        assertThat(withCoupon.getCouponCode()).isEqualTo(code);
+        // 10% sobre o subtotal (1000 MT) tem de baixar o total face ao pedido sem cupão.
+        assertThat(withCoupon.getTotal()).isLessThan(withoutCoupon.getTotal());
+        // O contador de utilizações é incrementado ao criar o pedido.
+        assertThat(couponService.list().stream()
+                .filter(c -> c.getCode().equals(code))
+                .findFirst()
+                .orElseThrow()
+                .getUsedCount()).isEqualTo(1);
+    }
+
+    @Test
+    void createOrder_concurrentLastUnit_isNotOversold() throws Exception {
+        // Produto com uma única unidade em stock. Dois checkouts concorrentes
+        // pedem essa unidade: o lock de escrita tem de garantir que só um passa
+        // (antes, ambos liam stock=1 e vendiam a mesma unidade duas vezes).
+        String uid = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        Product product = productRepository.save(Product.builder()
+                .id("conc-" + uid)
+                .slug("conc-" + uid)
+                .name("Produto Concorrência")
+                .category("eletronicos")
+                .price(new BigDecimal("500"))
+                .stock(1)
+                .sold(0)
+                .shortDescription("teste")
+                .images(List.of())
+                .description(List.of())
+                .specs(List.of())
+                .badges(List.of())
+                .deliveryDays(List.of(3, 7))
+                .tags(List.of())
+                .build());
+
+        OrderRequest request = new OrderRequest(
+                List.of(new OrderRequest.ItemRequest(product.getId(), product.getSlug(), product.getName(),
+                        "img.jpg", product.getPrice(), 1, null)),
+                new BigDecimal("500"), new BigDecimal("100"), BigDecimal.ZERO, new BigDecimal("600"),
+                new OrderRequest.AddressRequest("John", "+258840000000", "conc@example.com",
+                        "Street", "City", "Maputo Cidade", null),
+                "m-pesa", new OrderRequest.PaymentInfoRequest("+258840000000", null), null);
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+        AtomicInteger success = new AtomicInteger();
+        AtomicInteger failures = new AtomicInteger();
+        Callable<Void> task = () -> {
+            start.await();
+            try {
+                orderService.createOrder(request, null, "k-" + UUID.randomUUID());
+                success.incrementAndGet();
+            } catch (ApiException e) {
+                failures.incrementAndGet();
+            }
+            return null;
+        };
+        Future<Void> first = pool.submit(task);
+        Future<Void> second = pool.submit(task);
+        start.countDown();
+        first.get(30, TimeUnit.SECONDS);
+        second.get(30, TimeUnit.SECONDS);
+        pool.shutdown();
+
+        assertThat(success.get()).isEqualTo(1);
+        assertThat(failures.get()).isEqualTo(1);
+        assertThat(productRepository.findById(product.getId()).orElseThrow().getStock()).isZero();
     }
 
     @Test

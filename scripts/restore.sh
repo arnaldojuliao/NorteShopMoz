@@ -4,12 +4,14 @@ set -euo pipefail
 # NorteShopMoz - Restore Script
 # Usage: ./restore.sh [backup_file] [target_db] [target_user]
 
+# Uso: ./restore.sh <backup_file> [target_db] [target_user]
+# (antes o DB_USER recebia o 2.º argumento e o DB_NAME o 3.º — ou seja, o
+# utilizador era o nome da base e o alvo era o utilizador: restore falhava)
 BACKUP_FILE="${1:-}"
 DB_NAME="${2:-norteshopmoz}"
-DB_USER="${2:-norteshopmoz}"
+DB_USER="${3:-norteshopmoz}"
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5432}"
-DB_NAME="${3:-norteshopmoz}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -34,6 +36,10 @@ fi
 
 log "Iniciando restore do backup: ${BACKUP_FILE}"
 log "Banco alvo: ${DB_NAME} | Usuário: ${DB_USER} | Host: ${DB_HOST}:${DB_PORT}"
+
+if [[ -z "${PGPASSWORD:-}" && ! -f "${HOME}/.pgpass" ]]; then
+    warn "PGPASSWORD não definido e ~/.pgpass inexistente: o psql/pg_restore vão pedir password."
+fi
 
 # Verificar se arquivo existe e é válido
 if [[ ! -f "${BACKUP_FILE}" ]]; then

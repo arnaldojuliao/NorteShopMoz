@@ -13,7 +13,7 @@ import {
   Truck,
   Wallet,
 } from "lucide-react";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth, useAvatarSrc } from "@/context/AuthContext";
 import { useCurrency } from "@/context/CurrencyContext";
 import { useCart } from "@/context/CartContext";
 import { useLoginModal } from "@/context/LoginModalContext";
@@ -21,15 +21,15 @@ import { useToast } from "@/context/ToastContext";
 import { useAsyncData, useLocalStorageState } from "@/lib/hooks";
 import { provinces as localProvinces } from "@/lib/data/provinces";
 import { getShippingConfig, LOCAL_FREE_SHIPPING_THRESHOLD } from "@/lib/shipping";
-import { ApiError } from "@/lib/api";
+import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { saveLocalOrder, submitOrder, type OrderPayload } from "@/lib/orders";
-import type { Order, PaymentMethod, UserProfile } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import type { Coupon, Order, PaymentMethod, UserProfile } from "@/lib/types";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { ProductImage } from "@/components/product/ProductImage";
 import { StatusTimeline } from "@/components/checkout/StatusTimeline";
-import { cn } from "@/lib/utils";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 
 /**
@@ -102,6 +102,8 @@ export default function CheckoutPage() {
   const { format } = useCurrency();
   const { items, subtotal, clear } = useCart();
   const { user: authUser, initializing } = useAuth();
+  // Foto de perfil: do servidor quando há sessão (cada conta tem a sua).
+  const avatarSrc = useAvatarSrc();
   const { openLogin } = useLoginModal();
   const [profile] = useLocalStorageState<UserProfile | null>("nsm:profile", null);
   const [localUser] = useLocalStorageState<{ email: string; name: string }>("nsm:user", {
@@ -125,7 +127,15 @@ export default function CheckoutPage() {
   const [method, setMethod] = useState("cod");
   const [province, setProvince] = useState(localProvinces[0].name);
   const [placing, setPlacing] = useState(false);
+  /** Rótulos de método disponíveis segundo o backend (vazio = todos). */
+  const [methodAvailability, setMethodAvailability] = useState<Set<string>>(() => new Set());
   const [placedOrder, setPlacedOrder] = useState<Order | null>(null);
+  const [couponCode, setCouponCode] = useState("");
+  const [coupon, setCoupon] = useState<Coupon | null>(null);
+  const [couponError, setCouponError] = useState("");
+  const [validatingCoupon, setValidatingCoupon] = useState(false);
+  // Código do cupão aplicado — dependência estável dos efeitos de validação.
+  const appliedCouponCode = coupon?.code ?? "";
   const [form, setForm] = useState({
     fullName: "",
     phone: "",
@@ -157,6 +167,56 @@ export default function CheckoutPage() {
     });
   }, [profile, form.fullName, form.email, form.phone]);
 
+  // Revalida o cupão aplicado quando o subtotal muda (mínimo e percentagem
+  // dependem do subtotal) — o desconto é sempre recalculado pelo servidor.
+  useEffect(() => {
+    if (!appliedCouponCode) return;
+    let cancelled = false;
+    // queueMicrotask: evita setState síncrono dentro do efeito (padrão do projeto).
+    queueMicrotask(() => {
+      if (!cancelled) setValidatingCoupon(true);
+    });
+    apiPost<{ data: { discount: number } }>("/api/orders/validate-coupon", { code: appliedCouponCode, subtotal })
+      .then((res) => {
+        if (cancelled) return;
+        setCouponError("");
+        setCoupon((current) => (current ? { ...current, discount: res.data.discount } : current));
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setCoupon(null);
+        setCouponError(err instanceof ApiError ? err.message : "Cupão inválido.");
+      })
+      .finally(() => {
+        if (!cancelled) setValidatingCoupon(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [appliedCouponCode, subtotal]);
+
+  // Métodos de pagamento disponíveis AGORA (o backend desliga os pagos online
+  // quando não há gateway): sem isto, o cliente escolhia M-Pesa e só via 503 no
+  // fim do checkout. A falha é ignorada — em caso de dúvida, mostram-se todos
+  // (o backend rejeita com 503 se o método não for cobrável).
+  useEffect(() => {
+    let cancelled = false;
+    apiGet<{ data: { methods: string[] } }>("/api/payments/methods", 60_000)
+      .then((res) => {
+        if (cancelled || !res.data?.methods) return;
+        const available = new Set(res.data.methods);
+        setMethodAvailability(() => available);
+        // Se o método selecionado ficou indisponível, volta ao COD (sempre existe).
+        setMethod((current) => (available.has(current) ? current : "cod"));
+      })
+      .catch(() => {
+        /* sem sinal do backend: mantém todos visíveis (comportamento anterior) */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Escolher M-Pesa/e-Mola pré-preenche o número com o telefone de entrega.
   const pickMethod = (id: string) => {
     setMethod(id);
@@ -171,7 +231,11 @@ export default function CheckoutPage() {
     (acc, i) => acc + (i.oldPrice && i.oldPrice > i.price ? (i.oldPrice - i.price) * i.qty : 0),
     0,
   );
-  const total = Math.max(0, subtotal - savings) + shipping;
+  const couponDiscount = coupon?.discount ?? 0;
+  const discount = savings + couponDiscount;
+  const total = Math.max(0, subtotal - savings - couponDiscount) + shipping;
+  // Percentagem poupada nos preços riscados (rótulo do resumo).
+  const discountPct = subtotal > 0 ? `-${Math.round((savings / subtotal) * 100)}%` : "";
 
   const selectedMethod = useMemo(
     () => paymentMethods.find((m) => m.id === method)!,
@@ -202,9 +266,9 @@ export default function CheckoutPage() {
   /* ── Sucesso ─────────────────────────────────────────────── */
   if (placedOrder) {
     return (
-      <div className="container-nsm max-w-3xl py-12">
-        <div className="rounded-3xl border border-emerald-100 bg-emerald-50/60 p-8 text-center">
-          <CheckCircle2 className="mx-auto size-14 text-emerald-600" />
+      <div className="container-nsm max-w-3xl py-16">
+        <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-8 text-center">
+          <CheckCircle2 className="mx-auto size-14 text-emerald-700" />
           <h1 className="mt-4 font-display text-2xl font-extrabold text-slate-900">
             Pedido recebido com sucesso!
           </h1>
@@ -212,7 +276,7 @@ export default function CheckoutPage() {
             Obrigado pela sua compra, {placedOrder.address.fullName.split(" ")[0]}! O seu pedido{" "}
             <strong className="text-slate-900">{placedOrder.id}</strong> foi registado.
           </p>
-          <div className="mt-6 rounded-2xl bg-white p-5 text-left">
+          <div className="mt-6 rounded-2xl bg-surface p-5 text-left">
             <StatusTimeline current={placedOrder.status} />
           </div>
           <p className="mt-5 text-sm text-slate-500">
@@ -226,7 +290,10 @@ export default function CheckoutPage() {
             </p>
           )}
           <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <Button href={`/pedido/${placedOrder.id}`} variant="secondary">
+            <Button
+              href={`/pedido/${placedOrder.id}${placedOrder.address.email ? `?email=${encodeURIComponent(placedOrder.address.email)}` : ""}`}
+              variant="secondary"
+            >
               Acompanhar pedido
             </Button>
             <Button href="/" variant="outline">
@@ -295,7 +362,7 @@ export default function CheckoutPage() {
         })),
         subtotal,
         shipping,
-        discount: savings,
+        discount,
         total,
         paymentMethod: selectedMethod.name,
         // Só o essencial chega ao servidor: telemóvel (carteiras) ou últimos 4
@@ -306,6 +373,7 @@ export default function CheckoutPage() {
             ? { cardLast4: digits(cardNumber).slice(-4) }
             : undefined,
         address: { ...form, province },
+        couponCode: coupon?.code || undefined,
       };
 
       // Cria o pedido no backend (guest checkout) com uma perceção mínima de
@@ -327,6 +395,50 @@ export default function CheckoutPage() {
     }
   };
 
+  const validateCoupon = async (code: string) => {
+    if (!code.trim()) {
+      setCouponError("Introduza um código de cupão.");
+      return;
+    }
+    setValidatingCoupon(true);
+    setCouponError("");
+    try {
+      // A API responde com o envelope { data: {...} } (igual a todas as outras
+      // chamadas) — sem desembrulhar, `code`/`discount` eram undefined e o
+      // cupão nunca era aplicado nem enviado no pedido.
+      const { data } = await apiPost<{
+        data: {
+          code: string;
+          discountType: string;
+          discountValue: number;
+          discount: number;
+          minimumSubtotal?: number;
+        };
+      }>("/api/orders/validate-coupon", { code, subtotal });
+      setCoupon({
+        code: data.code,
+        discountType: data.discountType,
+        discountValue: data.discountValue,
+        discount: data.discount,
+        minimumSubtotal: data.minimumSubtotal,
+      });
+    } catch (err) {
+      setCoupon(null);
+      setCouponError(err instanceof ApiError ? err.message : "Cupão inválido.");
+    } finally {
+      setValidatingCoupon(false);
+    }
+  };
+
+  const applyCoupon = async () => {
+    if (!couponCode.trim()) {
+      setCoupon(null);
+      setCouponError("");
+      return;
+    }
+    await validateCoupon(couponCode);
+  };
+
   return (
     <RequireAuth redirect fallbackPath="/">
       <div className="container-nsm py-6">
@@ -340,14 +452,14 @@ export default function CheckoutPage() {
       <form onSubmit={submit} className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div className="space-y-6">
           {/* Dados do cliente */}
-          <section className="rounded-2xl border border-slate-100 bg-white p-5 sm:p-6">
+          <section className="rounded-2xl border border-slate-100 bg-surface p-5 sm:p-6">
             <h2 className="flex items-center gap-2 font-display text-lg font-bold text-slate-900">
               <Wallet className="size-5 text-primary-600" /> Dados de entrega
             </h2>
             {displayName && (
               <div className="mt-4 flex items-center gap-2.5 rounded-xl bg-primary-50/70 px-3.5 py-2.5">
                 <Avatar
-                  src={authUser?.avatar ?? profile?.avatar}
+                  src={avatarSrc}
                   name={displayName}
                   className="size-8"
                   textClassName="text-xs"
@@ -426,7 +538,7 @@ export default function CheckoutPage() {
           </section>
 
           {/* Pagamento */}
-          <section className="rounded-2xl border border-slate-100 bg-white p-5 sm:p-6">
+          <section className="rounded-2xl border border-slate-100 bg-surface p-5 sm:p-6">
             <h2 className="flex items-center gap-2 font-display text-lg font-bold text-slate-900">
               <Lock className="size-5 text-primary-600" /> Método de pagamento
             </h2>
@@ -434,24 +546,29 @@ export default function CheckoutPage() {
               {paymentMethods.map((m) => {
                 const Icon = methodIcons[m.id];
                 const active = method === m.id;
+                // Disponibilidade efetiva: o campo `available` estático E o que o
+                // backend diz (pagos online desligados sem gateway). Quando a lista
+                // do backend ainda não chegou (Set vazio), assume-se disponível.
+                const backendUnavailable = methodAvailability.size > 0 && !methodAvailability.has(m.name);
+                const isAvailable = m.available && !backendUnavailable;
                 return (
                   <button
                     key={m.id}
                     type="button"
-                    disabled={!m.available}
+                    disabled={!isAvailable}
                     onClick={() => pickMethod(m.id)}
                     aria-pressed={active}
                     className={cn(
                       "relative flex flex-col gap-1 rounded-2xl border-2 p-4 text-left transition",
                       active
                         ? "border-primary-600 bg-primary-50/60"
-                        : m.available
+                        : isAvailable
                           ? "border-slate-200 hover:border-slate-300"
                           : "cursor-not-allowed border-slate-100 bg-slate-50 opacity-60",
                     )}
                   >
                     {m.badge && (
-                      <span className="absolute right-3 top-3 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">
+                      <span className="absolute right-3 top-3 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold uppercase text-amber-700">
                         {m.badge}
                       </span>
                     )}
@@ -541,7 +658,7 @@ export default function CheckoutPage() {
 
         {/* Resumo */}
         <aside className="h-fit space-y-4 lg:sticky lg:top-32">
-          <div className="rounded-2xl border border-slate-100 bg-white p-5">
+          <div className="rounded-2xl border border-slate-100 bg-surface p-5">
             <h2 className="font-display text-lg font-bold text-slate-900">O seu pedido</h2>
             <ul className="mt-4 space-y-3">
               {items.map((i) => (
@@ -555,7 +672,7 @@ export default function CheckoutPage() {
                       label={i.name}
                       imgClassName="object-cover"
                     />
-                    <span className="absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full bg-navy-900 text-[10px] font-bold text-white">
+                    <span className="absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full bg-navy-900 text-xs font-bold text-white">
                       {i.qty}
                     </span>
                   </span>
@@ -573,16 +690,22 @@ export default function CheckoutPage() {
                 <dd className="font-semibold text-slate-800 tabular-nums">{format(subtotal)}</dd>
               </div>
               {savings > 0 && (
-                <div className="flex justify-between text-emerald-600">
-                  <dt>Desconto</dt>
+                <div className="flex justify-between text-emerald-700">
+                  <dt>Desconto ({discountPct})</dt>
                   <dd className="font-semibold">-{format(savings)}</dd>
+                </div>
+              )}
+              {couponDiscount > 0 && (
+                <div className="flex justify-between text-emerald-700">
+                  <dt>Cupão ({coupon?.code})</dt>
+                  <dd className="font-semibold">-{format(couponDiscount)}</dd>
                 </div>
               )}
               <div className="flex justify-between">
                 <dt className="flex items-center gap-1.5 text-slate-500">
                   <Truck className="size-4 text-primary-500" /> Entrega ({province})
                 </dt>
-                <dd className={cn("font-semibold", shipping === 0 ? "text-emerald-600" : "text-slate-800")}>
+                <dd className={cn("font-semibold", shipping === 0 ? "text-emerald-700" : "text-slate-800")}>
                   {shipping === 0 ? "Grátis" : format(shipping)}
                 </dd>
               </div>
@@ -598,6 +721,48 @@ export default function CheckoutPage() {
                 </dd>
               </div>
             </dl>
+          </div>
+
+          {/* Cupão */}
+          <div className="rounded-2xl border border-slate-100 bg-surface p-5">
+            <h2 className="font-display text-sm font-bold text-slate-900">Cupão de desconto</h2>
+            <div className="mt-3 flex gap-2">
+              <input
+                type="text"
+                value={couponCode}
+                onChange={(e) => setCouponCode(e.target.value.trim().toUpperCase())}
+                // O placeholder não é um rótulo: sem isto o campo não tinha nome acessível.
+                aria-label="Código do cupão de desconto"
+                placeholder="EX: NOVO2024"
+                className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+              />
+              <Button
+                type="button"
+                size="sm"
+                onClick={applyCoupon}
+                loading={validatingCoupon}
+                disabled={!couponCode.trim()}
+              >
+                Aplicar
+              </Button>
+            </div>
+            {couponError && <p className="mt-2 text-xs text-red-600">{couponError}</p>}
+            {coupon && (
+              <p className="mt-2 text-xs text-emerald-700">
+                Cupão aplicado: {format(couponDiscount)} ({coupon.discountType === "PERCENT" ? "%" : "MT"})
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCoupon(null);
+                    setCouponError("");
+                    setCouponCode("");
+                  }}
+                  className="ml-2 underline hover:text-red-600"
+                >
+                  Remover
+                </button>
+              </p>
+            )}
           </div>
 
           {initializing || logged ? (

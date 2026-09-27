@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Heart } from "lucide-react";
+import { Heart, LogIn } from "lucide-react";
 import { useFavorites } from "@/context/FavoritesContext";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth, useAvatarSrc } from "@/context/AuthContext";
 import { useLocalStorageState } from "@/lib/hooks";
 import { repo } from "@/lib/repo";
 import type { Product, UserProfile } from "@/lib/types";
@@ -11,11 +11,16 @@ import { Avatar } from "@/components/ui/Avatar";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { ProductGridSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { RequireAuth } from "@/components/auth/RequireAuth";
+import { Button } from "@/components/ui/Button";
+import { useLoginModal } from "@/context/LoginModalContext";
 
 export default function FavoritesPage() {
   const { ids } = useFavorites();
   const { user: authUser } = useAuth();
+  // Foto de perfil: do servidor quando há sessão (cada conta tem a sua).
+  const avatarSrc = useAvatarSrc();
+  const { openLogin } = useLoginModal();
+  const signedIn = Boolean(authUser);
   const [profile] = useLocalStorageState<UserProfile | null>("nsm:profile", null);
   const [products, setProducts] = useState<Product[] | null>(null);
   const idsKey = ids.join(",");
@@ -41,12 +46,11 @@ export default function FavoritesPage() {
   const displayName = authUser?.fullName || profile?.fullName || "";
 
   return (
-    <RequireAuth redirect fallbackPath="/">
-      <div className="container-nsm py-6">
+    <div className="container-nsm py-6">
       <div className="flex items-center gap-3.5">
         {displayName && (
           <Avatar
-            src={authUser?.avatar ?? profile?.avatar}
+            src={avatarSrc}
             name={displayName}
             className="size-12 ring-4 ring-white shadow-card sm:size-14"
             textClassName="text-lg sm:text-xl"
@@ -65,7 +69,15 @@ export default function FavoritesPage() {
       </div>
 
       <div className="mt-6">
-        {products === null ? (
+        {!signedIn ? (
+          /* Sem sessão: estado próprio em vez de abrir o modal de login por cima
+             da página (o h1 e a explicação ficam no HTML e o utilizador decide). */
+          <EmptyState
+            icon={Heart}
+            title="Entre para ver os seus favoritos"
+            description="Os favoritos ficam guardados na sua conta e sincronizam entre dispositivos."
+          />
+        ) : products === null ? (
           <ProductGridSkeleton count={4} />
         ) : count === 0 ? (
           <EmptyState
@@ -78,8 +90,14 @@ export default function FavoritesPage() {
         ) : (
           <ProductGrid products={products} />
         )}
-      </div>
+        {!signedIn && (
+          <div className="mt-5 flex justify-center">
+            <Button onClick={openLogin} className="gap-2">
+              <LogIn className="size-4" aria-hidden /> Entrar ou criar conta
+            </Button>
           </div>
-        </RequireAuth>
-        );
-      }
+        )}
+      </div>
+    </div>
+  );
+}

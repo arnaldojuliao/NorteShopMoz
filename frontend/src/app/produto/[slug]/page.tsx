@@ -9,9 +9,11 @@ import { ProductGallery } from "@/components/product/ProductGallery";
 import { BuyBox } from "@/components/product/BuyBox";
 import { ProductTabs } from "@/components/product/ProductTabs";
 import { ProductGrid } from "@/components/product/ProductGrid";
+import { isValidImageSrc, serializeJsonLd } from "@/lib/utils";
 import { site } from "@/config/site";
+import { envOr } from "@/lib/env";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? site.url;
+const SITE_URL = envOr(process.env.NEXT_PUBLIC_SITE_URL, site.url);
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -27,14 +29,19 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const product = await repo.getProduct(slug);
   if (!product) return { title: "Produto não encontrado" };
 
+  // Só emite openGraph.images com uma imagem válida (URLs relativas rebentam
+  // a resolução de metadados do Next).
+  const ogImage = product.images.find(isValidImageSrc);
   return {
     title: product.name,
     description: product.shortDescription,
     openGraph: {
-      title: `${product.name} — NorteShop`,
+      title: `${product.name} — NorteShopMoz`,
       description: product.shortDescription,
       type: "website",
-      images: [{ url: product.images[0], width: 800, height: 800, alt: product.name }],
+      ...(ogImage
+        ? { images: [{ url: ogImage, width: 800, height: 800, alt: product.name }] }
+        : {}),
     },
   };
 }
@@ -47,13 +54,14 @@ export default async function ProductPage({ params }: PageProps) {
   const related = await repo.getRelated(product);
   const category = await repo.getCategory(product.category);
 
+  const validImages = product.images.filter(isValidImageSrc);
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Product",
     name: product.name,
     description: product.shortDescription,
-    image: product.images,
-    brand: { "@type": "Brand", name: product.brand ?? "NorteShop" },
+    ...(validImages.length ? { image: validImages } : {}),
+    brand: { "@type": "Brand", name: product.brand ?? "NorteShopMoz" },
     sku: product.id,
     offers: {
       "@type": "Offer",
@@ -62,7 +70,7 @@ export default async function ProductPage({ params }: PageProps) {
       price: product.price,
       availability: product.stock > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
       itemCondition: "https://schema.org/NewCondition",
-      seller: { "@type": "Organization", name: "NorteShop" },
+      seller: { "@type": "Organization", name: "NorteShopMoz" },
     },
     aggregateRating: {
       "@type": "AggregateRating",
@@ -90,7 +98,7 @@ export default async function ProductPage({ params }: PageProps) {
               "@type": "ListItem",
               position: 2,
               name: "Produtos",
-              item: `${SITE_URL}/procurar`,
+              item: `${SITE_URL}/explore`,
             },
           ]),
       {
@@ -106,16 +114,16 @@ export default async function ProductPage({ params }: PageProps) {
     <div className="container-nsm py-5">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbJsonLd) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
 
       <Breadcrumbs
         items={[
-          { label: category?.name ?? "Produtos", href: category ? `/categoria/${category.slug}` : "/procurar" },
+          { label: category?.name ?? "Produtos", href: category ? `/categoria/${category.slug}` : "/explore" },
           { label: product.name },
         ]}
       />

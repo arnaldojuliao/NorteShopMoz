@@ -1,25 +1,36 @@
 package mz.norteshopmoz.api.service;
 
+import java.math.BigDecimal;
+
 /**
- * Contrato de cobrança de pagamentos online (M-Pesa, e-Mola, cartão).
+ * Gateway de pagamento — contrato para os métodos pagos online (M-Pesa, e-Mola,
+ * cartão).
  *
- * <p>Ponto único de extensão para integrar um gateway real: implementar esta
- * interface (ex.: API M-Pesa da Vodacom, e-Mola API da Movitel, um processador
- * de cartões) e selecioná-la com {@code app.payments.mode=live}. Em modo
- * {@code simulated} (padrão) a implementação {@link SimulatedPaymentGateway}
- * devolve uma referência sem cobrar nada — o fluxo de compra funciona de ponta
- * a ponta para testes/demo.</p>
+ * <p><strong>Breaking change intencional</strong>: {@code charge} recebe o valor
+ * e a moeda. Antes, a interface não permitia cobrar o total do pedido — qualquer
+ * implementação real teria de adivinhar o valor, o que é inadmissível num
+ * gateway: é o servidor que recalcula o total (o do cliente é informativo) e
+ * esse é o valor a cobrar, em MZN (Metical).</p>
  */
 public interface PaymentGateway {
 
     /**
-     * Cobra o pagamento e devolve uma referência única a guardar no pedido
-     * (ex.: {@code MP-4F3K9Q2X7Z} ou {@code CARD-••••1234}).
+     * Cobra o valor indicado no método escolhido.
      *
-     * @param methodId   id do método: {@code mpesa}, {@code emola} ou {@code card}
-     * @param phone      número de telemóvel (M-Pesa/e-Mola) — null para cartão
-     * @param cardLast4  últimos 4 dígitos do cartão — null para carteiras móveis
-     * @return referência da cobrança
+     * @param methodId   id do método ("mpesa", "emola", "card", …)
+     * @param phone      telefone da carteira móvel (null em cartões)
+     * @param cardLast4  últimos 4 dígitos do cartão (null em carteiras)
+     * @param amount     valor a cobrar (recalculado no servidor, nunca no cliente)
+     * @param currency   moeda ISO (ex.: "MZN")
+     * @return referência da cobrança (guardada no pedido, usada em estornos)
      */
-    String charge(String methodId, String phone, String cardLast4);
+    String charge(String methodId, String phone, String cardLast4, BigDecimal amount, String currency);
+
+    /**
+     * Estorna uma cobrança anterior (compensação quando o pedido falha após a
+     * cobrança).
+     *
+     * @param reference referência devolvida por {@link #charge}
+     */
+    void refund(String reference);
 }

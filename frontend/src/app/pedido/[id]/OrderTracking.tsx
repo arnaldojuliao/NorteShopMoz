@@ -2,26 +2,30 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { MapPin, PackageSearch, RefreshCw } from "lucide-react";
-import { fetchOrderTracking } from "@/lib/orders";
+import { MapPin, PackageSearch, RefreshCw, XCircle } from "lucide-react";
+import { cancelOrder, fetchOrderTracking } from "@/lib/orders";
+import { ApiError } from "@/lib/api";
 import type { Order } from "@/lib/types";
 import { formatDate } from "@/lib/format";
+import { useAuth } from "@/context/AuthContext";
 import { useCurrency } from "@/context/CurrencyContext";
 import { StatusTimeline } from "@/components/checkout/StatusTimeline";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
 
-export function OrderTracking({ id }: { id: string }) {
+export function OrderTracking({ id, email }: { id: string; email?: string }) {
   const { format } = useCurrency();
+  const { user } = useAuth();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [tick, setTick] = useState(0);
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     let alive = true;
     // O `loading` só arranca como true (primeira carga); nas atualizações manuais
     // o estado anterior mantém-se visível até chegar o novo (sem flicker).
-    fetchOrderTracking(id).then((o) => {
+    fetchOrderTracking(id, email).then((o) => {
       if (!alive) return;
       setOrder(o);
       setLoading(false);
@@ -29,7 +33,7 @@ export function OrderTracking({ id }: { id: string }) {
     return () => {
       alive = false;
     };
-  }, [id, tick]);
+  }, [id, email, tick]);
 
   if (loading) {
     return (
@@ -46,6 +50,8 @@ export function OrderTracking({ id }: { id: string }) {
   if (!order) {
     return (
       <div className="container-nsm py-16">
+        {/* A página não tinha h1 nenhum neste estado. */}
+        <h1 className="sr-only">Acompanhar pedido</h1>
         <EmptyState
           icon={PackageSearch}
           title="Pedido não encontrado"
@@ -56,6 +62,25 @@ export function OrderTracking({ id }: { id: string }) {
       </div>
     );
   }
+
+  // Só o dono (ou admin) consegue cancelar, mas isso é validado no servidor:
+  // aqui basta esconder a ação de convidados e em estados terminais.
+  const canCancel = Boolean(user) && order.status !== "Entregue" && order.status !== "Cancelado";
+
+  const handleCancel = async () => {
+    if (cancelling) return;
+    if (!window.confirm(`Cancelar o pedido ${order.id}? O stock será reposto.`)) return;
+    setCancelling(true);
+    try {
+      setOrder(await cancelOrder(order.id));
+    } catch (err) {
+      window.alert(
+        err instanceof ApiError ? err.message : "Não foi possível cancelar o pedido.",
+      );
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   return (
     <div className="container-nsm max-w-3xl py-6">
@@ -74,11 +99,11 @@ export function OrderTracking({ id }: { id: string }) {
         </button>
       </div>
 
-      <div className="mt-6 rounded-2xl border border-slate-100 bg-white p-5">
+      <div className="mt-6 rounded-2xl border border-slate-100 bg-surface p-5">
         <StatusTimeline current={order.status} />
       </div>
 
-      <div className="mt-6 rounded-2xl border border-slate-100 bg-white p-5">
+      <div className="mt-6 rounded-2xl border border-slate-100 bg-surface p-5">
         <ul className="space-y-3">
           {order.items.map((i) => (
             <li key={i.productId + (i.variant ?? "")} className="flex items-center justify-between gap-3">
@@ -100,14 +125,14 @@ export function OrderTracking({ id }: { id: string }) {
             <dd className="font-semibold text-slate-800 tabular-nums">{format(order.subtotal)}</dd>
           </div>
           {order.discount > 0 && (
-            <div className="flex justify-between text-emerald-600">
+            <div className="flex justify-between text-emerald-700">
               <dt>Desconto</dt>
               <dd className="font-semibold">-{format(order.discount)}</dd>
             </div>
           )}
           <div className="flex justify-between">
             <dt className="text-slate-500">Envio</dt>
-            <dd className={order.shipping === 0 ? "font-semibold text-emerald-600" : "font-semibold text-slate-800"}>
+            <dd className={order.shipping === 0 ? "font-semibold text-emerald-700" : "font-semibold text-slate-800"}>
               {order.shipping === 0 ? "Grátis" : format(order.shipping)}
             </dd>
           </div>
@@ -120,7 +145,7 @@ export function OrderTracking({ id }: { id: string }) {
         </dl>
       </div>
 
-      <div className="mt-6 rounded-2xl border border-slate-100 bg-white p-5 text-sm">
+      <div className="mt-6 rounded-2xl border border-slate-100 bg-surface p-5 text-sm">
         <p className="flex items-center gap-2 font-bold text-slate-900">
           <MapPin className="size-4 text-primary-600" /> Entrega para
         </p>
@@ -140,6 +165,11 @@ export function OrderTracking({ id }: { id: string }) {
         <Button href="/configuracoes" variant="secondary">
           Ir para as definições
         </Button>
+        {canCancel && (
+          <Button variant="outline" loading={cancelling} onClick={() => void handleCancel()}>
+            <XCircle className="size-4" /> Cancelar pedido
+          </Button>
+        )}
       </div>
     </div>
   );

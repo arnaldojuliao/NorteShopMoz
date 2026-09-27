@@ -2,6 +2,8 @@ package mz.norteshopmoz.api.web;
 
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import mz.norteshopmoz.api.config.JwtCookieService;
+import mz.norteshopmoz.api.security.ClientIpResolver;
 import mz.norteshopmoz.api.security.UserPrincipal;
 import mz.norteshopmoz.api.service.AuthService;
 import mz.norteshopmoz.api.web.dto.ApiResponse;
@@ -14,6 +16,7 @@ import mz.norteshopmoz.api.web.dto.AuthDtos.ResetPasswordRequest;
 import mz.norteshopmoz.api.web.dto.AuthDtos.SocialLoginRequest;
 import mz.norteshopmoz.api.web.dto.AuthDtos.UpdateAvatarRequest;
 import mz.norteshopmoz.api.web.dto.AuthDtos.UserDto;
+import mz.norteshopmoz.api.web.dto.AuthDtos.VerifyEmailCodeRequest;
 import mz.norteshopmoz.api.web.dto.AuthDtos.VerifyEmailRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -34,9 +37,34 @@ import java.util.Map;
 public class AuthController {
 
     private final AuthService authService;
+    private final JwtCookieService jwtCookieService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, JwtCookieService jwtCookieService) {
         this.authService = authService;
+        this.jwtCookieService = jwtCookieService;
+    }
+
+    /**
+     * Devolve um CSRF token utilizável como header {@code X-CSRF-Token}.
+     *
+     * <p>Existe porque o cookie {@code nsm_csrf} é host-only: quando a API está
+     * num subdomínio, o JavaScript do frontend não o consegue ler e o header
+     * seguia vazio (403 em todos os pedidos autenticados que alteram estado).
+     * Reutiliza o cookie da sessão; se não existir, gera um novo.</p>
+     *
+     * <p>Não enfraquece o CSRF: o valor é imprevisível e o <em>atacante</em> não
+     * consegue lê-lo — um pedido cross-origin é bloqueado pelo CORS (a origem
+     * dele não está em {@code CORS_ALLOWED_ORIGINS}) e um formulário HTML simples
+     * não consegue definir headers personalizados.</p>
+     */
+    @GetMapping("/csrf")
+    public ResponseEntity<?> csrf(jakarta.servlet.http.HttpServletRequest request,
+            HttpServletResponse response) {
+        String token = jwtCookieService.getCsrfToken(request).orElse(null);
+        if (token == null || token.isBlank()) {
+            token = jwtCookieService.issueCsrfToken(response);
+        }
+        return ResponseEntity.ok(ApiResponse.data(Map.of("csrfToken", token)));
     }
 
     @PostMapping("/register")
@@ -59,16 +87,14 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.data(authResponse));
     }
 
+    /**
+     * IP do cliente resolvido de forma segura: só confia em
+     * {@code X-Forwarded-For}/{@code X-Real-IP} quando a ligação direta vem de um
+     * proxy fidedigno, e usa o último elemento do XFF (o único acrescentado pelo
+     * proxy). Alimenta o bloqueio por brute-force e os logs de auditoria.
+     */
     private String getClientIp(jakarta.servlet.http.HttpServletRequest request) {
-        String xf = request.getHeader("X-Forwarded-For");
-        if (xf != null && !xf.isBlank()) {
-            return xf.split(",")[0].trim();
-        }
-        String xr = request.getHeader("X-Real-IP");
-        if (xr != null && !xr.isBlank()) {
-            return xr;
-        }
-        return request.getRemoteAddr();
+        return ClientIpResolver.resolve(request);
     }
 
     /**
@@ -128,6 +154,16 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.data(authService.verifyEmail(request.token())));
     }
 
+    /**
+     * Confirma o email com o código de 6 dígitos recebido no email (autenticado —
+     * o utilizador cola-o na página de configurações da conta).
+     */
+    @PostMapping("/verify-email-code")
+    public ResponseEntity<?> verifyEmailWithCode(@AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody VerifyEmailCodeRequest request) {
+        return ResponseEntity.ok(ApiResponse.data(authService.verifyEmailWithCode(principal.id(), request.code())));
+    }
+
     /** Reenvia o email de verificação (autenticado, conta não verificada). */
     @PostMapping("/resend-verification")
     public ResponseEntity<?> resendVerification(@AuthenticationPrincipal UserPrincipal principal) {
@@ -140,7 +176,7 @@ public class AuthController {
             HttpServletResponse response, jakarta.servlet.http.HttpServletRequest httpRequest) {
         String clientIp = getClientIp(httpRequest);
         String userAgent = httpRequest.getHeader("User-Agent");
-        authService.logout(principal.id(), response, clientIp, userAgent);
+        authService.logout(principal.id(), principal.sessionId(), response, clientIp, userAgent);
         return ResponseEntity.ok(ApiResponse.data(Map.of(
                 "message", "Sessão terminada em todos os dispositivos.")));
     }

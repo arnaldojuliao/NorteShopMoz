@@ -4,14 +4,14 @@ import { InfoPage } from "@/components/layout/InfoPage";
 export const metadata: Metadata = {
   title: "Sobre nós",
   description:
-    "Conheça a NorteShop (NS): a loja online moçambicana de compras simples, seguras e acessíveis.",
+    "Conheça a NorteShopMoz (NS): a loja online moçambicana de compras simples, seguras e acessíveis.",
 };
 
 export default function SobrePage() {
   return (
     <InfoPage
       crumb="Sobre nós"
-      title="Sobre a NorteShop"
+      title="Sobre a NorteShopMoz"
       subtitle="Compras simples, seguras e acessíveis para todo Moçambique."
       updatedAt="Agosto de 2026"
       sections={[
@@ -20,7 +20,7 @@ export default function SobrePage() {
           body: (
             <>
               <p>
-                A <strong>NorteShop (NS)</strong> nasceu com uma missão clara: levar o
+                A <strong>NorteShopMoz (NS)</strong> nasceu com uma missão clara: levar o
                 melhor do comércio online a todos os moçambicanos, da capital Maputo até às
                 províncias mais distantes como Niassa e Cabo Delgado.
               </p>

@@ -1,7 +1,7 @@
 import type { Category } from "@/lib/types";
 
 /**
- * Categorias da NorteShop.
+ * Categorias da NorteShopMoz.
  * `image` usa fotos reais (Unsplash CDN) — trocável pela API quando o
  * backend Spring Boot estiver disponível.
  */
@@ -61,30 +61,6 @@ export const categories: Category[] = [
     image:
       "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=70",
     description: "Relógios, óculos, malas e gadgets.",
-  },
-  {
-    slug: "desporto",
-    name: "Desporto",
-    emoji: "⚽",
-    image:
-      "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=800&q=70",
-    description: "Fitness, treino e equipamento.",
-  },
-  {
-    slug: "automovel",
-    name: "Automóvel",
-    emoji: "🚗",
-    image:
-      "https://images.unsplash.com/photo-1489824904134-891ab64532f1?auto=format&fit=crop&w=800&q=70",
-    description: "Acessórios e tecnologia para o carro.",
-  },
-  {
-    slug: "outros",
-    name: "Outros",
-    emoji: "🎁",
-    image:
-      "https://images.unsplash.com/photo-1513885535751-8b9238bd345a?auto=format&fit=crop&w=800&q=70",
-    description: "Brinquedos, bebé, pets e presentes.",
   },
 ];
 

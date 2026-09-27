@@ -22,7 +22,8 @@ export function ProductListing({ products }: { products: Product[] }) {
   const priceCaps = useMemo(() => {
     const prices = products.map((p) => p.price).sort((a, b) => a - b);
     const cap = Math.ceil((prices[prices.length - 1] ?? 50000) / 5000) * 5000;
-    return cap;
+    // Evita duplicar um valor já presente nas opções fixas (key duplicada).
+    return [1000, 2500, 5000, 10000, 20000].includes(cap) ? 0 : cap;
   }, [products]);
 
   const filtered = useMemo(() => {
@@ -52,14 +53,14 @@ export function ProductListing({ products }: { products: Product[] }) {
         title="Nenhum produto encontrado"
         description="Tente outra pesquisa ou explore as categorias da loja."
         actionLabel="Ver todos os produtos"
-        actionHref="/procurar"
+        actionHref="/explore"
       />
     );
   }
 
   return (
     <div>
-      <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-slate-100 bg-white p-3.5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-slate-100 bg-surface p-3.5 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-slate-500">
           <strong className="font-semibold text-slate-800">{filtered.length}</strong>{" "}
           {filtered.length === 1 ? "produto" : "produtos"}
@@ -71,10 +72,10 @@ export function ProductListing({ products }: { products: Product[] }) {
               id="max-price"
               value={maxPrice}
               onChange={(e) => setMaxPrice(Number(e.target.value))}
-              className="h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-sm text-slate-700 focus:border-primary-500 focus:outline-none"
+              className="h-9 rounded-lg border border-slate-200 bg-surface px-2.5 text-sm text-slate-700 focus:border-primary-500 focus:outline-none"
             >
               <option value={0}>Qualquer preço</option>
-              {[1000, 2500, 5000, 10000, 20000, priceCaps].map((v) => (
+              {[1000, 2500, 5000, 10000, 20000, ...(priceCaps ? [priceCaps] : [])].map((v) => (
                 <option key={v} value={v}>
                   {v.toLocaleString("pt-MZ").replace(/\s/g, ".")} MT
                 </option>

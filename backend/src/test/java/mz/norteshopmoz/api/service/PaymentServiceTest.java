@@ -1,5 +1,6 @@
 package mz.norteshopmoz.api.service;
 
+import java.math.BigDecimal;
 import mz.norteshopmoz.api.exception.ApiException;
 import mz.norteshopmoz.api.web.dto.OrderRequest;
 import org.junit.jupiter.api.Test;
@@ -7,6 +8,7 @@ import org.springframework.beans.factory.ObjectProvider;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -27,7 +29,7 @@ class PaymentServiceTest {
         return mock;
     }
 
-    private final PaymentService service = new PaymentService(provider(null));
+    private final PaymentService service = new PaymentService(provider(null), 8, 10);
 
     @Test
     void resolve_acceptsLabelAndAliases_caseInsensitive() {
@@ -42,11 +44,11 @@ class PaymentServiceTest {
     @Test
     void authorize_offlineMethod_doesNotTouchGateway() {
         PaymentGateway gateway = mock(PaymentGateway.class);
-        PaymentService withGateway = new PaymentService(provider(gateway));
+        PaymentService withGateway = new PaymentService(provider(gateway), 8, 10);
         PaymentService.PaymentMethodInfo cod = service.resolve("cod").orElseThrow();
 
-        assertThat(withGateway.authorize(cod, null)).isNull();
-        verify(gateway, never()).charge(anyString(), anyString(), anyString());
+        assertThat(withGateway.authorize(cod, null, BigDecimal.TEN)).isNull();
+        verify(gateway, never()).charge(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -54,7 +56,7 @@ class PaymentServiceTest {
         PaymentService.PaymentMethodInfo mpesa = service.resolve("mpesa").orElseThrow();
         OrderRequest.PaymentInfoRequest info = new OrderRequest.PaymentInfoRequest("841234567", null);
 
-        assertThatThrownBy(() -> service.authorize(mpesa, info))
+        assertThatThrownBy(() -> service.authorize(mpesa, info, BigDecimal.TEN))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("indispon")
                 .extracting(e -> ((ApiException) e).getStatus().value())
@@ -65,24 +67,25 @@ class PaymentServiceTest {
     void authorize_onlineWithGateway_chargesAndReturnsReference() {
         PaymentGateway gateway = mock(PaymentGateway.class);
         // O serviço normaliza "+258 84 123 4567" → "258841234567".
-        when(gateway.charge("mpesa", "258841234567", null)).thenReturn("MP-TESTE12345");
-        PaymentService withGateway = new PaymentService(provider(gateway));
+        when(gateway.charge("mpesa", "258841234567", null, BigDecimal.TEN, "MZN"))
+                .thenReturn("MP-TESTE12345");
+        PaymentService withGateway = new PaymentService(provider(gateway), 8, 10);
 
         PaymentService.PaymentMethodInfo mpesa = withGateway.resolve("M-Pesa").orElseThrow();
         OrderRequest.PaymentInfoRequest info = new OrderRequest.PaymentInfoRequest("+258 84 123 4567", null);
 
-        assertThat(withGateway.authorize(mpesa, info)).isEqualTo("MP-TESTE12345");
+        assertThat(withGateway.authorize(mpesa, info, BigDecimal.TEN)).isEqualTo("MP-TESTE12345");
     }
 
     @Test
     void authorize_mpesaWithoutPhone_throws400() {
         PaymentGateway gateway = mock(PaymentGateway.class);
-        PaymentService withGateway = new PaymentService(provider(gateway));
+        PaymentService withGateway = new PaymentService(provider(gateway), 8, 10);
         PaymentService.PaymentMethodInfo mpesa = withGateway.resolve("mpesa").orElseThrow();
 
-        assertThatThrownBy(() -> withGateway.authorize(mpesa, null))
+        assertThatThrownBy(() -> withGateway.authorize(mpesa, null, BigDecimal.TEN))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("telemóvel");
-        verify(gateway, never()).charge(anyString(), anyString(), anyString());
+        verify(gateway, never()).charge(any(), any(), any(), any(), any());
     }
 }

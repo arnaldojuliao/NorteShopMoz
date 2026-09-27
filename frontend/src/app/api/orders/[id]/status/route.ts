@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { Order } from "@/lib/types";
-import { ApiError, apiPatch } from "@/lib/api";
+import { ApiError, apiPatch, forwardedAuthHeaders } from "@/lib/api";
 
 interface RouteCtx {
   params: Promise<{ id: string }>;
@@ -9,7 +9,9 @@ interface RouteCtx {
 /**
  * PATCH /api/orders/:id/status
  * Proxy same-origin para a transição de estado do pedido (admin).
- * Encaminha o header Authorization — o backend valida a role ADMIN no token.
+ * Encaminha os cookies de sessão (HttpOnly) e o CSRF — o backend valida a role
+ * ADMIN na sessão. O Authorization continua a ser aceite para clientes que
+ * usem token.
  */
 export async function PATCH(request: Request, { params }: RouteCtx) {
   const { id } = await params;
@@ -22,15 +24,15 @@ export async function PATCH(request: Request, { params }: RouteCtx) {
   if (!body.status) {
     return NextResponse.json({ error: "Campo 'status' é obrigatório" }, { status: 400 });
   }
-  const auth = request.headers.get("authorization");
-  if (!auth) {
+  const headers = forwardedAuthHeaders(request);
+  if (!headers.cookie && !headers.Authorization) {
     return NextResponse.json({ error: "Autenticação necessária" }, { status: 401 });
   }
   try {
     const { data } = await apiPatch<{ data: Order }>(
       `/api/orders/${encodeURIComponent(id)}/status`,
       { status: body.status },
-      { Authorization: auth },
+      headers,
     );
     return NextResponse.json({ data });
   } catch (err) {

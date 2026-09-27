@@ -25,11 +25,30 @@ services:
   redis:
     image: redis:7-alpine
     container_name: nsm-redis-prod
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    # noeviction (não allkeys-lru): o LRU descartava refresh tokens, chaves de
+    # idempotência e buckets de rate limit sob pressão de memória. Ver
+    # docker-compose.prod.yml para o racional completo.
+    command: redis-server --appendonly yes --maxmemory 400mb --maxmemory-policy noeviction
     ports:
       - "127.0.0.1:6380:6379"
     volumes:
       - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+  # Redis dedicado à cache (allkeys-lru) — separa a evição da cache da do
+  # estado (noeviction). Ver docker-compose.prod.yml para o racional.
+  redis-cache:
+    image: redis:7-alpine
+    container_name: nsm-redis-cache-prod
+    command: redis-server --appendonly no --maxmemory 200mb --maxmemory-policy allkeys-lru
+    ports:
+      - "127.0.0.1:6382:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -47,9 +66,18 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      CACHE_REDIS_HOST: redis-cache
+      CACHE_REDIS_PORT: 6379
       JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRATION: ${JWT_EXPIRATION:-604800}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-3600}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      # Administrador inicial: o perfil 'prod' recusa a password de
+      # desenvolvimento, por isso tem de vir do .env (ver .env.example).
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@norteshopmoz.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD em falta no .env}
+      # Sem nginx à frente neste stack (o frontend corre no host): não há proxy
+      # externo a confiar, pelo que os cabeçalhos de IP são ignorados.
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
       RESEND_API_KEY: ${RESEND_API_KEY}
       RESEND_FROM: ${RESEND_FROM:-onboarding@resend.dev}
       APP_BASE_URL: ${APP_BASE_URL}
@@ -57,6 +85,12 @@ services:
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
       PAYMENTS_MODE: ${PAYMENTS_MODE:-simulated}
+      # Teste local de produção: a loja serve http://localhost, logo os cookies
+      # com flag Secure não podem ser usados (o backend recusa arrancar com
+      # APP_COOKIE_SECURE=true e APP_BASE_URL não-https — ver
+      # ProductionConfigGuard).
+      APP_COOKIE_SECURE: ${APP_COOKIE_SECURE:-false}
+      SESSION_IDLE_TIMEOUT_MINUTES: ${SESSION_IDLE_TIMEOUT_MINUTES:-30}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       FACEBOOK_APP_ID: ${FACEBOOK_APP_ID}
       FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET}
@@ -70,9 +104,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      redis-cache:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/actuator/health"]
+      # liveness: não depende de Redis/DB (ver docker-compose.prod.yml).
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/actuator/health/liveness"]
       interval: 30s
       timeout: 10s
       retries: 3

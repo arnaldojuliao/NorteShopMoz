@@ -4,7 +4,7 @@ import { InfoPage } from "@/components/layout/InfoPage";
 
 export const metadata: Metadata = {
   title: "Política de devolução",
-  description: "Saiba como devolver um produto comprado na NorteShop.",
+  description: "Saiba como devolver um produto comprado na NorteShopMoz.",
 };
 
 export default function DevolucoesPage() {

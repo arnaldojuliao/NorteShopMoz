@@ -87,7 +87,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
             image: product.images[0],
             price: product.price,
             oldPrice: product.oldPrice,
-            qty,
+            // Item novo também é clampado ao stock (como o ramo de item já
+            // existente) — sem isto o carrinho local podia mostrar mais unidades
+            // do que as disponíveis até sincronizar com o servidor.
+            qty: product.stock > 0 ? Math.min(qty, product.stock) : qty,
             variant,
             freeShipping: product.freeShipping,
           },

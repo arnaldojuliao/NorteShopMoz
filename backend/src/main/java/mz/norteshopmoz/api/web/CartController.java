@@ -1,6 +1,8 @@
 package mz.norteshopmoz.api.web;
 
+import jakarta.validation.Valid;
 import java.util.List;
+import java.util.regex.Pattern;
 import mz.norteshopmoz.api.exception.ApiException;
 import mz.norteshopmoz.api.security.UserPrincipal;
 import mz.norteshopmoz.api.service.CartService;
@@ -26,6 +28,16 @@ public class CartController {
 
     private static final String GUEST_PREFIX = "guest:";
 
+    /**
+     * Formato aceite para o {@code X-Guest-Id}: o UUID gerado pelo dispositivo
+     * (36 caracteres) ou o fallback antigo {@code guest-…}. Limita o tamanho à
+     * coluna ({@code user_carts.user_id} tem 64 caracteres, pelo que sem isto um
+     * header longo rebentava com 500) e recusa caracteres que não têm lugar
+     * numa chave. Não é um segredo — a entropia do UUID é que impede adivinhar
+     * carrinhos alheios.
+     */
+    private static final Pattern GUEST_ID = Pattern.compile("^[A-Za-z0-9_-]{8,48}$");
+
     private final CartService cartService;
 
     public CartController(CartService cartService) {
@@ -42,7 +54,7 @@ public class CartController {
 
     @PutMapping
     public ResponseEntity<?> replaceCart(
-            @RequestBody(required = false) List<CartItemRequest> requests,
+            @Valid @RequestBody(required = false) List<CartItemRequest> requests,
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestHeader(name = "X-Guest-Id", required = false) String guestId) {
         String cartKey = resolveCartKey(principal, guestId);
@@ -58,6 +70,9 @@ public class CartController {
             return principal.id();
         }
         if (guestId != null && !guestId.isBlank()) {
+            if (!GUEST_ID.matcher(guestId).matches()) {
+                throw ApiException.badRequest("Identificador de convidado inválido");
+            }
             return GUEST_PREFIX + guestId;
         }
         throw ApiException.unauthorized("Forneça um token JWT ou X-Guest-Id");

@@ -1,63 +1,35 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   ChevronDown,
   Heart,
   LayoutGrid,
   MapPin,
-  Search,
   ShoppingCart,
   Truck,
 } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Logo } from "@/components/ui/Logo";
 import { site, telHref } from "@/config/site";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth, useAvatarSrc } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
 import { useFavorites } from "@/context/FavoritesContext";
 import { useLoginModal } from "@/context/LoginModalContext";
-import { useLocalStorageState } from "@/lib/hooks";
 import { categories } from "@/lib/data/categories";
-import type { UserProfile } from "@/lib/types";
+import { SearchCombobox } from "@/components/layout/SearchCombobox";
 import { cn } from "@/lib/utils";
 
 const secondaryLinks = [
-  { label: "Ofertas", href: "/procurar?deal=1" },
-  { label: "Novidades", href: "/procurar?new=1" },
-  { label: "Mais vendidos", href: "/procurar?bestseller=1" },
+  { label: "Ofertas", href: "/explore?deal=1" },
+  { label: "Novidades", href: "/explore?new=1" },
+  { label: "Mais vendidos", href: "/explore?bestseller=1" },
 ];
 
 function SearchForm({ className, autoFocus }: { className?: string; autoFocus?: boolean }) {
-  const router = useRouter();
-  const [q, setQ] = useState("");
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    const query = q.trim();
-    if (!query) return;
-    router.push(`/procurar?q=${encodeURIComponent(query)}`);
-    setQ("");
-  };
   return (
-    <form onSubmit={submit} role="search" className={cn("relative", className)}>
-      <input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Pesquisar produtos, marcas e mais…"
-        aria-label="Pesquisar produtos"
-        autoFocus={autoFocus}
-        className="h-11 w-full rounded-xl border border-slate-300 bg-slate-50/70 pl-4 pr-12 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-primary-500 focus:bg-white focus:ring-4 focus:ring-primary-500/15 focus:outline-none"
-      />
-      <button
-        type="submit"
-        aria-label="Pesquisar"
-        className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl bg-primary-600 text-white transition hover:bg-primary-700 active:scale-95"
-      >
-        <Search className="size-[18px]" />
-      </button>
-    </form>
+    <SearchCombobox className={cn(className)} autoFocus={autoFocus} />
   );
 }
 
@@ -74,7 +46,7 @@ function CartButton({ className }: { className?: string }) {
           className={cn("size-6 text-slate-700 transition group-hover:text-primary-700", bump > 0 && "animate-cart-pop")}
         />
         {count > 0 && (
-          <span className="absolute -right-1.5 -top-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white shadow-sm">
+          <span className="absolute -right-1.5 -top-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger px-1 text-xs font-bold text-white shadow-sm">
             {count > 99 ? "99+" : count}
           </span>
         )}
@@ -89,7 +61,12 @@ export function Header() {
   const { count: favCount } = useFavorites();
   const { openLogin } = useLoginModal();
   const [scrolled, setScrolled] = useState(false);
-  const [profile] = useLocalStorageState<UserProfile | null>("nsm:profile", null);
+  // O painel de categorias abre por CSS (`group-hover` / `group-focus-within`).
+  // Este estado existe só para o `aria-expanded` dizer a verdade a quem usa
+  // leitor de ecrã (antes ficava sempre "false").
+  const [catOpen, setCatOpen] = useState(false);
+  // Foto de perfil: do servidor quando há sessão, para cada conta ter a sua.
+  const avatarSrc = useAvatarSrc();
 
   const accountName = user?.fullName ?? null;
 
@@ -103,10 +80,11 @@ export function Header() {
   const catLinks = secondaryLinks;
 
   return (
-    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/85">
-      {/* Barra de anúncio */}
-      <div className="hidden bg-navy-900 text-white md:block">
-        <div className="container-nsm flex h-9 items-center justify-center gap-6 text-xs font-medium sm:justify-between">
+    <header className="sticky top-0 z-50 bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/85">
+      {/* Barra de anúncio — visível também no telemóvel (era `hidden md:block`,
+          o que escondia a mensagem de entrega nacional de quem mais a lê). */}
+      <div className="bg-navy-900 text-white">
+        <div className="container-nsm flex h-9 items-center justify-center gap-4 text-xs font-medium sm:justify-between sm:gap-6">
           <p className="flex items-center gap-1.5">
             <Truck className="size-3.5" aria-hidden /> Entrega para todo Moçambique
           </p>
@@ -114,7 +92,9 @@ export function Header() {
             <MapPin className="size-3.5" aria-hidden /> Pagamento na entrega disponível
           </p>
           <p className="hidden items-center gap-1.5 md:flex">
-            <a href={telHref} className="transition hover:text-white">Suporte: {site.phoneDisplay}</a>
+            <a href={telHref} className="text-white/80 transition hover:text-white">
+              Suporte: {site.phoneDisplay}
+            </a>
           </p>
         </div>
       </div>
@@ -137,14 +117,9 @@ export function Header() {
               aria-label={user.role === "ADMIN" ? "Painel de administração" : "Definições"}
               className="hidden items-center gap-2 rounded-xl px-2.5 py-2 transition hover:bg-slate-100 md:flex"
             >
-              <Avatar
-                src={user.avatar ?? profile?.avatar}
-                name={user.fullName}
-                className="size-8"
-                textClassName="text-xs"
-              />
+              <Avatar src={avatarSrc} name={user.fullName} className="size-8" textClassName="text-xs" />
               <span className="text-left leading-tight">
-                <span className="block text-[11px] text-slate-400">
+                <span className="block text-xs text-slate-400">
                   {user.role === "ADMIN" ? "Painel" : accountName ? "Bem-vindo," : "Conta"}
                 </span>
                 <span className="block max-w-[9rem] truncate text-sm font-semibold text-slate-800">
@@ -159,14 +134,9 @@ export function Header() {
               aria-label="Entrar ou registar-se"
               className="hidden items-center gap-2 rounded-xl px-2.5 py-2 transition hover:bg-slate-100 md:flex"
             >
-              <Avatar
-                src={profile?.avatar}
-                name={undefined}
-                className="size-8"
-                textClassName="text-xs"
-              />
+              <Avatar src={avatarSrc} name={undefined} className="size-8" textClassName="text-xs" />
               <span className="text-left leading-tight">
-                <span className="block text-[11px] text-slate-400">Conta</span>
+                <span className="block text-xs text-slate-400">Conta</span>
                 <span className="block max-w-[9rem] truncate text-sm font-semibold text-slate-800">
                   Entrar / Registar-se
                 </span>
@@ -181,7 +151,7 @@ export function Header() {
           >
             <Heart className="size-6" />
             {favCount > 0 && (
-              <span className="absolute right-0.5 top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary-600 px-1 text-[10px] font-bold text-white">
+              <span className="absolute right-0.5 top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-brand px-1 text-xs font-bold text-white">
                 {favCount}
               </span>
             )}
@@ -202,17 +172,23 @@ export function Header() {
         className="hidden border-t border-slate-100 lg:block"
       >
         <div className="container-nsm flex items-center gap-1 py-0">
-          <div className="group relative">
+          <div
+            className="group relative"
+            onMouseEnter={() => setCatOpen(true)}
+            onMouseLeave={() => setCatOpen(false)}
+            onFocus={() => setCatOpen(true)}
+            onBlur={() => setCatOpen(false)}
+          >
             <button
               aria-haspopup="true"
-              aria-expanded="false"
-              className="flex h-9 items-center gap-2 rounded-lg bg-primary-600 px-3.5 text-sm font-semibold text-white shadow-sm shadow-primary-600/25 transition hover:bg-primary-700"
+              aria-expanded={catOpen}
+              className="flex h-9 items-center gap-2 rounded-lg bg-brand px-3.5 text-sm font-semibold text-white shadow-sm shadow-brand/25 transition hover:bg-brand-strong"
             >
               <LayoutGrid className="size-4" />
               Todas as categorias
               <ChevronDown className="size-3.5 opacity-80 transition-transform group-hover:rotate-180" />
             </button>
-            <div className="invisible absolute left-0 top-full z-50 grid w-72 grid-cols-1 gap-0 overflow-hidden rounded-2xl border border-slate-100 bg-white p-2 opacity-0 shadow-card transition-all duration-200 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
+            <div className="invisible absolute left-0 top-full z-50 grid w-72 grid-cols-1 gap-0 overflow-hidden rounded-2xl border border-slate-100 bg-surface p-2 opacity-0 shadow-card transition-all duration-200 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
               {categories.map((c) => (
                 <Link
                   key={c.slug}

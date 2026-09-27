@@ -1,13 +1,16 @@
 import type { Order, OrderStatus } from "@/lib/types";
-import { apiGet, apiPost, apiPatch, ApiError } from "@/lib/api";
+import { apiDelete, apiGet, apiPost, apiPatch, ApiError } from "@/lib/api";
 
 /**
  * Camada de pedidos — liga o checkout e a página de conta ao backend
  * Spring Boot (POST /api/orders público — guest checkout; GET /api/orders/{id}
  * público por ID de alta entropia para acompanhar o estado sem conta).
  *
- * Fallback offline: se a API estiver indisponível, o pedido é criado
- * localmente (localStorage) com o mesmo formato — a loja nunca bloqueia.
+ * Sem fallback fictício: se a API estiver indisponível, a submissão levanta erro
+ * e o checkout mostra-o ao cliente. Antes criava-se um pedido local
+ * ("NSM-<timestamp>") com o mesmo formato e o cliente via "Pedido registado com
+ * sucesso" sem nada ter chegado à loja — a encomenda nunca era preparada e o
+ * cliente ficava com um número de rastreio que não existe no servidor.
  *
  * NOTA: Tokens JWT agora estão em cookies HttpOnly (nsm_at, nsm_rt).
  * As chamadas usam credentials: 'include' (via api.ts) — não precisamos
@@ -47,6 +50,23 @@ export function clearUserOrders(userId?: string): void {
 
 // Deprecated: manter para compatibilidade com código antigo
 export const ORDERS_KEY = "nsm:orders";
+
+/**
+ * Há marca de sessão guardada neste navegador (`nsm:user`)?
+ *
+ * Serve para distinguir "a sessão expirou" de "visitante anónimo": o arranque
+ * termina com 401 nos dois casos, mas só no primeiro se pode expulsar o
+ * utilizador da página e limpar o perfil local (que preenche o checkout de
+ * convidado).
+ */
+export function hasStoredUser(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(USER_KEY) != null;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Guarda dados do utilizador no localStorage (usado pelo AuthContext).
@@ -114,13 +134,20 @@ export interface OrderPayload {
     phone?: string;
     cardLast4?: string;
   };
+  /** Código do cupão aplicado no checkout — o servidor revalida e recalcula. */
+  couponCode?: string;
 }
 
 /**
- * Cria o pedido no backend (guest checkout).
- * - Sucesso → pedido real (totais recalculados no servidor);
+ * Cria o pedido no backend (guest checkout). A fonte de verdade é sempre o
+ * servidor: só há pedido quando a API responde, e os totais são recalculados lá.
+ *
+ * - Sucesso → pedido real;
  * - Erro de validação do backend (ApiError, ex.: província inválida) → re-lança;
- * - Falha de rede/timeout → fallback offline com pedido local (totais do cliente).
+ * - Falha de rede/timeout → re-lança um ApiError 503 explicativo.
+ *
+ * Nunca inventa um pedido: um "pedido fantasma" dava ao cliente a ilusão de
+ * compra (ecrã de sucesso + rastreio) sem nada chegar à loja.
  *
  * `idempotencyKey` (opcional): chave única por tentativa de finalização — se o
  * mesmo pedido for enviado de novo (retry após falha de rede, duplo clique), o
@@ -131,39 +158,44 @@ export async function submitOrder(
   idempotencyKey?: string,
   extraHeaders?: Record<string, string>,
 ): Promise<Order> {
+  const headers: Record<string, string> = { ...extraHeaders };
+  // X-Guest-Id para carrinho de convidado
+  const guestId = getGuestId();
+  if (guestId) headers["X-Guest-Id"] = guestId;
+  if (idempotencyKey && !headers["Idempotency-Key"]) headers["Idempotency-Key"] = idempotencyKey;
   try {
-    const headers: Record<string, string> = { ...extraHeaders };
-    // X-Guest-Id para carrinho de convidado
-    const guestId = getGuestId();
-    if (guestId) headers["X-Guest-Id"] = guestId;
-    if (idempotencyKey && !headers["Idempotency-Key"]) headers["Idempotency-Key"] = idempotencyKey;
     // Credentials: 'include' é adicionado automaticamente por apiPost
     const { data } = await apiPost<{ data: Order }>("/api/orders", payload, headers);
     return data;
   } catch (err) {
     if (err instanceof ApiError) throw err;
-    // Fallback offline — pedido local (totais calculados no cliente).
-    const order: Order = {
-      id: `NSM-${Date.now().toString().slice(-8)}`,
-      date: new Date().toISOString(),
-      items: payload.items,
-      subtotal: payload.subtotal,
-      shipping: payload.shipping,
-      discount: payload.discount,
-      total: payload.total,
-      status: "Pedido recebido" as OrderStatus,
-      address: payload.address,
-      paymentMethod: payload.paymentMethod,
-    };
-    return order;
+    // Falha de rede/timeout: propaga em vez de fabricar um pedido. A mensagem é
+    // a mesma do checkout para o cliente saber que pode tentar de novo (a
+    // Idempotency-Key evita duplicar se a primeira tentativa chegou a passar).
+    throw new ApiError(
+      503,
+      "Não foi possível registar o pedido — verifique a ligação e tente novamente.",
+    );
   }
 }
 
+/**
+ * Prova de contacto para pedidos de convidado: o backend exige o email (ou
+ * telefone) do checkout, além do ID, para não expor dados pessoais a quem só
+ * tenha o link. Devolve a query string já pronta (vazia se não houver email).
+ */
+function contactQuery(email?: string | null): string {
+  const trimmed = email?.trim();
+  return trimmed ? `?email=${encodeURIComponent(trimmed)}` : "";
+}
+
 /** Estado real do pedido (lookup público por ID). null se indisponível/inexistente. */
-export async function fetchOrderStatus(id: string): Promise<Order | null> {
+export async function fetchOrderStatus(id: string, email?: string | null): Promise<Order | null> {
   try {
     // TTL curto (60s) para o estado refletir atualizações do backend com frescor.
-    const { data } = await apiGet<{ data: Order }>(`/api/orders/${encodeURIComponent(id)}`);
+    const { data } = await apiGet<{ data: Order }>(
+      `/api/orders/${encodeURIComponent(id)}${contactQuery(email)}`,
+    );
     return data;
   } catch {
     return null;
@@ -173,12 +205,12 @@ export async function fetchOrderStatus(id: string): Promise<Order | null> {
 /**
  * Pedido para a página pública de acompanhamento (link do email).
  * Com sessão ativa (cookie HttpOnly), o backend associa à conta;
- * sem sessão, o lookup público por ID cobre os guest checkouts.
+ * sem sessão, o lookup por ID + email cobre os guest checkouts.
  */
-export async function fetchOrderTracking(id: string): Promise<Order | null> {
+export async function fetchOrderTracking(id: string, email?: string | null): Promise<Order | null> {
   try {
     const { data } = await apiGet<{ data: Order }>(
-      `/api/orders/${encodeURIComponent(id)}`,
+      `/api/orders/${encodeURIComponent(id)}${contactQuery(email)}`,
       60_000,
       false,
     );
@@ -203,21 +235,92 @@ export async function fetchMyOrders(): Promise<Order[] | null> {
 }
 
 /**
- * Lista todos os pedidos (admin) via proxy same-origin com cookie HttpOnly.
- * Lança ApiError (401/403/400) — a página de admin decide como reagir.
+ * Tamanho da página da listagem de pedidos do painel. Tem de estar alinhado com
+ * o teto do servidor (`MAX_PAGE_SIZE` em OrderService): pedir mais devolve o
+ * teto, não um erro, mas o pager tem de saber o tamanho efetivo (`size`).
  */
-export async function listAdminOrders(status?: OrderStatus | ""): Promise<Order[]> {
-  const query = status ? `?status=${encodeURIComponent(status)}` : "";
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8081"}/api/admin/orders${query}`, {
-    headers: { "Content-Type": "application/json" },
-    cache: "no-store",
-    credentials: "include",
-  });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new ApiError(res.status, `[${res.status}] ${body?.error ?? "Erro ao carregar pedidos"}`);
-  }
-  const { data } = (await res.json()) as { data: Order[] };
+export const ADMIN_ORDERS_PAGE_SIZE = 20;
+
+/** Página de pedidos do painel admin (contrato de GET /api/orders/admin/all). */
+export interface AdminOrdersPage {
+  items: Order[];
+  /** Índice da página (base 0). */
+  page: number;
+  /** Tamanho da página efetivamente aplicado pelo servidor. */
+  size: number;
+  totalItems: number;
+  totalPages: number;
+  hasNext: boolean;
+  /** Total de pedidos por estado — os contadores dos filtros, não os da página. */
+  statusCounts: Record<string, number>;
+}
+
+/**
+ * Página de pedidos (admin) via proxy same-origin com cookie HttpOnly.
+ *
+ * A listagem é paginada no servidor (filtro de estado, ordenação e limite em
+ * SQL): antes trazia o histórico completo, com os itens de cada pedido. Lança
+ * ApiError (401/403/400) — a página de admin decide como reagir.
+ */
+export async function listAdminOrders(
+  status?: OrderStatus | "",
+  page = 0,
+  size: number = ADMIN_ORDERS_PAGE_SIZE,
+): Promise<AdminOrdersPage> {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  params.set("page", String(page));
+  params.set("size", String(size));
+  const { data } = await apiGet<{ data: AdminOrdersPage }>(
+    `/api/orders/admin/all?${params.toString()}`,
+    0,
+    true,
+  );
+  return data;
+}
+
+/** Produto mais vendido na lista das estatísticas (receita agregada no servidor). */
+export interface SalesStatsTopProduct {
+  productId: string;
+  /** Nome gravado no item no momento da compra (legível, sem resolver ids). */
+  name?: string;
+  revenue: number;
+}
+
+/** Um dia da série de vendas (data ISO `YYYY-MM-DD`, pedidos e receita do dia). */
+export interface SalesStatsDay {
+  date: string;
+  orders: number;
+  revenue: number;
+}
+
+/**
+ * Estatísticas de vendas do painel admin. Todos os totais são agregados no
+ * SERVIDOR (SQL) — o cliente recebe só os números, nunca os pedidos.
+ */
+export interface SalesStats {
+  totalOrders: number;
+  deliveredOrders: number;
+  cancelledOrders: number;
+  inProgressOrders: number;
+  revenue: number;
+  shippingCollected: number;
+  discountsGiven: number;
+  cancelledValue: number;
+  avgOrderValue: number;
+  topProducts: SalesStatsTopProduct[];
+  days: SalesStatsDay[];
+}
+
+/**
+ * Estatísticas de vendas (admin) via GET /api/orders/admin/stats.
+ *
+ * Sem cache e sem fallback: dados internos que têm de vir sempre frescos (e
+ * nunca inventados). Lança ApiError — a página decide como reagir (401 →
+ * terminar sessão, 403 → sem permissões).
+ */
+export async function fetchSalesStats(): Promise<SalesStats> {
+  const { data } = await apiGet<{ data: SalesStats }>("/api/orders/admin/stats", 0, true);
   return data;
 }
 
@@ -230,6 +333,16 @@ export async function advanceOrderStatus(id: string, nextStatus: OrderStatus): P
     `/api/orders/${encodeURIComponent(id)}/status`,
     { status: nextStatus },
   );
+  return res.data;
+}
+
+/**
+ * Cancela um pedido (DELETE /api/orders/{id}) — dono do pedido ou admin.
+ * O servidor repõe o stock e envia o email de cancelamento; re-lança ApiError
+ * (404 pedido inexistente, 403 sem permissões, 400 já entregue/cancelado).
+ */
+export async function cancelOrder(id: string): Promise<Order> {
+  const res = await apiDelete<{ data: Order }>(`/api/orders/${encodeURIComponent(id)}`);
   return res.data;
 }
 

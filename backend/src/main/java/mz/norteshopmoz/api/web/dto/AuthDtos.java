@@ -45,6 +45,11 @@ public final class AuthDtos {
     public record VerifyEmailRequest(
             @NotBlank(message = "Token é obrigatório") String token) {}
 
+    /** Confirmação de email via código de 6 dígitos recebido no email. */
+    public record VerifyEmailCodeRequest(
+            @NotBlank(message = "Código é obrigatório")
+            @Pattern(regexp = "\\d{6}", message = "O código tem 6 dígitos") String code) {}
+
     /** Pedido de recuperação de palavra-passe (público — não revela se a conta existe). */
     public record ForgotPasswordRequest(
             @NotBlank(message = "Email é obrigatório") @Email(message = "Email inválido") @Size(max = 255) String email) {}
@@ -59,7 +64,23 @@ public final class AuthDtos {
     public record RefreshTokenRequest(
             String refreshToken) {}
 
-    public record AuthResponse(String token, String refreshToken, UserDto user) {}
+    /**
+     * Resposta de autenticação.
+     *
+     * <p><strong>Nunca transporta os tokens JWT.</strong> O access e o refresh
+     * token viajam apenas em cookies HttpOnly — devolvê-los no corpo anulava o
+     * propósito desses cookies: qualquer XSS, extensão ou registo de rede
+     * passava a ter uma cópia do refresh token (que vive 30 dias).</p>
+     *
+     * <p>{@code csrfToken} vai no corpo de propósito: o cookie {@code nsm_csrf} é
+     * legível por JavaScript apenas quando o frontend está no mesmo domínio do
+     * cookie. Com a API num subdomínio, o frontend obtém o token daqui (ou de
+     * {@code GET /api/auth/csrf}) em vez de o ler do cookie.</p>
+     *
+     * <p>{@code expiresInSeconds} é a validade do access token (para o frontend
+     * agendar a renovação) — é um número, não um segredo.</p>
+     */
+    public record AuthResponse(UserDto user, String csrfToken, long expiresInSeconds) {}
 
     /** Preferências de notificação do utilizador (toggles em /configuracoes). */
     public record NotificationPrefsDto(

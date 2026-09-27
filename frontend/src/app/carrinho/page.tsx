@@ -68,7 +68,7 @@ export default function CartPage() {
               <div
                 key={removingKey}
                 className={cn(
-                  "flex gap-4 rounded-2xl border border-slate-100 bg-white p-3.5 transition-all duration-300 sm:p-4",
+                  "flex gap-4 rounded-2xl border border-slate-100 bg-surface p-3.5 transition-all duration-300 sm:p-4",
                   removing === removingKey && "scale-[0.98] opacity-40",
                 )}
               >
@@ -137,14 +137,15 @@ export default function CartPage() {
 
           <button
             onClick={clear}
-            className="text-sm font-medium text-slate-400 underline-offset-2 transition hover:text-red-600 hover:underline"
+            // `-my-2 py-2`: o alvo tinha 20px de altura (mínimo AA: 24).
+            className="-my-2 py-2 text-sm font-medium text-slate-400 underline-offset-2 transition hover:text-red-600 hover:underline"
           >
             Esvaziar carrinho
           </button>
         </div>
 
         {/* Resumo */}
-        <aside className="h-fit rounded-2xl border border-slate-100 bg-white p-5 lg:sticky lg:top-32">
+        <aside className="h-fit rounded-2xl border border-slate-100 bg-surface p-5 lg:sticky lg:top-32">
           <h2 className="font-display text-lg font-bold text-slate-900">Resumo do pedido</h2>
           <dl className="mt-4 space-y-3 text-sm">
             <div className="flex justify-between">
@@ -152,7 +153,7 @@ export default function CartPage() {
               <dd className="font-semibold text-slate-800 tabular-nums">{format(subtotal)}</dd>
             </div>
             {savings > 0 && (
-              <div className="flex justify-between text-emerald-600">
+              <div className="flex justify-between text-emerald-700">
                 <dt>Desconto</dt>
                 <dd className="font-semibold">-{format(savings)}</dd>
               </div>
@@ -161,7 +162,7 @@ export default function CartPage() {
               <dt className="flex items-center gap-1.5 text-slate-500">
                 <Truck className="size-4 text-primary-500" /> Entrega
               </dt>
-              <dd className={cn("font-semibold", shippingCost === 0 ? "text-emerald-600" : "text-slate-800")}>
+              <dd className={cn("font-semibold", shippingCost === 0 ? "text-emerald-700" : "text-slate-800")}>
                 {shippingCost === 0 ? "Grátis" : format(shippingCost)}
               </dd>
             </div>

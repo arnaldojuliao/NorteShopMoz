@@ -50,3 +50,10 @@ backend/.gradle/
 # uploads e logs
 uploads/
 *.log
+
+# certificados do certbot e backups locais (nunca commitar)
+certbot/
+backups/
+
+# conf do nginx gerada pelo deploy.sh a partir de nginx/nginx.conf.template
+nginx/.generated/

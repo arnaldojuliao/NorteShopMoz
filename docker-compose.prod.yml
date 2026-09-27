@@ -7,10 +7,40 @@
 #
 # Prerequisites:
 # 1. .env.prod file with all production secrets
-# 2. NEXT_PUBLIC_API_URL deve apontar para este servidor SEM porta 8080
-#    (a API é servida pelo nginx em http://SEU_IP/api/...)
-# 3. Quando houver domínio: configurar DNS, trocar o mount do conf.d pelo
-#    nginx/nginx.conf (HTTPS), publicar 443 e emitir certs com certbot.
+# 2. NEXT_PUBLIC_API_URL deve apontar para o host público (a API é servida pelo
+#    nginx em /api/...)
+# 3. TLS: este ficheiro monta POR OMISSÃO a conf HTTP (nginx/conf.d/
+#    norteshopmoz.conf, só `listen 80`), adequada a um acesso por IP enquanto não
+#    houver domínio. Com domínio + certificados do certbot, use o deploy.sh:
+#
+#      APP_DOMAIN=loja.exemplo.com ./deploy.sh prod
+#
+#    O deploy.sh valida que os certificados existem, renderiza
+#    nginx/nginx.conf.template (trocando ${APP_DOMAIN}) para
+#    nginx/.generated/default.conf e define NGINX_CONF a apontar para lá. Os
+#    volumes dos certificados já estão montados abaixo (CERTBOT_CERTS /
+#    CERTBOT_WWW) — antes estavam comentados e o nginx arrancava sem eles.
+#
+#    Sem isso o domínio não responde em HTTPS e os cookies com flag Secure
+#    (APP_COOKIE_SECURE=true, o valor por omissão) são descartados pelo browser —
+#    o login falha em silêncio. O backend recusa o arranque nessa combinação
+#    (ver ProductionConfigGuard).
+
+# ─── Limite de logs de TODOS os contentores ─────────────────────────────────
+# O driver `json-file` do Docker NÃO tem limite por omissão: cada contentor escreve
+# os seus logs para o disco do servidor e estes crescem indefinidamente. O nginx
+# escreve uma linha de access log POR PEDIDO, o Next.js escreve as suas e a API
+# escreve INFO de `mz.norteshopmoz`. A ~10 pedidos/s são ~170 MB/dia só de nginx —
+# no mesmo disco do PostgreSQL (`pgdata`) e dos backups. Quando o disco enche, o
+# Postgres deixa de conseguir escrever WAL e a loja PARA de aceitar pedidos (e não
+# "fica lenta": falha), além de o Docker começar a matar contentores.
+# Com este limite o consumo tem teto fixo (5 × 10 MB por serviço) e um incidente
+# de disco cheio deixa de ser uma questão de tempo.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
 
 services:
   # ─── PostgreSQL ────────────────────────────────────────────────────────────
@@ -21,8 +51,31 @@ services:
       POSTGRES_DB: ${DB_NAME:-norteshopmoz}
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-    ports:
-      - "127.0.0.1:5432:5432"  # Only localhost for security
+    # SEM portas publicadas no host, de propósito. O `api` chega à base de dados
+    # por `db:5432` na rede do compose (DB_URL=jdbc:postgresql://db:5432/...).
+    #
+    # Porque é que isto importa: quando o Docker não consegue programar uma porta
+    # publicada no arranque (outro processo a ocupá-la — um PostgreSQL do sistema
+    # na 5432, por exemplo) devolve
+    #   "failed to set up container networking: ... failed to bind host port ...
+    #    address already in use"
+    # e deixa o contentor A CORRER com o endpoint de rede revertido. O healthcheck
+    # corre DENTRO do contentor, por isso continua `healthy`; o `depends_on:
+    # service_healthy` passa; e o nome `db` deixa de resolver-se para a API. O
+    # resultado é a loja inteira avariada com o `docker compose ps` a mostrar tudo
+    # verde — já aconteceu com o Redis de produção (ver README, resolução de
+    # problemas). Sem portas publicadas, esta classe de falha desaparece.
+    #
+    # Precisa de acesso ao psql do host (apoio pontual)? Use um túnel, sem
+    # alterar este ficheiro:
+    #   docker compose -f docker-compose.prod.yml exec db psql -U $DB_USER -d $DB_NAME
+    # /dev/shm em Docker tem 64 MB por omissão. Os workers paralelos do
+    # PostgreSQL falham com «could not resize shared memory segment … No space
+    # left on device» — e as agregações do painel (séries diárias, top de
+    # produtos, contagens por estado) são o tipo de consulta que o planeador
+    # paraleliza. O erro só aparece quando a tabela cresce, ou seja em produção e
+    # nunca em desenvolvimento.
+    shm_size: 256mb
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -32,6 +85,7 @@ services:
       retries: 5
       start_period: 10s
     restart: unless-stopped
+    logging: *default-logging
     deploy:
       resources:
         limits:
@@ -43,9 +97,25 @@ services:
   redis:
     image: redis:7-alpine
     container_name: nsm-redis-prod
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
-    ports:
-      - "127.0.0.1:6379:6379"
+    # Autenticação obrigatória: sem `--requirepass` o Redis (que guarda cache,
+    # rate limits, tokens de refresh e idempotência) ficava aberto a qualquer
+    # processo na rede. `${REDIS_PASSWORD:?…}` falha o arranque se faltar no
+    # .env.prod, em vez de subir sem password em silêncio.
+    #
+    # Política noeviction (e não allkeys-lru): com LRU, sob pressão de memória o
+    # Redis descartava silenciosamente refresh tokens (utilizadores expulsos),
+    # chaves de idempotência (pedidos duplicados) e buckets de rate limit
+    # (proteção desligada). Todas as chaves têm TTL, pelo que o uso de memória é
+    # limitado no tempo; 400mb é folgado para cache + sessões num único VPS.
+    command: redis-server --appendonly yes --maxmemory 400mb --maxmemory-policy noeviction --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD em falta no .env.prod}
+    environment:
+      # O healthcheck autentica-se por REDISCLI_AUTH (evita password na linha
+      # de comando, visível em `docker inspect`/`ps`).
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?REDIS_PASSWORD em falta no .env.prod}
+    # SEM portas publicadas: a 6379 é a porta por omissão de qualquer Redis do
+    # sistema (`apt install redis-server`) e foi exactamente a colisão que deixou
+    # este contentor "healthy mas sem rede" em produção (21/ago). A API chega-lhe
+    # por `redis:6379` na rede do compose.
     volumes:
       - redisdata:/data
     healthcheck:
@@ -55,12 +125,41 @@ services:
       retries: 5
       start_period: 5s
     restart: unless-stopped
+    logging: *default-logging
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 640M
         reservations:
-          memory: 128M
+          memory: 256M
+
+  # ─── Redis da CACHE (instância dedicada) ───────────────────────────────────
+  # Separada do Redis de estado: aqui a cache pode evictar livremente
+  # (allkeys-lru) porque é descartável, sem nunca descartar refresh tokens,
+  # chaves de idempotência ou buckets de rate limit. Sem persistência
+  # (appendonly no) — é só cache.
+  redis-cache:
+    image: redis:7-alpine
+    container_name: nsm-redis-cache-prod
+    command: redis-server --appendonly no --maxmemory 200mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD em falta no .env.prod}
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?REDIS_PASSWORD em falta no .env.prod}
+    # SEM portas publicadas (ver o serviço `db`): a API chega-lhe por
+    # `redis-cache:6379` na rede do compose.
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 64M
 
   # ─── Backend API (Spring Boot) ─────────────────────────────────────────────
   api:
@@ -74,16 +173,37 @@ services:
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD}
 
-      # Redis
+      # Redis de ESTADO: refresh tokens, idempotência e rate limit (noeviction).
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD em falta no .env.prod}
+      # Redis de CACHE (instância dedicada, allkeys-lru). Ver redis-cache.
+      CACHE_REDIS_HOST: redis-cache
+      CACHE_REDIS_PORT: 6379
+      CACHE_REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD em falta no .env.prod}
 
       # JWT
       JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRATION: ${JWT_EXPIRATION:-604800}
+      # Access token de 1 hora; a sessão longa vive do refresh token (cookie
+      # HttpOnly, rotação). Reduzido de 7 dias: um cookie roubado valia uma
+      # semana, porque o idle timeout do servidor falha aberto se o Redis cair.
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-3600}
 
       # CORS - production domain
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+
+      # Administrador inicial. OBRIGATÓRIO: o DataSeeder recusa arrancar com o
+      # perfil 'prod' se a password for a de desenvolvimento (pública no repo).
+      # ADMIN_EMAIL tem por omissão admin@norteshopmoz.com.
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@norteshopmoz.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD em falta no .env.prod}
+
+      # Proxy inverso fidedigno para ler X-Forwarded-For/X-Real-IP (ver a secção
+      # networks: o nginx tem IP fixo). Sem isto o backend ignora os cabeçalhos
+      # — mais seguro, mas todos os clientes partilhavam um só bucket de rate
+      # limit. A lista é o IP do nginx e nada mais: quem alcance a API
+      # diretamente (127.0.0.1:8080) não consegue forjar o IP do cliente.
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-172.28.0.10}
 
       # Email (Resend)
       RESEND_API_KEY: ${RESEND_API_KEY}
@@ -94,6 +214,9 @@ services:
       CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
+      # Fallback local dos uploads (usado quando CLOUDINARY_* está vazio).
+      # Caminho fixo, montado num volume com o mesmo nome — ver volumes:.
+      UPLOAD_DIR: /app/uploads
 
       # Payments
       PAYMENTS_MODE: ${PAYMENTS_MODE:-simulated}
@@ -111,9 +234,18 @@ services:
       # Força IPv4 na JVM: sem rota IPv6 na VPS, o DNS pode devolver apenas
       # registos AAAA e chamadas externas (Resend, Google, Facebook) falham
       # com "Network is unreachable".
-      JAVA_TOOL_OPTIONS: "-Djava.net.preferIPv4Stack=true"
+      # MaxRAMPercentage: o contentor tem limite de 2G — sem isto a JVM usa 25%
+      # do limite como heap (~512 MB) e um pico do checkout (itens a processar)
+      # podia esgotar o heap muito antes da memória do contentor. 75% deixa o
+      # resto para metaspace, threads e off-heap.
+      JAVA_TOOL_OPTIONS: "-Djava.net.preferIPv4Stack=true -XX:MaxRAMPercentage=75.0"
 
       # Logging
+      # Inatividade máxima de uma sessão (minutos), imposta pelo SERVIDOR.
+      # Deve ser >= NEXT_PUBLIC_SESSION_TIMEOUT_MINUTES (30) para o cliente não
+      # expirar a sessão antes do servidor.
+      SESSION_IDLE_TIMEOUT_MINUTES: ${SESSION_IDLE_TIMEOUT_MINUTES:-30}
+
       LOGGING_LEVEL_ROOT: WARN
       LOGGING_LEVEL_MZ_NORTESHOPMOZ: INFO
 
@@ -128,7 +260,16 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      redis-cache:
+        condition: service_healthy
     restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      # Imagens de produto enviadas pelos admins quando não há Cloudinary.
+      # Sem este volume ficavam no disco EFÉMERO do contentor: desapareciam no
+      # deploy seguinte (imagens de produto em 404) e não eram partilhadas entre
+      # réplicas. Com Cloudinary configurada, o diretório é ignorado.
+      - uploads:/app/uploads
     deploy:
       resources:
         limits:
@@ -136,7 +277,11 @@ services:
         reservations:
           memory: 1G
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/actuator/health"]
+      # liveness (e não /actuator/health): o healthcheck não pode depender do
+      # Redis/DB. Com /actuator/health, uma oscilação do Redis (que a API tolera,
+      # por falhar aberto) marcava o contentor como unhealthy e o deploy.sh ficava
+      # preso à espera de UP.
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health/liveness"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -148,13 +293,16 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        # O código consome NEXT_PUBLIC_API_BASE_URL (lib/api.ts, lib/orders.ts)
+        # O código consome NEXT_PUBLIC_API_BASE_URL (lib/api.ts) e
+        # NEXT_PUBLIC_SITE_URL (config/site.ts, proxy.ts). Os ARGs têm de estar
+        # declarados no Dockerfile — os restantes são fallback/compatibilidade.
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_URL}
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
         NEXT_PUBLIC_APP_URL: ${APP_BASE_URL}
         NEXT_PUBLIC_SITE_URL: ${APP_BASE_URL}
         NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
         NEXT_PUBLIC_FACEBOOK_APP_ID: ${NEXT_PUBLIC_FACEBOOK_APP_ID:-${FACEBOOK_APP_ID:-}}
+        NEXT_PUBLIC_SESSION_TIMEOUT_MINUTES: ${NEXT_PUBLIC_SESSION_TIMEOUT_MINUTES:-30}
     container_name: nsm-frontend-prod
     environment:
       NODE_ENV: production
@@ -164,11 +312,19 @@ services:
       NEXT_PUBLIC_SITE_URL: ${APP_BASE_URL}
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       NEXT_PUBLIC_FACEBOOK_APP_ID: ${NEXT_PUBLIC_FACEBOOK_APP_ID:-${FACEBOOK_APP_ID:-}}
+      NEXT_PUBLIC_SESSION_TIMEOUT_MINUTES: ${NEXT_PUBLIC_SESSION_TIMEOUT_MINUTES:-30}
+      # URL da API para as chamadas que correm DENTRO do contentor (route
+      # handlers/SSR). É o nome do serviço na rede do compose: evita sair pela
+      # internet e voltar (DNS público + hairpin NAT + TLS) só para falar com a
+      # API que está na mesma rede. Sem isto o catálogo caía em silêncio para os
+      # dados locais quando o domínio público não era alcançável do contentor.
+      API_INTERNAL_BASE_URL: http://api:8080
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:
       - api
     restart: unless-stopped
+    logging: *default-logging
     deploy:
       resources:
         limits:
@@ -190,11 +346,32 @@ services:
       - "80:80"
       - "443:443"  # reservado para a migração HTTPS (nginx.conf + certbot)
     volumes:
-      - ./nginx/conf.d/norteshopmoz.conf:/etc/nginx/conf.d/default.conf:ro
+      # Conf do nginx configurável: por omissão a de HTTP (modo IP). Para HTTPS,
+      # o deploy.sh gera e aponta NGINX_CONF ao ficheiro renderizado — ver o
+      # cabeçalho deste ficheiro. Montar as duas confs ao mesmo tempo dava dois
+      # `server` na porta 80 e o nginx não arrancava.
+      - ${NGINX_CONF:-./nginx/conf.d/norteshopmoz.conf}:/etc/nginx/conf.d/default.conf:ro
+      # Certificados e webroot do certbot. Montados SEMPRE (não só no modo HTTPS):
+      # enquanto estavam comentados, ativar o TLS obrigava a editar este ficheiro
+      # e o nginx arrancava sem os certificados. Em modo HTTP ficam só montados,
+      # sem serem referidos por nenhuma conf.
+      - ${CERTBOT_CERTS:-./certbot/conf}:/etc/letsencrypt:ro
+      - ${CERTBOT_WWW:-./certbot/www}:/var/www/certbot:ro
+      # Cabeçalhos de segurança comuns, incluídos pela conf do nginx. Sem este
+      # volume o `include` falha e o nginx NÃO ARRANCA (config inválida) — erro
+      # barulhento, de propósito: melhor do que servir sem os cabeçalhos.
+      # Ver nginx/snippets/security-headers.conf (um `add_header` numa location
+      # substitui todos os herdados do `server`).
+      - ./nginx/snippets:/etc/nginx/snippets:ro
     depends_on:
       - frontend
       - api
     restart: unless-stopped
+    # IP fixo: é o valor por omissão de TRUSTED_PROXIES no serviço api (o
+    # backend só aceita X-Forwarded-For vindo deste endereço).
+    networks:
+      default:
+        ipv4_address: 172.28.0.10
     deploy:
       resources:
         limits:
@@ -202,20 +379,32 @@ services:
         reservations:
           memory: 64M
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80"]
+      # /healthz (e não /): em modo HTTPS o `/` responde 301 para
+      # https://localhost/, onde o certificado é do domínio real — o healthcheck
+      # falhava sempre e o contentor ficava unhealthy.
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/healthz"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
+    logging: *default-logging
 
 volumes:
   pgdata:
   redisdata:
+  # Uploads locais (ver o serviço api). Persistente entre deploys.
+  uploads:
 
 networks:
   default:
     name: nsm-prod-network
     driver: bridge
+    # Sub-rede fixa para o nginx ter um IP previsível (ver ipv4_address no
+    # serviço nginx). Se 172.28.0.0/16 já estiver ocupada no servidor, mude aqui
+    # E ajuste TRUSTED_PROXIES (e o ipv4_address do nginx) para o novo par.
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
     driver_opts:
       # MTU reduzido: nesta rede o path MTU real é <1300 e o ICMP de
       # fragmentação está filtrado — com o padrão 1500, o handshake TLS dos

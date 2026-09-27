@@ -6,6 +6,7 @@ import {
   Truck,
   Wallet,
   MapPin,
+  XCircle,
 } from "lucide-react";
 import type { OrderStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -20,6 +21,19 @@ const steps: { status: OrderStatus; icon: typeof Truck; label: string }[] = [
 ];
 
 export function StatusTimeline({ current }: { current: OrderStatus }) {
+  // Pedido cancelado sai da timeline: nenhum passo está "alcançado".
+  if (current === "Cancelado") {
+    return (
+      <div className="flex items-center gap-3 rounded-2xl border border-red-100 bg-red-50/70 px-4 py-3">
+        <XCircle className="size-5 shrink-0 text-red-600" aria-hidden />
+        <p className="text-sm leading-relaxed text-red-700">
+          <strong className="font-semibold">Pedido cancelado.</strong> O stock foi reposto e
+          não será feita qualquer cobrança.
+        </p>
+      </div>
+    );
+  }
+
   const currentIndex = steps.findIndex((s) => s.status === current);
   const reached = (i: number) => i <= currentIndex;
 
@@ -35,7 +49,7 @@ export function StatusTimeline({ current }: { current: OrderStatus }) {
                   "flex size-9 items-center justify-center rounded-full border-2 transition",
                   reached(i)
                     ? "border-emerald-500 bg-emerald-500 text-white"
-                    : "border-slate-200 bg-white text-slate-300",
+                    : "border-slate-200 bg-surface text-slate-400",
                   active && "ring-4 ring-emerald-500/20",
                 )}
                 aria-hidden
@@ -48,7 +62,7 @@ export function StatusTimeline({ current }: { current: OrderStatus }) {
               </span>
               <span
                 className={cn(
-                  "max-w-16 text-center text-[10px] font-semibold leading-tight",
+                  "max-w-16 text-center text-xs font-semibold leading-tight",
                   active ? "text-emerald-700" : reached(i) ? "text-slate-600" : "text-slate-400",
                 )}
               >

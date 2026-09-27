@@ -100,4 +100,41 @@ class CartControllerTest {
                         .content(payload))
                 .andExpect(status().isUnauthorized());
     }
+
+    @Test
+    void putCart_guestIdComFormatoInvalido_returnsBadRequest() throws Exception {
+        // Curto demais para ser um identificador de dispositivo e com caracteres
+        // que não têm lugar numa chave — antes era aceite e criava uma linha.
+        mockMvc.perform(put("/api/cart")
+                        .header("X-Guest-Id", "abc")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("[]"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void putCart_guestIdDemasiadoLongo_returnsBadRequest() throws Exception {
+        // A coluna user_id tem 64 caracteres: um header maior rebentava com 500.
+        // Passa a 400 explicito (nunca chega à base de dados).
+        mockMvc.perform(put("/api/cart")
+                        .header("X-Guest-Id", "g".repeat(80))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("[]"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void putCart_guestIdValidoNaoEhAceiteComoCarrinhoDeConta() throws Exception {
+        // O prefixo `guest:` impede que o ID de um visitante colida com o id de
+        // um utilizador (UUID) e dê acesso ao carrinho de uma conta.
+        mockMvc.perform(put("/api/cart")
+                        .header("X-Guest-Id", "7f3c1b1e-2a4d-4c9e-9a11-5d6e7f8a9b0c")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("[]"))
+                .andExpect(status().isOk());
+
+        assertThat(cartRepository.findById("guest:7f3c1b1e-2a4d-4c9e-9a11-5d6e7f8a9b0c"))
+                .as("a chave gravada leva o prefixo guest:")
+                .isPresent();
+    }
 }

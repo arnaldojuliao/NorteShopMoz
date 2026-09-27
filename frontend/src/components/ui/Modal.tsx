@@ -55,7 +55,7 @@ export function Modal({
       <div
         ref={panelRef}
         className={cn(
-          "animate-fade-up relative w-full rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl",
+          "animate-fade-up relative w-full rounded-t-2xl bg-surface shadow-2xl sm:rounded-2xl",
           size === "sm" && "sm:max-w-sm",
           size === "md" && "sm:max-w-lg",
           size === "lg" && "sm:max-w-2xl",

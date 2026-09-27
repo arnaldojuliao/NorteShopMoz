@@ -1,5 +1,5 @@
 /* ────────────────────────────────────────────────────────────────
-   NS · NorteShop — Domain types
+   NS · NorteShopMoz — Domain types
    Estes tipos espelham o contrato REST que o backend Spring Boot
    deverá expor no futuro. A camada de dados (lib/repo) é o único
    ponto de troca entre dados locais e a API real.
@@ -47,6 +47,12 @@ export interface Product {
   deliveryDays: [number, number];
   freeShipping?: boolean;
   tags: string[];
+  /**
+   * Momento em que o produto entrou no catálogo (ISO). Define a ordem por
+   * omissão da loja: o mais recente fica em cima. Opcional porque os dados
+   * locais de fallback (src/lib/data) não têm carimbo.
+   */
+  createdAt?: string;
 }
 
 export interface Category {
@@ -91,7 +97,27 @@ export type OrderStatus =
   | "Em preparação"
   | "Enviado"
   | "Em trânsito"
-  | "Entregue";
+  | "Entregue"
+  | "Cancelado";
+
+/** Cupão promocional. O `discount` só vem preenchido na validação (checkout). */
+export interface Coupon {
+  id?: number;
+  code: string;
+  /** `PERCENT` (descontoValue em %) ou `FIXED` (em MT). */
+  discountType: string;
+  discountValue: number;
+  /** Subtotal mínimo para o cupão ser válido (MT). */
+  minimumSubtotal?: number;
+  /** ISO instant — ausente significa sem validade. */
+  expiresAt?: string;
+  active?: boolean;
+  /** 0 = sem limite de utilizações. */
+  usageLimit?: number;
+  usedCount?: number;
+  /** Desconto já calculado para o subtotal atual (MT). */
+  discount?: number;
+}
 
 export interface OrderItem {
   productId: string;
@@ -126,6 +152,8 @@ export interface Order {
   paymentMethod: string;
   /** Referência da cobrança online (M-Pesa/e-Mola/cartão) — opcional. */
   paymentReference?: string;
+  /** Código do cupão aplicado ao pedido — opcional. */
+  couponCode?: string;
 }
 
 export interface UserProfile {

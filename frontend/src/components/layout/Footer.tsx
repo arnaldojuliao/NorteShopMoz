@@ -26,8 +26,10 @@ const socials = [
 ];
 
 export function Footer() {
+  // `theme-inverse`: o footer é navy nos dois temas, por isso o conteúdo mantém
+  // a paleta clara — senão os seus cinzas ficariam mais escuros que o fundo.
   return (
-    <footer className="mt-16 hidden bg-navy-950 text-slate-300 lg:block">
+    <footer className="theme-inverse mt-16 hidden bg-navy-950 text-slate-300 lg:block">
       <div className="container-nsm grid gap-10 py-14 md:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1.2fr]">
         {/* Marca */}
         <div>
@@ -54,9 +56,9 @@ export function Footer() {
 
         {/* Ajuda */}
         <nav aria-label="Links de ajuda">
-          <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-white">
+          <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-white">
             Ajuda
-          </h3>
+          </h2>
           <ul className="space-y-2.5 text-sm">
             {helpLinks.map((l) => (
               <li key={l.label}>
@@ -70,9 +72,9 @@ export function Footer() {
 
         {/* Legal */}
         <nav aria-label="Links legais">
-          <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-white">
+          <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-white">
             Informação legal
-          </h3>
+          </h2>
           <ul className="space-y-2.5 text-sm">
             {legalLinks.map((l) => (
               <li key={l.label}>
@@ -86,9 +88,9 @@ export function Footer() {
 
         {/* Contactos */}
         <div>
-          <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-white">
+          <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-white">
             Contactos
-          </h3>
+          </h2>
           <ul className="space-y-3 text-sm">
             <li className="flex items-start gap-2.5">
               <Phone className="mt-0.5 size-4 shrink-0 text-primary-400" />
@@ -111,7 +113,7 @@ export function Footer() {
               </span>
             </li>
           </ul>
-          <p className="mt-4 text-xs leading-relaxed text-slate-500">
+          <p className="mt-4 text-xs leading-relaxed text-slate-400">
             Horário de apoio: {site.hoursWeekdays}
             <br />
             {site.hoursSaturday}
@@ -120,8 +122,8 @@ export function Footer() {
       </div>
 
       <div className="border-t border-white/10">
-        <div className="container-nsm flex flex-col items-center justify-between gap-4 py-6 text-xs text-slate-500 sm:flex-row">
-          <p>© {new Date().getFullYear()} NorteShop (NS). Todos os direitos reservados.</p>
+        <div className="container-nsm flex flex-col items-center justify-between gap-4 py-6 text-xs text-slate-400 sm:flex-row">
+          <p>© {new Date().getFullYear()} NorteShopMoz (NS). Todos os direitos reservados.</p>
           <div className="flex flex-wrap items-center justify-center gap-2">
             <span className="rounded-md bg-white/5 px-2.5 py-1 font-semibold text-slate-300">
               Pagamento na entrega

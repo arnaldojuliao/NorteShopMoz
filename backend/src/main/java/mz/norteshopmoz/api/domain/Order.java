@@ -21,6 +21,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.Fetch;
+import org.hibernate.annotations.FetchMode;
 
 /**
  * Pedido — espelha o contrato Order do frontend.
@@ -46,9 +48,17 @@ public class Order {
     @Column(length = 40)
     private String userId;
 
+    // `@Fetch(SUBSELECT)` (e não um JOIN EAGER): as listagens paginadas
+    // (admin e histórico) não podem participar num join de coleção, ou o
+    // Hibernate aplica o LIMIT em memória e carrega a tabela de pedidos inteira —
+    // sintoma clássico de memória a crescer sem limite com o histórico. Com
+    // SUBSELECT, a página é cortada no SQL e a coleção é carregada com um único
+    // SELECT adicional por página (em vez de N+1), mantendo-se EAGER para a
+    // serialização não precisar de sessão aberta.
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @JoinColumn(name = "order_id", nullable = false)
     @OrderColumn(name = "position")
+    @Fetch(FetchMode.SUBSELECT)
     @Builder.Default
     private List<OrderItem> items = new ArrayList<>();
 
@@ -70,6 +80,10 @@ public class Order {
 
     @Embedded
     private OrderAddress address;
+
+    /** Código promocional aplicado, se existir. */
+    @Column(length = 40)
+    private String couponCode;
 
     @Column(nullable = false, length = 80)
     private String paymentMethod;

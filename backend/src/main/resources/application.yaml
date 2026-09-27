@@ -2,6 +2,16 @@ spring:
   application:
     name: norteshopmoz-api
 
+  # Agendador (@Scheduled). O Spring usa por omissão UMA thread partilhada por
+  # todas as tarefas: uma tarefa lenta (manutenção a apagar/varrer, ou a sonda do
+  # Redis) atrasa as outras — incluindo a sonda que deteta o Redis em baixo. Uma
+  # pequena pool (3) mantém as tarefas independentes sem custo relevante.
+  task:
+    scheduling:
+      pool:
+        size: ${SCHEDULER_POOL_SIZE:3}
+      thread-name-prefix: nsm-sched-
+
   servlet:
     multipart:
       # Limites para o upload de imagens de produto (admin).
@@ -13,22 +23,72 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5434/norteshopmoz}
     username: ${DB_USER:postgres}
     password: ${DB_PASSWORD:postgres}
+    # Dimensionamento do pool JDBC. Sem isto, o Hikari usa 10 ligações por omissão
+    # enquanto o Tomcat aceita 200 threads: basta a base de dados ficar
+    # ligeiramente lenta (checkpoint, lock, disco) para as 10 ligações estarem
+    # ocupadas e as restantes threads esperarem até 30 s (`connection-timeout`) e
+    # devolverem 500 — a loja INTEIRA deixa de responder, não só o checkout.
+    #
+    # 20 é dimensionado para um VPS único com um PostgreSQL também único (mais
+    # ligações do que núcleos não aceleram nada; o trabalho passa a ser
+    # serializado na base de dados e as threads ficam todas à espera). Em troca,
+    # o `connection-timeout` é curto: é melhor devolver um 503 rapidamente (e
+    # registá-lo) do que segurar uma thread 30 s enquanto a fila cresce.
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+      minimum-idle: ${DB_POOL_MIN_IDLE:5}
+      connection-timeout: ${DB_POOL_CONNECTION_TIMEOUT_MS:10000}
+      # Uma ligação presa (consulta bloqueada, rede) não pode ficar presa para
+      # sempre: é devolvida ao pool (e substituída) ao fim de 5 minutos.
+      max-lifetime: 1800000
+      leak-detection-threshold: 20000
 
   jpa:
     hibernate:
-      ddl-auto: update
+      # O schema é gerido por migrações Flyway (db/migration). O Hibernate só
+      # VALIDA que as entidades correspondem ao schema — nunca o altera. Antes
+      # usava-se `update`, que em produção podia alterar/criar colunas e índices
+      # sem revisão nem rollback (risco de perda de dados).
+      ddl-auto: validate
     open-in-view: false
     properties:
       hibernate:
         format_sql: false
         jdbc:
           time_zone: UTC
+          # Escrita em lote: o checkout grava N itens de pedido e N atualizações de
+          # stock. Sem batching, cada linha era um round-trip à base de dados —
+          # um carrinho com 50 itens eram 100+ queries de escrita por pedido e o
+          # tempo de transação (e o lock do cupão) crescia linearmente.
+          batch_size: 30
+          order_inserts: true
+          order_updates: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # Uma base de dados não vazia sem histórico (criada antes do Flyway, pelo
+    # antigo ddl-auto=update) é "baselined" em vez de falhar o arranque. A
+    # baseline-version é 0 — e não 1 — para que a V1 (idempotente por
+    # construção: CREATE TABLE IF NOT EXISTS) seja ainda executada e possa
+    # criar tabelas em falta. Uma base nova corre a V1 normalmente.
+    baseline-on-migrate: true
+    baseline-version: 0
 
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6381}
-      timeout: 2s
+      # Em produção o Redis exige password (--requirepass no docker-compose.prod.yml).
+      # Vazio (dev/testes) → ligação sem AUTH.
+      password: ${REDIS_PASSWORD:}
+      # 1s e não 2s: este valor é o custo de CADA chamada quando o Redis está
+      # "pendurado" (não recusa ligações, apenas não responde) e o circuit
+      # breaker só abre ao fim de algumas falhas seguidas. Na rede local do
+      # compose, um PING saudável leva menos de 1 ms — 1 s é folgado para o
+      # tráfego normal e corta para metade a janela em que a API espera por um
+      # Redis avariado (a partir daí o breaker falha aberto sem tocar no Redis).
+      timeout: ${REDIS_TIMEOUT:1s}
 
   cache:
     type: redis
@@ -47,7 +107,22 @@ management:
         include: health,info,prometheus,metrics
   endpoint:
     health:
-      show-details: always
+      # `when_authorized`: /actuator/health é público (permitAll), por isso os
+      # detalhes dos componentes (DB, Redis, …) só aparecem a pedidos autenticados.
+      show-details: when_authorized
+      # Sondas separadas. O healthcheck do contentor e o deploy.sh usam
+      # `/actuator/health/liveness` — que NÃO inclui dependências externas.
+      # Sem esta separação, uma oscilação do Redis punha /actuator/health a 503
+      # (DOWN) e o deploy ficava preso à espera de `"status":"UP"`, além de o
+      # contentor ser marcado como unhealthy com a API perfeitamente funcional
+      # (o rate limiter e a idempotência são fail-open).
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState,ping
+        readiness:
+          include: readinessState,db,redis
     prometheus:
       enabled: true
   metrics:
@@ -60,28 +135,128 @@ management:
         http.server.requests: 0.5,0.95,0.99
 
 app:
+  # Instância Redis DEDICADA à cache. Vazio (omissão) = usa a mesma instância
+  # do restante estado (dev/testes). Em produção (ver docker-compose.prod.yml)
+  # aponta para `redis-cache`, que corre com allkeys-lru: a cache evicta
+  # livremente sob pressão de memória, enquanto a instância do estado (refresh
+  # tokens, idempotência, rate limit) fica em noeviction e nunca perde dados.
+  cache:
+    redis:
+      host: ${CACHE_REDIS_HOST:}
+      port: ${CACHE_REDIS_PORT:0}
+      password: ${CACHE_REDIS_PASSWORD:}
+      # Índice da base de dados (útil quando partilha a instância; -1 = padrão).
+      database: ${CACHE_REDIS_DATABASE:-1}
   jwt:
-    # Substituir em produção via variável de ambiente JWT_SECRET (mín. 32 caracteres)
+    # Default apenas para desenvolvimento local/testes — é público (está no
+    # repositório). Em produção defina JWT_SECRET (mín. 32 caracteres, ex.:
+    # openssl rand -base64 48); com o perfil `prod` e este default a aplicação
+    # NÃO arranca (fail-fast no JwtService).
     secret: ${JWT_SECRET:norteshopmoz-dev-secret-change-me-in-production-2026}
-    expiration-seconds: ${JWT_EXPIRATION:604800}
+    # Access token CURTO (1 hora). A sessão longa é suportada pelo refresh token
+    # (30 dias, cookie HttpOnly, rotação). Antes eram 7 dias: o cookie vivia uma
+    # semana e o único limite era o idle timeout do servidor — que falha aberto
+    # se o Redis cair, ou seja, uma janela de 7 dias para um cookie roubado.
+    expiration-seconds: ${JWT_EXPIRATION:3600}
     refresh-expiration-seconds: ${JWT_REFRESH_EXPIRATION:2592000}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+  admin:
+    # Credenciais do administrador criado no arranque (só quando ainda não
+    # existe). Os valores por omissão são públicos (estão no repositório) e por
+    # isso só valem em dev/testes: com o perfil `prod` a aplicação NÃO arranca
+    # com a password por omissão (fail-fast no DataSeeder, como no JWT_SECRET).
+    email: ${ADMIN_EMAIL:admin@norteshopmoz.com}
+    password: ${ADMIN_PASSWORD:Admin@2026}
+  security:
+    # Proxies inversos em que a API confia para ler X-Forwarded-For/X-Real-IP.
+    # Vazio (omissão) = nenhum proxy é fidedigno e usa-se sempre o IP real da
+    # ligação — sem isto, qualquer cliente que alcance a API pode inventar o
+    # header e obter um bucket de rate limit novo por cada valor (bypass total).
+    # Em produção atrás do nginx: TRUSTED_PROXIES=<ip do proxy> (ou CIDR) e/ou
+    # PROXY_TOKEN=<segredo enviado em X-Proxy-Token pelo proxy>.
+    trusted-proxies: ${TRUSTED_PROXIES:}
+    proxy-token: ${PROXY_TOKEN:}
+    # Inatividade máxima de uma sessão, verificada no SERVIDOR (Redis, chave por
+    # token de sessão). Sem isto o "timeout de sessão" era só cosmético no
+    # cliente: o cookie do access token continuava válido até 7 dias
+    # (JWT_EXPIRATION) e não havia idle timeout nenhum do lado do servidor.
+    # Deve ser >= ao NEXT_PUBLIC_SESSION_TIMEOUT_MINUTES do frontend.
+    session:
+      idle-timeout-minutes: ${SESSION_IDLE_TIMEOUT_MINUTES:30}
+    # Bloqueio temporário após tentativas falhadas de login. Três contadores:
+    #  - par (IP + email): proteção principal contra brute-force (limite apertado);
+    #  - email: ataques distribuídos (vários IPs contra a mesma conta);
+    #  - IP: sinal de abuso de um só endereço contra MUITAS contas.
+    # O par é o que evita trancar clientes atrás de CGNAT: em redes móveis
+    # milhares de clientes partilham o IP, e um limite baixo por IP (era 20)
+    # bloqueava o login de todos eles por causa das passwords erradas de alguns.
+    lockout:
+      max-attempts-pair: ${LOGIN_MAX_ATTEMPTS_PAIR:5}
+      max-attempts-email: ${LOGIN_MAX_ATTEMPTS_EMAIL:15}
+      max-attempts-ip: ${LOGIN_MAX_ATTEMPTS_IP:200}
+      # Janela de contagem e duração do bloqueio. Valores curtos reduzem o
+      # abuso como arma (5 tentativas trancavam uma conta 15 min); a proteção
+      # contra brute-force mantém-se (5 tentativas por janela é muito abaixo do
+      # que qualquer ataque por password precisa).
+      window-minutes: ${LOGIN_WINDOW_MINUTES:15}
+      lockout-minutes: ${LOGIN_LOCKOUT_MINUTES:5}
   rate-limit:
     enabled: true
     endpoints:
+      # Credenciais (login, register, …) por IP + path. O bloqueio por
+      # brute-force é do LoginAttemptService (por IP+conta); este é a segunda
+      # barreira, por isso é mais folgado do que era (10 travava o login de
+      # clientes atrás de CGNAT).
       auth:
-        max-requests: 10
+        max-requests: ${RATE_LIMIT_AUTH_MAX:30}
         window-seconds: 60
         key-prefix: "ratelimit"
+      # Pedidos autenticados que alteram estado — chave por CONTA (uid), não por
+      # IP. 100/min por utilizador é muito acima do uso humano normal.
       api:
-        max-requests: 100
+        max-requests: ${RATE_LIMIT_API_MAX:100}
+        window-seconds: 60
+        key-prefix: "ratelimit"
+      # Pedidos anónimos que alteram estado (checkout de convidado, carrinho,
+      # cupão) — chave por IP. Em redes móveis (CGNAT) milhares de clientes
+      # partilham o IP, por isso o limite é alto: corta scripts abusivos sem
+      # estrangular clientes legítimos.
+      anon-api:
+        max-requests: ${RATE_LIMIT_ANON_MAX:600}
+        window-seconds: 60
+        key-prefix: "ratelimit"
+      # Leituras (GET/HEAD) de chamadores externos: generoso para navegação
+      # legítima, mas corta scraping em massa. Serviços internos (ex.: o
+      # servidor do frontend que faz SSR) ficam isentos — partilham um IP.
+      safe:
+        max-requests: ${RATE_LIMIT_SAFE_MAX:2000}
         window-seconds: 60
         key-prefix: "ratelimit"
       default:
-        max-requests: 60
+        max-requests: ${RATE_LIMIT_DEFAULT_MAX:60}
         window-seconds: 60
         key-prefix: "ratelimit"
+  # Travão dos emails disparados por endpoints PÚBLICOS (register,
+  # forgot-password, resend-verification).
+  #
+  # Estes três endpoints enviam email para um endereço que o PEDIDO indica, sem
+  # exigir conta, e o único limite era o rate limit por IP+path (30/min) — inútil
+  # contra um atacante com uma lista de endereços. O custo não é do atacante, é da
+  # loja: a cota do fornecedor de email (centenas/mês) é queimada por mensagens que
+  # ninguém pediu, os clientes REAIS deixam de receber a confirmação do pedido, e
+  # milhares de verificações para endereços que nunca se registaram levam os
+  # fornecedores a marcar o domínio como spam. Ver EmailThrottleService.
+  email-throttle:
+    enabled: ${MAIL_THROTTLE_ENABLED:true}
+    # Emails por endereço dentro da janela (folgado: é também o teto que o
+    # utilizador legítimo sente; 3/hora cobre pedir de novo o código ou o link).
+    max-per-address: ${MAIL_MAX_PER_ADDRESS:3}
+    address-window-minutes: ${MAIL_ADDRESS_WINDOW_MINUTES:60}
+    # Travão de anomalia global (emails públicos por hora). Alto de propósito:
+    # é um sinal de abuso, não um teto de negócio. A 150 bloqueava registos e
+    # recuperações de password num pico legítimo de campanha.
+    max-global-per-hour: ${MAIL_MAX_GLOBAL_PER_HOUR:500}
   mail:
     # Email transacional (Resend). Sem RESEND_API_KEY o envio é ignorado (dev).
     # `from` deve usar um domínio verificado no Resend (teste: onboarding@resend.dev).
@@ -95,6 +270,65 @@ app:
     google-client-id: ${GOOGLE_CLIENT_ID:}
     facebook-app-id: ${FACEBOOK_APP_ID:}
     facebook-app-secret: ${FACEBOOK_APP_SECRET:}
+  # Sonda de conectividade ao Redis (ver RedisConnectivityProbe): corre no arranque
+  # e a cada intervalo, e registra o diagnóstico accionável quando o Redis deixa
+  # de responder — sem isto, um Redis inacessível só dava degradação silenciosa
+  # (fail-open) e 500s, sem nenhum erro no arranque.
+  redis:
+    probe-interval-ms: ${REDIS_PROBE_INTERVAL_MS:60000}
+  # Manutenção periódica: limpa sessões órfãs e chaves de idempotência obsoletas
+  # no Redis e dados expirados/órfãos na base de dados (ver MaintenanceCleanup).
+  maintenance:
+    enabled: ${MAINTENANCE_CLEANUP_ENABLED:true}
+    initial-delay-ms: ${MAINTENANCE_INITIAL_DELAY_MS:900000}   # 15 min
+    interval-ms: ${MAINTENANCE_INTERVAL_MS:86400000}           # 24 h
+    # Teto de chaves de idempotência analisadas por execução (SCAN + verificação
+    # do pedido): evita uma varredura pesada numa instância grande.
+    idempotency-max-keys: ${MAINTENANCE_IDEMPOTENCY_MAX_KEYS:2000}
+  # Carrinhos de convidado (chave `guest:<uuid>`, sem conta) — política de
+  # retenção. Não expiravam e cresciam sem limite na base de dados; o
+  # GuestCartCleanup apaga os inativos há mais de `guest-retention-days`.
+  cart:
+    guest-retention-days: ${GUEST_CART_RETENTION_DAYS:30}
+    cleanup-enabled: ${GUEST_CART_CLEANUP_ENABLED:true}
+    cleanup-initial-delay-ms: ${GUEST_CART_CLEANUP_INITIAL_DELAY_MS:600000}
+    cleanup-interval-ms: ${GUEST_CART_CLEANUP_INTERVAL_MS:21600000}
+    # Teto ABSOLUTO de carrinhos de convidado (não só por idade). O X-Guest-Id é
+    # escolhido pelo cliente e cada valor novo cria uma linha: sem teto, um
+    # atacante enche o disco (e o disco cheio para o PostgreSQL — a loja deixa de
+    # aceitar pedidos). Acima deste número, os mais antigos são eliminados.
+    # 0 = sem teto (só a retenção por idade). Ver GuestCartCleanup.
+    guest-max-count: ${GUEST_CART_MAX_COUNT:50000}
+  # Proteção do checkout (POST /api/orders é público — ver SecurityConfig).
+  #
+  # Sem isto, criar pedidos em massa não custava nada a um script: cada pedido
+  # desconta stock REAL (decrementStockAndSold) e dispara um email de confirmação
+  # para o endereço que o atacante escolher — ou seja, stock esgotado e a nossa
+  # chave do Resend (e a reputação do domínio) a servir de relay de spam.
+  #
+  # O limite é por CONTACTO (email/telefone) e por janela global, e não por IP:
+  # em redes móveis moçambicanas (CGNAT) milhares de clientes partilham o IP, e um
+  # limite apertado por IP bloquearia vendas legítimas — o mesmo motivo pelo qual
+  # o rate limit autenticado é por conta e o lockout de login é por IP+conta.
+  orders:
+    throttle:
+      enabled: ${ORDERS_THROTTLE_ENABLED:true}
+      # Pedidos por contacto (email normalizado; o telefone fica como alternativa
+      # quando não há email) dentro da janela.
+      max-per-contact: ${ORDERS_MAX_PER_CONTACT:3}
+      contact-window-minutes: ${ORDERS_CONTACT_WINDOW_MINUTES:60}
+      # Travão de anomalia global: com muitos pedidos anónimos na janela, a loja
+      # está a ser automatizada. Generoso de propósito — não deve tocar num pico
+      # de vendas real (a 200/h, uma campanha com alguma adesão fechava as vendas
+      # para toda a gente; agora só dispara com automação de facto).
+      max-global-per-hour: ${ORDERS_MAX_GLOBAL_PER_HOUR:1000}
+    # Expurgo de pedidos antigos (RGPD/retenção). LIGADO por omissão a 730 dias
+    # (~2 anos): o histórico de vendas cresce para sempre e, num VPS único, o disco
+    # cheio PARA o PostgreSQL — a loja deixa de aceitar pedidos. Apaga APENAS
+    # pedidos já ENTREGUES ou CANCELADOS com mais de N dias (nunca pedidos em
+    # curso). 0 = desligado (mantém todo o histórico, para obrigações de
+    # conservação/contabilidade). Aumente o valor se precisar de mais histórico.
+    retention-days: ${ORDERS_RETENTION_DAYS:730}
   # Diretório onde ficam as imagens enviadas pelos administradores (fallback local;
   # com Cloudinary configurada, as imagens vão para a nuvem e este diretório é ignorado).
   upload-dir: ${UPLOAD_DIR:./uploads}
@@ -108,6 +342,13 @@ app:
     # Modo do gateway de pagamentos: `simulated` (padrão, sem cobrança real) ou
     # `live` (exige implementação real de PaymentGateway com credenciais).
     mode: ${PAYMENTS_MODE:simulated}
+    # Bulkhead das cobranças online (ver PaymentService): teto de cobranças
+    # SIMULTÂNEAS ao gateway. Cada uma ocupa uma thread do Tomcat durante a
+    # latência do gateway; sem teto, um gateway lento esgotava as 200 threads e
+    # derrubava a API inteira. Acima do limite responde-se 503 rapidamente.
+    max-concurrent-charges: ${PAYMENTS_MAX_CONCURRENT:8}
+    # Tempo máximo de espera por uma vaga antes de devolver 503.
+    charge-slot-timeout-seconds: ${PAYMENTS_CHARGE_SLOT_TIMEOUT:10}
 
 logging:
   level:

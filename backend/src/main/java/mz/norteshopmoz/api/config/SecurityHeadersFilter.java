@@ -21,8 +21,13 @@ public class SecurityHeadersFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
 
-        // HSTS - força HTTPS por 1 ano com preload
-        response.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
+        // HSTS - força HTTPS por 1 ano com preload.
+        // Só em respostas efetivamente servidas por HTTPS: sobre HTTP o header é
+        // ignorado pelos browsers, mas um max-age de 1 ano com preload pode prender
+        // os clientes se o host passar a HTTPS com problemas.
+        if (isHttps(request)) {
+            response.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
+        }
 
         // Previne clickjacking
         response.setHeader("X-Frame-Options", "DENY");
@@ -52,5 +57,14 @@ public class SecurityHeadersFilter extends OncePerRequestFilter {
         response.setHeader("Server", "NorteShopMoz");
 
         filterChain.doFilter(request, response);
+    }
+
+    /** Verdadeiro se o pedido chegou por HTTPS (direto ou com TLS terminado no proxy). */
+    private static boolean isHttps(HttpServletRequest request) {
+        if (request.isSecure()) {
+            return true;
+        }
+        String proto = request.getHeader("X-Forwarded-Proto");
+        return proto != null && "https".equalsIgnoreCase(proto.split(",")[0].trim());
     }
 }

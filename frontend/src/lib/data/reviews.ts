@@ -6,7 +6,7 @@ const titles = ["Excelente qualidade!", "Muito satisfeito(a)", "Recomendo", "Bom
 const comments = [
   "Chegou rápido em Maputo e veio bem embalado. A qualidade é muito boa pelo preço.",
   "Comprei para oferecer e adorei. O atendimento da loja também foi excelente.",
-  "Funciona perfeitamente. Recomendo a NorteShop para quem quer comprar com confiança.",
+  "Funciona perfeitamente. Recomendo a NorteShopMoz para quem quer comprar com confiança.",
   "Bom produto, entrega dentro do prazo combinado em Nampula.",
   "Estou a usar há duas semanas e estou muito contente com a compra.",
   "O preço é imbatível comparado com as lojas locais. Voltarei a comprar.",

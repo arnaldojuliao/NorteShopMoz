@@ -4,10 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, LayoutGrid, MessageCircle, ShoppingCart, User } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth, useAvatarSrc } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
-import { useLocalStorageState } from "@/lib/hooks";
-import type { UserProfile } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { whatsappHref } from "@/config/site";
 
@@ -23,7 +21,8 @@ export function BottomNav() {
   const pathname = usePathname();
   const { user } = useAuth();
   const { count } = useCart();
-  const [profile] = useLocalStorageState<UserProfile | null>("nsm:profile", null);
+  // Foto de perfil: do servidor quando há sessão, para cada conta ter a sua.
+  const avatarSrc = useAvatarSrc();
 
   const isActive = (href: string) => {
     if (href.startsWith("http")) return false;
@@ -40,36 +39,44 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Navegação principal"
-      className="fixed inset-x-0 bottom-0 z-[60] border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur supports-[backdrop-filter]:bg-white/85 lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-[60] border-t border-slate-200 bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur supports-[backdrop-filter]:bg-surface/85 lg:hidden"
     >
       <ul className="mx-auto grid max-w-lg grid-cols-5">
         {items.map((item) => {
           const active = isActive(item.href);
           const Icon = item.icon;
-          // Admin no mobile: círculo com a foto vai direto ao painel de administração.
-          if (item.label === "Conta" && user?.role === "ADMIN") {
+          // Sessão iniciada: o círculo com a foto (ou a inicial) substitui o ícone
+          // genérico — admin vai ao painel, cliente às configurações.
+          if (item.label === "Conta" && user) {
+            const isAdmin = user.role === "ADMIN";
+            const accountActive = isAdmin ? pathname.startsWith("/admin") : active;
             return (
               <li key={item.label}>
                 <Link
-                  href="/admin"
-                  aria-label="Painel de administração"
-                  className="flex flex-col items-center justify-center py-2"
+                  href={isAdmin ? "/admin" : "/configuracoes"}
+                  aria-label={isAdmin ? "Painel de administração" : "Conta"}
+                  aria-current={accountActive ? "page" : undefined}
+                  className={cn(
+                    "flex flex-col items-center gap-1 py-2 text-xs font-semibold transition",
+                    accountActive ? "text-primary-700" : "text-slate-500 hover:text-slate-800",
+                  )}
                 >
                   <Avatar
-                    src={user?.avatar ?? profile?.avatar}
-                    name={user?.fullName}
+                    src={avatarSrc}
+                    name={user.fullName}
                     className={cn(
-                      "size-7 ring-2 ring-offset-1",
-                      pathname.startsWith("/admin") ? "ring-primary-600" : "ring-transparent",
+                      "size-5 ring-2 ring-offset-1",
+                      accountActive ? "ring-primary-600" : "ring-transparent",
                     )}
                     textClassName="text-xs"
                   />
+                  {item.label}
                 </Link>
               </li>
             );
           }
           const linkClass = cn(
-            "flex flex-col items-center gap-1 py-2 text-[10px] font-semibold transition",
+            "flex flex-col items-center gap-1 py-2 text-xs font-semibold transition",
             active ? "text-primary-700" : "text-slate-500 hover:text-slate-800",
           );
           return (
@@ -93,7 +100,7 @@ export function BottomNav() {
                   <span className="relative">
                     <Icon className="size-5" />
                     {item.label === "Carrinho" && count > 0 && (
-                      <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">
+                      <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-xs font-bold text-white">
                         {count > 99 ? "99+" : count}
                       </span>
                     )}

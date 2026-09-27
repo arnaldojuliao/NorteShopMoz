@@ -26,7 +26,8 @@ export function SectionHeader({
       {linkLabel && linkHref && (
         <Link
           href={linkHref}
-          className="group hidden shrink-0 items-center gap-1.5 text-sm font-semibold text-primary-700 transition hover:text-primary-800 sm:inline-flex"
+          // `-my-1 py-1`: alvo de toque de 28px sem alterar o alinhamento do cabeçalho.
+          className="group -my-1 inline-flex shrink-0 items-center gap-1.5 py-1 text-sm font-semibold text-primary-700 transition hover:text-primary-800"
         >
           {linkLabel}
           <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />

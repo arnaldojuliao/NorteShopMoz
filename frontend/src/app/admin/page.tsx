@@ -1,13 +1,19 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   BadgePlus,
+  BarChart3,
+  CalendarDays,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   ClipboardList,
+  Eye,
+  FolderOpen,
   ImagePlus,
   Loader2,
   Lock,
@@ -17,25 +23,34 @@ import {
   PackagePlus,
   Pencil,
   Plus,
+  Printer,
   RefreshCw,
   ShieldCheck,
   Star,
+  Tag,
   Trash2,
   Users,
   X,
+  XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { SalesStatsPanel } from "@/components/admin/SalesStatsPanel";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { API_BASE, apiGet, ApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useLoginModal } from "@/context/LoginModalContext";
-import { formatDate } from "@/lib/format";
+import { formatDate, groupByISOWeek, type WeekGroup } from "@/lib/format";
 import { useCurrency } from "@/context/CurrencyContext";
 import { useAsyncData } from "@/lib/hooks";
 import {
+  ADMIN_ORDERS_PAGE_SIZE,
   advanceOrderStatus,
+  cancelOrder,
+  fetchSalesStats,
   listAdminOrders,
+  type AdminOrdersPage,
+  type SalesStats,
 } from "@/lib/orders";
 import {
   createProduct,
@@ -44,10 +59,15 @@ import {
   updateProduct,
   type CreateProductPayload,
 } from "@/lib/products";
-import type { Order, OrderStatus, Product } from "@/lib/types";
+import { createCoupon, deleteCoupon, listCoupons } from "@/lib/coupons";
+import type { Coupon, Order, OrderStatus, Product } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-/** Timeline dos 6 estados — ordem usada para avançar e para os filtros. */
+/**
+ * Timeline dos 6 estados — ordem usada para avançar pedidos. "Cancelado" fica
+ * FORA desta lista: é um estado terminal, não um passo da sequência (senão um
+ * pedido entregue poderia ser "avançado" para cancelado).
+ */
 const ORDER_STATUSES: OrderStatus[] = [
   "Pedido recebido",
   "Pagamento confirmado",
@@ -57,6 +77,21 @@ const ORDER_STATUSES: OrderStatus[] = [
   "Entregue",
 ];
 
+/** Filtros do painel — timeline + o estado terminal de cancelamento. */
+const ORDER_FILTERS: OrderStatus[] = [...ORDER_STATUSES, "Cancelado"];
+
+/** Página vazia — antes do primeiro carregamento e nas mutações locais. */
+const EMPTY_ORDERS_PAGE: AdminOrdersPage = {
+  items: [],
+  page: 0,
+  size: ADMIN_ORDERS_PAGE_SIZE,
+  totalItems: 0,
+  totalPages: 0,
+  hasNext: false,
+  statusCounts: {},
+};
+
+
 const STATUS_STYLES: Record<OrderStatus, string> = {
   "Pedido recebido": "bg-sky-50 text-sky-700",
   "Pagamento confirmado": "bg-indigo-50 text-indigo-700",
@@ -64,13 +99,14 @@ const STATUS_STYLES: Record<OrderStatus, string> = {
   Enviado: "bg-violet-50 text-violet-700",
   "Em trânsito": "bg-blue-50 text-blue-700",
   Entregue: "bg-emerald-50 text-emerald-700",
+  Cancelado: "bg-red-50 text-red-700",
 };
 
 function StatusPill({ status }: { status: OrderStatus }) {
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold",
+        "inline-flex shrink-0 rounded-full px-2.5 py-1 text-xs font-bold",
         STATUS_STYLES[status],
       )}
     >
@@ -81,7 +117,7 @@ function StatusPill({ status }: { status: OrderStatus }) {
 
 function OrderSkeleton() {
   return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-5">
+    <div className="rounded-2xl border border-slate-100 bg-surface p-5">
       <div className="flex items-center justify-between">
         <div className="h-4 w-40 animate-pulse rounded-lg bg-slate-200/80" />
         <div className="h-5 w-28 animate-pulse rounded-full bg-slate-200/80" />
@@ -99,7 +135,7 @@ function OrderSkeleton() {
 /** Skeleton de linha (produtos do catálogo / subscritores da newsletter). */
 function ProductSkeleton() {
   return (
-    <div className="flex items-center gap-4 rounded-2xl border border-slate-100 bg-white p-4">
+    <div className="flex items-center gap-4 rounded-2xl border border-slate-100 bg-surface p-4">
       <div className="size-14 shrink-0 animate-pulse rounded-xl bg-slate-200/80" />
       <div className="min-w-0 flex-1 space-y-2">
         <div className="h-4 w-2/5 animate-pulse rounded-lg bg-slate-200/80" />
@@ -127,12 +163,34 @@ export default function AdminPage() {
   const { user, initializing, logout: authLogout } = useAuth();
   const { openLogin } = useLoginModal();
 
-  // Secção ativa do painel: pedidos, publicar produto, gerir catálogo ou newsletter.
-  const [section, setSection] = useState<"pedidos" | "produtos" | "gerir" | "newsletter">("pedidos");
+  // Secção ativa do painel: pedidos, publicar produto, gerir catálogo, newsletter,
+  // cupões ou estatísticas.
+  const [section, setSection] = useState<
+    "pedidos" | "produtos" | "gerir" | "newsletter" | "cupoes" | "estatisticas"
+  >("pedidos");
+
+  // Estatísticas de vendas (agregadas no servidor). Carregam-se à entrada da
+  // secção e ficam em cache local enquanto o admin navega entre secções.
+  const [stats, setStats] = useState<SalesStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [statsError, setStatsError] = useState<string | null>(null);
+
+  // Produto cujos detalhes estão abertos (modal) e produto recém-publicado
+  // (destacado no topo da lista de gestão).
+  const [highlightId, setHighlightId] = useState<string | null>(null);
 
   // Pedidos
+  // Sem filtro "Todos" — cada filtro por estado mostra as pastas semanais dessa vista.
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "">("");
+  // Página da listagem (base 0). A lista é paginada NO SERVIDOR: antes vinha o
+  // histórico todo, com os itens de cada pedido.
+  const [ordersPage, setOrdersPage] = useState(0);
   const [advancingId, setAdvancingId] = useState<string | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  // Pasta semanal aberta na vista "Todos" (null = mostra as pastas).
+  const [openWeek, setOpenWeek] = useState<string | null>(null);
+  // Chave da pasta com avanço em massa em curso (botão desabilitado).
+  const [advancingWeek, setAdvancingWeek] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   // Categorias para o formulário de produto (fallback vazio enquanto carrega).
@@ -373,8 +431,19 @@ export default function AdminPage() {
           text: "Produto atualizado com sucesso! As alterações já estão visíveis na loja.",
         });
       } else {
-        await createProduct(payload);
-        setPublishMsg({ ok: true, text: "Produto publicado com sucesso! Já aparece na loja." });
+        const created = await createProduct(payload);
+        setPublishMsg({
+          ok: true,
+          text: `Produto “${created.name}” publicado! Está no topo do catálogo, em “Gerir catálogo”.`,
+        });
+        setForm(emptyForm);
+        setEditing(null);
+        // Leva o admin a "Gerir catálogo" com o produto novo no topo da lista
+        // (a lista vem do servidor a seguir, para não ficar desatualizada) e
+        // revalida o resto da página.
+        openCatalogWith(created);
+        void refreshCatalogTop(created);
+        return;
       }
       setForm(emptyForm);
       setEditing(null);
@@ -422,19 +491,89 @@ export default function AdminPage() {
     router.push("/");
   };
 
-  // Carrega a lista sempre que o utilizador ou o filtro mudam (via useAsyncData,
-  // que adia o setState para não disparar atualizações síncronas no effect).
-  // 401 → sessão expirada: o catch do fetcher (promise, fora do effect) faz logout().
-  const { data: orders, loading, error: loadError, setData: setOrders } = useAsyncData(
+  /**
+   * Carrega as estatísticas de vendas (todos os totais são agregados no SQL do
+   * backend — o cliente recebe só os números). Sem cache e sem dados locais: um
+   * painel de gestão não pode mostrar números inventados.
+   */
+  const loadStats = async () => {
+    setStatsLoading(true);
+    setStatsError(null);
+    try {
+      setStats(await fetchSalesStats());
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.status === 401) {
+          logout();
+          return;
+        }
+        setStatsError(
+          err.status === 403
+            ? "A sua conta não tem permissões de administrador."
+            : err.message,
+        );
+        return;
+      }
+      setStatsError("Não foi possível carregar as estatísticas. Verifique a ligação e tente novamente.");
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  // Carrega uma vez, à entrada da secção "Estatísticas". O botão "Tentar
+  // novamente" do painel recarrega explicitamente (loadStats).
+  const statsRequestedRef = useRef(false);
+  useEffect(() => {
+    if (section !== "estatisticas" || statsRequestedRef.current) return;
+    statsRequestedRef.current = true;
+    void loadStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section]);
+
+  // Carrega a página sempre que o utilizador, o filtro ou a página mudam (via
+  // useAsyncData, que adia o setState para não disparar atualizações síncronas
+  // no effect). 401 → sessão expirada: o catch do fetcher (promise, fora do
+  // effect) faz logout().
+  const {
+    data: ordersResult,
+    loading,
+    error: loadError,
+    setData: setOrdersResult,
+  } = useAsyncData<AdminOrdersPage | null>(
     () =>
       user
-        ? listAdminOrders(statusFilter).catch((err) => {
+        ? listAdminOrders(statusFilter, ordersPage, ADMIN_ORDERS_PAGE_SIZE).catch((err) => {
             if (err instanceof ApiError && err.status === 401) logout();
             throw err;
           })
-        : Promise.resolve([]),
-    [user, statusFilter],
+        : Promise.resolve(null),
+    [user, statusFilter, ordersPage],
   );
+
+  /**
+   * Pedidos da página atual (lista vazia enquanto carrega a primeira vez).
+   * Num `useMemo` próprio: a criar um array novo em cada render, invalidava as
+   * memoizações que dele dependem (pastas semanais, contadores).
+   */
+  const orders = useMemo(() => ordersResult?.items ?? [], [ordersResult]);
+
+  /**
+   * Atualiza a lista da página atual sem perder os metadados da página (totais,
+   * contagens por estado) — as ações locais (avançar/cancelar) só mexem nos itens.
+   */
+  const setOrders = (update: Order[] | ((previous: Order[]) => Order[])) => {
+    setOrdersResult((previous) => {
+      const base = previous ?? EMPTY_ORDERS_PAGE;
+      const items = typeof update === "function" ? update(base.items) : update;
+      return { ...base, items };
+    });
+  };
+
+  /** Muda de página e fecha a pasta aberta (as semanas da página mudam). */
+  const goToPage = (next: number) => {
+    setOpenWeek(null);
+    setOrdersPage(Math.max(0, next));
+  };
 
   // Catálogo para a secção "Gerir produtos" (só carrega com sessão de admin).
   const { data: products, loading: productsLoading, setData: setProducts } = useAsyncData(
@@ -448,12 +587,113 @@ export default function AdminPage() {
     [user],
   );
 
+  /**
+   * Depois de publicar: abre "Gerir catálogo" com o produto novo destacado no
+   * topo, para o admin confirmar o que acabou de ficar visível na loja.
+   */
+  const openCatalogWith = (p: Product) => {
+    setSection("gerir");
+    setHighlightId(p.id);
+    setProducts([p, ...(products ?? []).filter((x) => x.id !== p.id)]);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    // O destaque desaparece sozinho — não deve confundir uma visita seguinte.
+    window.setTimeout(() => setHighlightId((cur) => (cur === p.id ? null : cur)), 12_000);
+  };
+
+  /**
+   * Confirma o topo da lista com o servidor (a lista local pode estar stale) e
+   * revalida a página — mantendo sempre o produto recém-publicado em primeiro.
+   */
+  const refreshCatalogTop = async (p: Product) => {
+    try {
+      const list = await listAdminProducts();
+      setProducts([p, ...list.filter((x) => x.id !== p.id)]);
+    } catch {
+      /* a lista local já mostra o produto publicado */
+    }
+    router.refresh();
+  };
+
   /** Recarga silenciosa da lista de produtos (após criar/editar/eliminar). */
   const reloadProducts = async () => {
     try {
       setProducts(await listAdminProducts());
     } catch {
       /* a lista antiga permanece — o erro já é tratado no useAsyncData */
+    }
+  };
+
+  // Cupões promocionais (GET /api/admin/coupons — apenas admin).
+  const { data: coupons, loading: couponsLoading, setData: setCoupons } = useAsyncData(
+    () =>
+      user
+        ? listCoupons().catch((err) => {
+            if (err instanceof ApiError && err.status === 401) logout();
+            throw err;
+          })
+        : Promise.resolve([] as Coupon[]),
+    [user],
+  );
+
+  // Formulário de criação de cupão.
+  const [couponForm, setCouponForm] = useState({
+    code: "",
+    discountType: "PERCENT",
+    discountValue: "",
+    minimumSubtotal: "",
+    usageLimit: "",
+    expiresAt: "",
+  });
+  const [couponBusy, setCouponBusy] = useState(false);
+
+  const submitCoupon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (couponBusy) return;
+    const value = Number(couponForm.discountValue);
+    if (!couponForm.code.trim() || !Number.isFinite(value) || value <= 0) {
+      window.alert("Indique um código e um valor de desconto maior que zero.");
+      return;
+    }
+    setCouponBusy(true);
+    try {
+      const created = await createCoupon({
+        code: couponForm.code.trim().toUpperCase(),
+        discountType: couponForm.discountType as "PERCENT" | "FIXED",
+        discountValue: value,
+        minimumSubtotal: couponForm.minimumSubtotal
+          ? Number(couponForm.minimumSubtotal)
+          : undefined,
+        usageLimit: couponForm.usageLimit ? Number(couponForm.usageLimit) : undefined,
+        expiresAt: couponForm.expiresAt
+          ? new Date(couponForm.expiresAt).toISOString()
+          : undefined,
+        active: true,
+      });
+      setCoupons((prev) => [created, ...(prev ?? [])]);
+      setCouponForm({
+        code: "",
+        discountType: "PERCENT",
+        discountValue: "",
+        minimumSubtotal: "",
+        usageLimit: "",
+        expiresAt: "",
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao criar o cupão.";
+      window.alert(`Não foi possível criar o cupão:\n${msg}`);
+    } finally {
+      setCouponBusy(false);
+    }
+  };
+
+  const removeCoupon = async (coupon: Coupon) => {
+    if (!coupon.id || !window.confirm(`Remover o cupão ${coupon.code}?`)) return;
+    try {
+      await deleteCoupon(coupon.id);
+      setCoupons((prev) => (prev ?? []).filter((c) => c.id !== coupon.id));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao remover o cupão.";
+      window.alert(`Não foi possível remover o cupão:\n${msg}`);
     }
   };
 
@@ -476,7 +716,7 @@ export default function AdminPage() {
     setRefreshing(true);
     const started = Date.now();
     try {
-      setOrders(await listAdminOrders(statusFilter));
+      setOrdersResult(await listAdminOrders(statusFilter, ordersPage, ADMIN_ORDERS_PAGE_SIZE));
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) logout();
     } finally {
@@ -515,12 +755,360 @@ export default function AdminPage() {
     }
   };
 
+  /**
+   * Cancela um pedido (admin) — o servidor repõe o stock e envia o email.
+   * O estado terminal atualiza-se na lista sem recarregar.
+   */
+  const cancel = async (order: Order) => {
+    if (
+      !window.confirm(
+        `Cancelar o pedido ${order.id}? O stock será reposto e o cliente será notificado.`,
+      )
+    ) {
+      return;
+    }
+    setCancellingId(order.id);
+    try {
+      const updated = await cancelOrder(order.id);
+      setOrders((prev) => (prev ?? []).map((o) => (o.id === updated.id ? updated : o)));
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        logout();
+        return;
+      }
+      const msg = err instanceof Error ? err.message : "Erro ao cancelar o pedido.";
+      window.alert(`Não foi possível cancelar o pedido ${order.id}:\n${msg}`);
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
+  /**
+   * Avança a pasta semanal inteira um estado para a frente: todos os pedidos
+   * em curso recebem o MESMO estado de destino — o estado seguinte ao mais
+   * avançado da pasta. Clicando repetidamente a pasta percorre
+   * "Pagamento confirmado" → "Em preparação" → "Enviado" → "Em trânsito" →
+   * "Entregue". Pedidos já entregues ficam de fora.
+   */
+  const advanceAllWeek = async (group: WeekGroup<Order>) => {
+    const pending = group.items.filter(
+      (o) => ORDER_STATUSES.indexOf(o.status) < ORDER_STATUSES.length - 1,
+    );
+    if (pending.length === 0) return;
+    // Estado mais avançado da pasta → destino comum = seguinte.
+    const maxIndex = Math.max(
+      ...pending.map((o) => ORDER_STATUSES.indexOf(o.status)),
+    );
+    const target = ORDER_STATUSES[Math.min(maxIndex + 1, ORDER_STATUSES.length - 1)];
+    const ok = window.confirm(
+      `Semana ${group.week}: avançar ${pending.length} pedido${pending.length === 1 ? "" : "s"} para o estado «${target}»?`,
+    );
+    if (!ok) return;
+    setAdvancingWeek(group.key);
+    let failures = 0;
+    for (const o of pending) {
+      try {
+        const updated = await advanceOrderStatus(o.id, target);
+        setOrders((prev) =>
+          (prev ?? []).map((x) => (x.id === updated.id ? updated : x)),
+        );
+      } catch {
+        failures++;
+      }
+    }
+    setAdvancingWeek(null);
+    if (failures > 0) {
+      window.alert(
+        `${pending.length - failures} pedido(s) avançado(s); ${failures} falharam (erro de rede ou sessão expirada).`,
+      );
+    }
+  };
+
+  /**
+   * Gera o HTML de um recibo (documento de impressão) para uma lista de
+   * pedidos: cliente, contacto, morada, artigos, pagamento e totais + resumo
+   * financeiro. Serve tanto o recibo de UM pedido como o da pasta semanal.
+   */
+  const buildReceiptHtml = (items: Order[], title: string, subtitle: string) => {
+    const esc = (s: string) =>
+      s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const money = (v: number) =>
+      `${Math.round(v).toLocaleString("pt-MZ").replace(/\s/g, ".")} MT`;
+    const grandTotal = items.reduce((sum, o) => sum + o.total, 0);
+    const totalShipping = items.reduce((sum, o) => sum + o.shipping, 0);
+
+    const orderRows = items
+      .map(
+        (o) => `
+      <div class="order">
+        <div class="order-head">
+          <div>
+            <strong>${esc(o.id)}</strong>
+            <span class="pill">${esc(o.status)}</span>
+            <span class="date">${formatDate(o.date)}</span>
+          </div>
+          <div class="total">${money(o.total)}</div>
+        </div>
+        <table>
+          <tr>
+            <th>Cliente</th>
+            <td>${esc(o.address.fullName)} · ${esc(o.address.phone)}</td>
+          </tr>
+          <tr>
+            <th>Morada</th>
+            <td>${esc(o.address.address)}, ${esc(o.address.city)} — ${esc(o.address.province)}</td>
+          </tr>
+          <tr>
+            <th>Pagamento</th>
+            <td>${esc(o.paymentMethod)}${o.paymentReference ? ` · Ref. ${esc(o.paymentReference)}` : ""}</td>
+          </tr>
+        </table>
+        <table class="items">
+          <thead>
+            <tr><th>Artigo</th><th>Qtd.</th><th>Preço</th><th>Subtotal</th></tr>
+          </thead>
+          <tbody>
+            ${o.items
+              .map(
+                (i) => `<tr>
+              <td>${esc(i.name)}${i.variant ? ` · ${esc(i.variant)}` : ""}</td>
+              <td>${i.qty}</td>
+              <td>${money(i.price)}</td>
+              <td>${money(i.price * i.qty)}</td>
+            </tr>`,
+              )
+              .join("")}
+          </tbody>
+        </table>
+      </div>`,
+      )
+      .join("");
+
+    const html = `<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<title>${title} · NorteShopMoz</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font: 13px/1.5 "Segoe UI", Arial, sans-serif; color: #0f172a; padding: 24px; }
+  h1 { font-size: 18px; margin-bottom: 2px; }
+  .sub { color: #64748b; font-size: 12px; margin-bottom: 18px; }
+  .summary { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+  .summary div { border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 14px; font-size: 12px; }
+  .summary b { display: block; font-size: 16px; margin-top: 2px; }
+  .order { border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; margin-bottom: 12px; page-break-inside: avoid; }
+  .order-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .pill { background: #ecfdf5; color: #047857; border-radius: 99px; padding: 1px 8px; font-size: 11px; font-weight: 700; margin-left: 6px; }
+  .date { color: #64748b; font-size: 11px; margin-left: 6px; }
+  .total { font-weight: 700; font-size: 15px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 12px; }
+  th { text-align: left; width: 90px; color: #64748b; font-weight: 600; padding: 2px 6px 2px 0; vertical-align: top; }
+  td { padding: 2px 0; }
+  .items th { width: auto; border-bottom: 1px solid #e2e8f0; padding: 4px 6px; }
+  .items td { border-bottom: 1px solid #f1f5f9; padding: 4px 6px; }
+  .items th:last-child, .items td:last-child { text-align: right; }
+  .items th:nth-child(2), .items td:nth-child(2) { text-align: center; }
+  .foot { margin-top: 16px; text-align: center; color: #64748b; font-size: 11px; }
+  @media print { body { padding: 0; } }
+</style>
+</head>
+<body>
+  <h1>${title}</h1>
+  <p class="sub">${subtitle} · ${items.length} pedido(s) · Emitido em ${new Date().toLocaleString("pt-MZ")}</p>
+  <div class="summary">
+    <div>Pedidos<b>${items.length}</b></div>
+    <div>Artigos<b>${items.reduce((n, o) => n + o.items.length, 0)}</b></div>
+    <div>Envios<b>${money(totalShipping)}</b></div>
+    <div>Total da semana<b>${money(grandTotal)}</b></div>
+  </div>
+  ${orderRows}
+  <p class="foot">NorteShopMoz — Compras simples, seguras e acessíveis em Moçambique · Documento gerado automaticamente pelo painel de administração.</p>
+</body>
+</html>`;
+
+    return html;
+  };
+
+  /** Abre a janela de impressão do browser com um documento HTML já gerado. */
+  const openPrintWindow = (html: string) => {
+    const win = window.open("", "_blank", "width=900,height=700");
+    if (!win) {
+      window.alert("Não foi possível abrir a janela de impressão — verifique o bloqueador de pop-ups.");
+      return;
+    }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 250);
+  };
+
+  /**
+   * Recibo da pasta semanal — todos os pedidos da semana num único documento.
+   */
+  const printWeekReceipt = (group: WeekGroup<Order>) => {
+    openPrintWindow(
+      buildReceiptHtml(
+        group.items,
+        `NorteShopMoz — Recibo da Semana ${group.week}`,
+        `${weekRangeLabel(group)} · Semana ${group.week} de ${group.year}`,
+      ),
+    );
+  };
+
+  /**
+   * Recibo de UM pedido — o mesmo documento, para imprimir/entregar logo que o
+   * pagamento é confirmado (ou em qualquer estado seguinte).
+   */
+  const printOrderReceipt = (order: Order) => {
+    openPrintWindow(
+      buildReceiptHtml(
+        [order],
+        `NorteShopMoz — Recibo do pedido ${order.id}`,
+        `${formatDate(order.date)} · ${order.status}`,
+      ),
+    );
+  };
+
+  // Totais por estado vindos do servidor. NÃO podem ser contados sobre a lista
+  // carregada: com paginação seriam apenas os da página atual.
   const counts = useMemo(() => {
     const map = new Map<OrderStatus, number>();
-    for (const s of ORDER_STATUSES) map.set(s, 0);
-    for (const o of orders ?? []) map.set(o.status, (map.get(o.status) ?? 0) + 1);
+    for (const s of ORDER_FILTERS) map.set(s, ordersResult?.statusCounts?.[s] ?? 0);
     return map;
-  }, [orders]);
+  }, [ordersResult]);
+
+  /** Pastas semanais (ISO, segunda→domingo), mais recente primeiro. */
+  const weekGroups = useMemo(
+    () => groupByISOWeek<Order>(orders ?? [], (o) => o.date),
+    [orders],
+  );
+
+  /** Fábrica de grupos semanais a partir de uma lista qualquer de pedidos. */
+  const groupOrders = (list: Order[]) => groupByISOWeek<Order>(list, (o) => o.date);
+
+  /** Formata o intervalo de datas de uma pasta semanal, ex.: "31 ago – 6 set 2026". */
+  const weekRangeLabel = (g: WeekGroup<Order>) => {
+    const fmt = (d: Date) =>
+      d.toLocaleDateString("pt-MZ", { day: "2-digit", month: "short" });
+    const year = g.start.toLocaleDateString("pt-MZ", { year: "numeric" });
+    const sameMonth = g.months.length === 1;
+    const endFmt = sameMonth
+      ? g.end.toLocaleDateString("pt-MZ", { day: "2-digit" })
+      : fmt(g.end);
+    return `${fmt(g.start)} – ${endFmt} ${year}`;
+  };
+
+  /** Pasta semanal actualmente aberta (ou null se fechada). */
+  const openGroup = useMemo(
+    () => weekGroups.find((g) => g.key === openWeek) ?? null,
+    [weekGroups, openWeek],
+  );
+
+  /** Cartão de pedido individual — usado na pasta aberta e nos filtros por estado. */
+  const renderOrderCard = (o: Order) => {
+    const index = ORDER_STATUSES.indexOf(o.status);
+    const canAdvance = index >= 0 && index < ORDER_STATUSES.length - 1;
+    return (
+      <div key={o.id} className="rounded-2xl border border-slate-100 bg-surface p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-display font-bold text-slate-900">{o.id}</p>
+              <StatusPill status={o.status} />
+              {o.items.length > 1 && (
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-500">
+                  {o.items.length} itens
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-sm text-slate-600">
+              {o.address.fullName} · {o.address.phone}
+            </p>
+            <p className="mt-0.5 line-clamp-1 text-xs text-slate-400">
+              {o.address.address}, {o.address.city} — {o.address.province} ·{" "}
+              {o.paymentMethod}
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <span className="font-display text-lg font-bold text-slate-900">
+              {format(o.total)}
+            </span>
+            <span className="text-xs text-slate-400">{formatDate(o.date)}</span>
+          </div>
+        </div>
+
+        <ul className="mt-3 space-y-1 border-t border-slate-100 pt-3 text-sm">
+          {o.items.slice(0, 3).map((i) => (
+            <li key={i.productId + (i.variant ?? "")} className="flex justify-between gap-3">
+              <Link
+                href={`/produto/${i.slug}`}
+                className="line-clamp-1 text-slate-600 hover:text-primary-700"
+              >
+                {i.qty}× {i.name}
+                {i.variant ? ` · ${i.variant}` : ""}
+              </Link>
+              <span className="shrink-0 font-semibold text-slate-700">
+                {format(i.price * i.qty)}
+              </span>
+            </li>
+          ))}
+          {o.items.length > 3 && (
+            <li className="text-xs font-medium text-slate-400">
+              + {o.items.length - 3} outro{o.items.length - 3 === 1 ? "" : "s"} artigo
+              {o.items.length - 3 === 1 ? "" : "s"}
+            </li>
+          )}
+        </ul>
+
+        {canAdvance ? (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+            <span className="text-xs text-slate-400">
+              Próximo estado: <strong className="text-slate-600">{ORDER_STATUSES[index + 1]}</strong>
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => printOrderReceipt(o)}>
+                <Printer className="size-3.5" /> Imprimir recibo
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                loading={cancellingId === o.id}
+                onClick={() => void cancel(o)}
+              >
+                <XCircle className="size-3.5" /> Cancelar
+              </Button>
+              <Button
+                size="sm"
+                loading={advancingId === o.id}
+                onClick={() => void advance(o)}
+              >
+                Avançar estado <ArrowRight className="size-3.5" />
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3">
+            {o.status === "Cancelado" ? (
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-red-600">
+                <XCircle className="size-3.5" /> Pedido cancelado
+              </span>
+            ) : (
+              <>
+                <span className="mr-auto flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+                  <Package className="size-3.5" /> Pedido concluído
+                </span>
+                {/* Também num pedido entregue o recibo pode ser reimpresso. */}
+                <Button variant="outline" size="sm" onClick={() => printOrderReceipt(o)}>
+                  <Printer className="size-3.5" /> Imprimir recibo
+                </Button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // Sem sessão ou sem privilégios de administrador → nunca mostra um login próprio;
   // usa o login principal da loja (modal). Administradores veem apenas o painel.
@@ -534,7 +1122,7 @@ export default function AdminPage() {
 
   if (!user) {
     return (
-      <div className="container-nsm flex justify-center py-14">
+      <div className="container-nsm flex justify-center py-16">
         <div className="w-full max-w-md">
           <div className="flex flex-col items-center text-center">
             <span className="flex size-14 items-center justify-center rounded-2xl bg-navy-900 text-white shadow-card">
@@ -564,7 +1152,7 @@ export default function AdminPage() {
 
   if (user.role !== "ADMIN") {
     return (
-      <div className="container-nsm flex justify-center py-14">
+      <div className="container-nsm flex justify-center py-16">
         <div className="w-full max-w-md text-center">
           <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-red-50 text-red-600 shadow-card">
             <ShieldCheck className="size-7" />
@@ -585,17 +1173,23 @@ export default function AdminPage() {
 
   const SECTION_TITLES = {
     pedidos: "Gestão de pedidos",
+    estatisticas: "Estatísticas de vendas",
     produtos: editing ? "Editar produto" : "Publicar produto",
     gerir: "Gerir catálogo",
     newsletter: "Newsletter",
+    cupoes: "Cupões",
   } as const;
   const SECTION_SUBTITLES = {
     pedidos: `${(orders ?? []).length} pedido${(orders ?? []).length === 1 ? "" : "s"}`,
+    estatisticas: stats
+      ? `Receita confirmada de ${stats.totalOrders} pedido${stats.totalOrders === 1 ? "" : "s"}`
+      : "Resumo agregado das vendas da loja",
     produtos: editing
       ? `A editar “${form.name || "produto"}”`
       : "Publique um novo produto no catálogo",
     gerir: `${(products ?? []).length} produto${(products ?? []).length === 1 ? "" : "s"} no catálogo`,
     newsletter: `${(subscribers ?? []).length} subscritor${(subscribers ?? []).length === 1 ? "" : "es"}`,
+    cupoes: `${(coupons ?? []).length} cupão${(coupons ?? []).length === 1 ? "" : "ões"}`,
   } as const;
 
   return (
@@ -619,6 +1213,16 @@ export default function AdminPage() {
               <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} /> Atualizar
             </Button>
           )}
+          {section === "estatisticas" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void loadStats()}
+              disabled={statsLoading}
+            >
+              <RefreshCw className={cn("size-3.5", statsLoading && "animate-spin")} /> Atualizar
+            </Button>
+          )}
           {section === "gerir" && (
             <Button variant="outline" size="sm" onClick={() => void reloadProducts()}>
               <RefreshCw className="size-3.5" /> Atualizar
@@ -639,8 +1243,10 @@ export default function AdminPage() {
       <div className="no-scrollbar mt-5 flex gap-1.5 overflow-x-auto rounded-xl bg-slate-100 p-1">
         {([
           { id: "pedidos", label: "Pedidos", icon: ClipboardList },
+          { id: "estatisticas", label: "Estatísticas", icon: BarChart3 },
           { id: "produtos", label: editing ? "Editar produto" : "Publicar produto", icon: PackagePlus },
           { id: "gerir", label: "Gerir catálogo", icon: Package },
+          { id: "cupoes", label: "Cupões", icon: Tag },
           { id: "newsletter", label: "Newsletter", icon: Users },
         ] as const).map((tab) => (
           <button
@@ -649,7 +1255,7 @@ export default function AdminPage() {
             className={cn(
               "flex shrink-0 flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition",
               section === tab.id
-                ? "bg-white text-navy-900 shadow-sm"
+                ? "bg-surface text-navy-900 shadow-sm"
                 : "text-slate-500 hover:text-slate-800",
             )}
           >
@@ -658,12 +1264,22 @@ export default function AdminPage() {
         ))}
       </div>
 
+      {/* ─── Secção: Estatísticas de vendas ───────────────────── */}
+      {section === "estatisticas" && (
+        <SalesStatsPanel
+          stats={stats}
+          loading={statsLoading}
+          error={statsError}
+          onRetry={() => void loadStats()}
+        />
+      )}
+
       {/* ─── Secção: Publicar/Editar produto ──────────────────── */}
       {section === "produtos" && (
         <form onSubmit={publish} className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="space-y-6">
             {/* Informação básica */}
-            <section className="rounded-2xl border border-slate-100 bg-white p-5 sm:p-6">
+            <section className="rounded-2xl border border-slate-100 bg-surface p-5 sm:p-6">
               <h2 className="flex items-center gap-2 font-display text-lg font-bold text-slate-900">
                 <BadgePlus className="size-5 text-primary-600" /> Informação básica
               </h2>
@@ -738,8 +1354,8 @@ export default function AdminPage() {
                       className={cn(
                         "rounded-full border px-3.5 py-1.5 text-xs font-bold transition",
                         form.badges.includes(b)
-                          ? "border-primary-600 bg-primary-600 text-white"
-                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300",
+                          ? "border-brand bg-brand text-white"
+                          : "border-slate-200 bg-surface text-slate-600 hover:border-slate-300",
                       )}
                     >
                       {b}
@@ -750,7 +1366,7 @@ export default function AdminPage() {
             </section>
 
             {/* Descrição */}
-            <section className="rounded-2xl border border-slate-100 bg-white p-5 sm:p-6">
+            <section className="rounded-2xl border border-slate-100 bg-surface p-5 sm:p-6">
               <h2 className="font-display text-lg font-bold text-slate-900">Descrição</h2>
               <div className="mt-4 grid gap-4">
                 <Textarea
@@ -818,7 +1434,7 @@ export default function AdminPage() {
                           <img src={url} alt="" className="size-full object-cover" />
                           {/* A primeira imagem é a capa (usada na loja). */}
                           {i === 0 && (
-                            <span className="absolute bottom-1 left-1 rounded bg-navy-900/80 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+                            <span className="absolute bottom-1 left-1 rounded bg-navy-900/80 px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide text-white">
                               Capa
                             </span>
                           )}
@@ -826,7 +1442,7 @@ export default function AdminPage() {
                             type="button"
                             onClick={() => removeImage(url)}
                             aria-label={`Remover imagem ${url}`}
-                            className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-navy-900/70 text-white opacity-0 transition hover:bg-red-600 group-hover:opacity-100"
+                            className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-navy-900/70 text-white opacity-0 transition hover:bg-danger group-hover:opacity-100"
                           >
                             <X className="size-3" aria-hidden />
                           </button>
@@ -836,7 +1452,7 @@ export default function AdminPage() {
                               onClick={() => setCover(url)}
                               aria-label={`Definir ${url} como capa`}
                               title="Definir como capa"
-                              className="absolute bottom-1 right-1 flex size-5 items-center justify-center rounded-full bg-white/90 text-slate-500 opacity-0 shadow transition hover:text-amber-500 group-hover:opacity-100"
+                              className="absolute bottom-1 right-1 flex size-5 items-center justify-center rounded-full bg-surface/90 text-slate-500 opacity-0 shadow transition hover:text-amber-500 group-hover:opacity-100"
                             >
                               <Star className="size-3" aria-hidden />
                             </button>
@@ -851,7 +1467,7 @@ export default function AdminPage() {
             </section>
 
             {/* Especificações e variantes */}
-            <section className="rounded-2xl border border-slate-100 bg-white p-5 sm:p-6">
+            <section className="rounded-2xl border border-slate-100 bg-surface p-5 sm:p-6">
               <h2 className="font-display text-lg font-bold text-slate-900">
                 Especificações e variantes
               </h2>
@@ -946,7 +1562,7 @@ export default function AdminPage() {
                                   value={/^#[0-9a-fA-F]{6}$/.test(o.hex) ? o.hex : "#000000"}
                                   onChange={(e) => updateOption(vi, oi, "hex", e.target.value)}
                                   aria-label="Cor da opção"
-                                  className="size-9 shrink-0 cursor-pointer rounded-lg border border-slate-200 bg-white p-0.5"
+                                  className="size-9 shrink-0 cursor-pointer rounded-lg border border-slate-200 bg-surface p-0.5"
                                 />
                                 <Input
                                   value={o.hex}
@@ -989,7 +1605,7 @@ export default function AdminPage() {
 
           {/* Coluna lateral: etiquetas e publicar */}
           <aside className="h-fit space-y-4 lg:sticky lg:top-32">
-            <section className="rounded-2xl border border-slate-100 bg-white p-5">
+            <section className="rounded-2xl border border-slate-100 bg-surface p-5">
               <h2 className="font-display text-lg font-bold text-slate-900">Etiquetas e destaque</h2>
               <div className="mt-3 space-y-1 divide-y divide-slate-100">
                 {[
@@ -1046,6 +1662,18 @@ export default function AdminPage() {
       {/* ─── Secção: Gerir catálogo ───────────────────────────── */}
       {section === "gerir" && (
         <div className="mt-6 space-y-4">
+          {/* Confirmação da publicação — a mensagem do formulário vive na
+              secção anterior, que fica escondida depois de mudar de aba. */}
+          {highlightId && publishMsg?.ok && (
+            <p
+              role="status"
+              className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3.5 py-2.5 text-sm font-semibold text-emerald-700"
+            >
+              <CheckCircle2 className="size-4 shrink-0" aria-hidden />
+              {publishMsg.text}
+            </p>
+          )}
+
           {productsLoading && (
             <>
               <ProductSkeleton />
@@ -1066,26 +1694,56 @@ export default function AdminPage() {
             (products ?? []).map((p) => (
               <div
                 key={p.id}
-                className="flex flex-wrap items-center gap-4 rounded-2xl border border-slate-100 bg-white p-4"
+                className={cn(
+                  "flex flex-wrap items-center gap-4 rounded-2xl border bg-surface p-4",
+                  highlightId === p.id
+                    ? "border-primary-300 ring-2 ring-primary-500/20"
+                    : "border-slate-100",
+                )}
               >
                 <div className="size-14 shrink-0 overflow-hidden rounded-xl border border-slate-100 bg-slate-50">
                   {p.images?.[0] ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={p.images[0]} alt="" className="size-full object-cover" />
                   ) : (
-                    <span className="flex size-full items-center justify-center text-slate-300">
+                    <span className="flex size-full items-center justify-center text-slate-400">
                       <Package className="size-5" aria-hidden />
                     </span>
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-slate-900">{p.name}</p>
+                  {/* O nome também abre a página do produto na loja — o painel
+                      não tem vista de detalhes própria. */}
+                  <Link
+                    href={`/produto/${p.slug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block max-w-full truncate font-semibold text-slate-900 transition hover:text-primary-700 hover:underline"
+                    aria-label={`Ver ${p.name} na loja`}
+                  >
+                    {p.name}
+                  </Link>
                   <p className="mt-0.5 text-xs text-slate-400">
                     /{p.slug} · {p.category} · stock: {p.stock}
                   </p>
+                  {highlightId === p.id && (
+                    <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">
+                      <CheckCircle2 className="size-3" aria-hidden /> Publicado agora
+                    </span>
+                  )}
                 </div>
                 <span className="font-display font-bold text-slate-900">{format(p.price)}</span>
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  {/* Abre a página do produto na loja (noutra aba) — é o que se
+                      quer conferir depois de publicar, sem perder o painel. */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    href={`/produto/${p.slug}`}
+                    target="_blank"
+                  >
+                    <Eye className="size-3.5" /> Ver na loja
+                  </Button>
                   <Button variant="outline" size="sm" onClick={() => startEdit(p)}>
                     <Pencil className="size-3.5" /> Editar
                   </Button>
@@ -1104,6 +1762,127 @@ export default function AdminPage() {
       )}
 
       {/* ─── Secção: Newsletter ───────────────────────────────── */}
+      {/* ─── Secção: Cupões ───────────────────────────────────── */}
+      {section === "cupoes" && (
+        <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+          {/* Lista de cupões */}
+          <div className="space-y-3">
+            {couponsLoading && (
+              <>
+                <ProductSkeleton />
+                <ProductSkeleton />
+              </>
+            )}
+
+            {!couponsLoading && (coupons ?? []).length === 0 && (
+              <EmptyState
+                icon={Tag}
+                title="Nenhum cupão ainda"
+                description="Crie o primeiro código promocional no formulário ao lado."
+              />
+            )}
+
+            {!couponsLoading &&
+              (coupons ?? []).map((c) => (
+                <div
+                  key={c.id ?? c.code}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-surface p-4"
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-mono font-bold text-slate-900">{c.code}</p>
+                      <span
+                        className={cn(
+                          "rounded-full px-2.5 py-1 text-xs font-bold",
+                          c.active === false
+                            ? "bg-slate-100 text-slate-500"
+                            : "bg-emerald-50 text-emerald-700",
+                        )}
+                      >
+                        {c.active === false ? "Inativo" : "Ativo"}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {c.discountType === "PERCENT"
+                        ? `${c.discountValue}%`
+                        : `${format(c.discountValue)}`}
+                      {c.minimumSubtotal ? ` · mínimo ${format(c.minimumSubtotal)}` : ""}
+                      {c.usageLimit ? ` · ${c.usedCount ?? 0}/${c.usageLimit} utilizações` : ""}
+                      {c.expiresAt ? ` · válido até ${formatDate(c.expiresAt)}` : ""}
+                    </p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => void removeCoupon(c)}>
+                    <Trash2 className="size-3.5" /> Remover
+                  </Button>
+                </div>
+              ))}
+          </div>
+
+          {/* Formulário de criação */}
+          <form
+            onSubmit={submitCoupon}
+            className="h-fit space-y-4 rounded-2xl border border-slate-100 bg-surface p-5"
+          >
+            <h2 className="flex items-center gap-2 font-display text-lg font-bold text-slate-900">
+              <Tag className="size-5 text-primary-600" /> Novo cupão
+            </h2>
+            <Input
+              label="Código"
+              required
+              value={couponForm.code}
+              onChange={(e) => setCouponForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))}
+              placeholder="EX: BEMVINDO10"
+            />
+            <Select
+              label="Tipo de desconto"
+              value={couponForm.discountType}
+              onChange={(e) => setCouponForm((f) => ({ ...f, discountType: e.target.value }))}
+            >
+              <option value="PERCENT">Percentagem (%)</option>
+              <option value="FIXED">Valor fixo (MT)</option>
+            </Select>
+            <Input
+              label={couponForm.discountType === "PERCENT" ? "Desconto (%)" : "Desconto (MT)"}
+              type="number"
+              min="0.01"
+              step="0.01"
+              required
+              value={couponForm.discountValue}
+              onChange={(e) => setCouponForm((f) => ({ ...f, discountValue: e.target.value }))}
+              placeholder={couponForm.discountType === "PERCENT" ? "10" : "500"}
+            />
+            <Input
+              label="Subtotal mínimo (MT)"
+              type="number"
+              min="0"
+              step="0.01"
+              value={couponForm.minimumSubtotal}
+              onChange={(e) => setCouponForm((f) => ({ ...f, minimumSubtotal: e.target.value }))}
+              placeholder="Opcional"
+            />
+            <Input
+              label="Limite de utilizações"
+              type="number"
+              min="0"
+              step="1"
+              value={couponForm.usageLimit}
+              onChange={(e) => setCouponForm((f) => ({ ...f, usageLimit: e.target.value }))}
+              placeholder="0 = sem limite"
+            />
+            <Input
+              label="Válido até"
+              type="date"
+              value={couponForm.expiresAt}
+              onChange={(e) => setCouponForm((f) => ({ ...f, expiresAt: e.target.value }))}
+              hint="Deixe vazio para um cupão sem validade."
+            />
+            <Button type="submit" fullWidth loading={couponBusy}>
+              <Plus className="size-4" /> Criar cupão
+            </Button>
+          </form>
+        </div>
+      )}
+
       {section === "newsletter" && (
         <div className="mt-6 space-y-4">
           {subscribersLoading && (
@@ -1125,7 +1904,7 @@ export default function AdminPage() {
             (subscribers ?? []).map((s) => (
               <div
                 key={s.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white p-4"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-surface p-4"
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-700">
@@ -1139,7 +1918,7 @@ export default function AdminPage() {
                 <div className="flex shrink-0 items-center gap-2">
                   <span
                     className={cn(
-                      "rounded-full px-2.5 py-1 text-[11px] font-bold",
+                      "rounded-full px-2.5 py-1 text-xs font-bold",
                       s.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500",
                     )}
                   >
@@ -1157,35 +1936,26 @@ export default function AdminPage() {
         <>
       {/* Filtros por estado */}
       <div className="no-scrollbar mt-5 flex gap-1.5 overflow-x-auto pb-1">
-        <button
-          onClick={() => setStatusFilter("")}
-          className={cn(
-            "flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-bold transition",
-            statusFilter === ""
-              ? "border-navy-900 bg-navy-900 text-white"
-              : "border-slate-200 bg-white text-slate-600 hover:border-slate-300",
-          )}
-        >
-          <ClipboardList className="size-3.5" /> Todos
-          <span className={cn("rounded-full px-1.5 text-[10px]", statusFilter === "" ? "bg-white/20" : "bg-slate-100")}>
-            {(orders ?? []).length}
-          </span>
-        </button>
-        {ORDER_STATUSES.map((s) => (
+        {ORDER_FILTERS.map((s) => (
           <button
             key={s}
-            onClick={() => setStatusFilter(s)}
+            onClick={() => {
+              setStatusFilter(s);
+              // Volta à primeira página: mudar de filtro mantendo a página 3
+              // mostraria uma página vazia quando o estado tem poucos pedidos.
+              goToPage(0);
+            }}
             className={cn(
               "flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-bold transition",
               statusFilter === s
                 ? "border-navy-900 bg-navy-900 text-white"
-                : "border-slate-200 bg-white text-slate-600 hover:border-slate-300",
+                : "border-slate-200 bg-surface text-slate-600 hover:border-slate-300",
             )}
           >
             {s}
             <span
               className={cn(
-                "rounded-full px-1.5 text-[10px]",
+                "rounded-full px-1.5 text-xs",
                 statusFilter === s ? "bg-white/20" : "bg-slate-100",
               )}
             >
@@ -1217,97 +1987,143 @@ export default function AdminPage() {
         {!loading && !loadError && (orders ?? []).length === 0 && (
           <EmptyState
             icon={Package}
-            title={statusFilter ? `Nenhum pedido em “${statusFilter}”` : "Nenhum pedido ainda"}
-            description={
-              statusFilter
-                ? "Mude o filtro ou volte a “Todos” para ver os restantes pedidos."
-                : "Quando um cliente fizer uma compra, o pedido aparecerá aqui."
-            }
+            title={`Nenhum pedido em “${statusFilter}”`}
+            description="Mude o filtro para ver os pedidos nos outros estados."
           />
         )}
 
-        {!loading &&
-          (orders ?? []).map((o) => {
-            const index = ORDER_STATUSES.indexOf(o.status);
-            const canAdvance = index >= 0 && index < ORDER_STATUSES.length - 1;
-            return (
-              <div key={o.id} className="rounded-2xl border border-slate-100 bg-white p-5">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-display font-bold text-slate-900">{o.id}</p>
-                      <StatusPill status={o.status} />
-                      {o.items.length > 1 && (
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">
-                          {o.items.length} itens
+        {/* ─── Pastas semanais (vista padrão em todos os filtros) ── */}
+        {!loading && !loadError && (orders ?? []).length > 0 && !openGroup && (
+          <>
+            {groupOrders(orders ?? []).map((g) => {
+              const pending = g.items.filter(
+                (o) => ORDER_STATUSES.indexOf(o.status) < ORDER_STATUSES.length - 1,
+              ).length;
+              return (
+                <div
+                  key={g.key}
+                  className="rounded-2xl border border-slate-100 bg-surface p-5 transition hover:border-slate-200 hover:shadow-card"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="flex size-10 items-center justify-center rounded-xl bg-primary-50 text-primary-700">
+                          <FolderOpen className="size-5" aria-hidden />
                         </span>
+                        <p className="font-display font-bold text-slate-900">
+                          Semana {g.week} · {g.months.join("/")} {g.year}
+                        </p>
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-500">
+                          {g.items.length} pedido{g.items.length === 1 ? "" : "s"}
+                        </span>
+                        {pending > 0 ? (
+                          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-700">
+                            {pending} em curso
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">
+                            Todos concluídos
+                          </span>
+                        )}
+                        {statusFilter && (
+                          <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-bold text-sky-700">
+                            {statusFilter}
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-400">
+                        <CalendarDays className="size-3.5" aria-hidden /> {weekRangeLabel(g)} · {g.key}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
+                      <Button variant="outline" size="sm" onClick={() => setOpenWeek(g.key)}>
+                        <Eye className="size-3.5" /> Ver pedidos
+                      </Button>
+                      {/* O recibo está sempre disponível (inclusive na pasta com
+                          pedidos em curso, ex.: pagamentos já confirmados). */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                        onClick={() => printWeekReceipt(g)}
+                      >
+                        <Printer className="size-3.5" /> Imprimir recibo
+                      </Button>
+                      {pending > 0 && (
+                        <Button
+                          size="sm"
+                          loading={advancingWeek === g.key}
+                          onClick={() => {
+                            void advanceAllWeek(g);
+                          }}
+                        >
+                          Avançar estado <ArrowRight className="size-3.5" />
+                        </Button>
                       )}
                     </div>
-                    <p className="mt-1 text-sm text-slate-600">
-                      {o.address.fullName} · {o.address.phone}
-                    </p>
-                    <p className="mt-0.5 line-clamp-1 text-xs text-slate-400">
-                      {o.address.address}, {o.address.city} — {o.address.province} ·{" "}
-                      {o.paymentMethod}
-                    </p>
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <span className="font-display text-lg font-bold text-slate-900">
-                      {format(o.total)}
-                    </span>
-                    <span className="text-xs text-slate-400">{formatDate(o.date)}</span>
                   </div>
                 </div>
+              );
+            })}
+          </>
+        )}
 
-                <ul className="mt-3 space-y-1 border-t border-slate-100 pt-3 text-sm">
-                  {o.items.slice(0, 3).map((i) => (
-                    <li key={i.productId + (i.variant ?? "")} className="flex justify-between gap-3">
-                      <Link
-                        href={`/produto/${i.slug}`}
-                        className="line-clamp-1 text-slate-600 hover:text-primary-700"
-                      >
-                        {i.qty}× {i.name}
-                        {i.variant ? ` · ${i.variant}` : ""}
-                      </Link>
-                      <span className="shrink-0 font-semibold text-slate-700">
-                        {format(i.price * i.qty)}
-                      </span>
-                    </li>
-                  ))}
-                  {o.items.length > 3 && (
-                    <li className="text-xs font-medium text-slate-400">
-                      + {o.items.length - 3} outro{o.items.length - 3 === 1 ? "" : "s"} artigo
-                      {o.items.length - 3 === 1 ? "" : "s"}
-                    </li>
-                  )}
-                </ul>
-
-                {canAdvance ? (
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
-                    <span className="text-xs text-slate-400">
-                      Próximo estado: <strong className="text-slate-600">{ORDER_STATUSES[index + 1]}</strong>
-                    </span>
-                    <Button
-                      size="sm"
-                      loading={advancingId === o.id}
-                      onClick={() => void advance(o)}
-                    >
-                      Avançar estado <ArrowRight className="size-3.5" />
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="mt-4 flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
-                    <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
-                      <Package className="size-3.5" /> Pedido concluído
-                    </span>
-                  </div>
-                )}
+        {/* ─── Interior de uma pasta semanal aberta ──────────────── */}
+        {!loading && !loadError && openGroup && (
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-primary-100 bg-primary-50/60 p-4">
+              <div>
+                <p className="font-display font-bold text-slate-900">
+                  Semana {openGroup.week} · {openGroup.months.join("/")} {openGroup.year}
+                  {statusFilter ? ` · ${statusFilter}` : ""}
+                </p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  <CalendarDays className="mr-1 inline size-3.5" aria-hidden />
+                  {weekRangeLabel(openGroup)} · {openGroup.items.length} pedido
+                  {openGroup.items.length === 1 ? "" : "s"}
+                </p>
               </div>
-            );
-          })}
+              <Button variant="outline" size="sm" onClick={() => setOpenWeek(null)}>
+                <X className="size-3.5" /> Fechar pasta
+              </Button>
+            </div>
+            {openGroup.items.map((o) => renderOrderCard(o))}
+          </>
+        )}
       </div>
+
+      {/* Paginação — feita no SERVIDOR (filtro, ordenação e limite em SQL). Só
+          aparece quando há mais de uma página. */}
+      {!loading && !loadError && (ordersResult?.totalPages ?? 0) > 1 && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-surface px-4 py-3">
+          <p className="text-xs font-semibold text-slate-500">
+            Página {(ordersResult?.page ?? 0) + 1} de {ordersResult?.totalPages} ·{" "}
+            {ordersResult?.totalItems ?? 0} pedido
+            {(ordersResult?.totalItems ?? 0) === 1 ? "" : "s"}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={ordersPage === 0}
+              onClick={() => goToPage(ordersPage - 1)}
+            >
+              <ChevronLeft className="size-3.5" /> Anterior
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!ordersResult?.hasNext}
+              onClick={() => goToPage(ordersPage + 1)}
+            >
+              Seguinte <ChevronRight className="size-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
         </>
       )}
+
     </div>
   );
 }

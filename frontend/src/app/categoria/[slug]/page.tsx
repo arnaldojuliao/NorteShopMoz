@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import Image from "next/image";
 import { repo } from "@/lib/repo";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 import { ProductListing } from "@/components/product/ProductListing";
+import { ProductImage } from "@/components/product/ProductImage";
+import { isValidImageSrc, serializeJsonLd } from "@/lib/utils";
 import { site } from "@/config/site";
+import { envOr } from "@/lib/env";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? site.url;
+const SITE_URL = envOr(process.env.NEXT_PUBLIC_SITE_URL, site.url);
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -21,13 +23,18 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { slug } = await params;
   const category = await repo.getCategory(slug);
   if (!category) return { title: "Categoria não encontrada" };
+  // Só emite openGraph.images com uma imagem válida (URLs relativas rebentam
+  // a resolução de metadados do Next).
+  const ogImage = isValidImageSrc(category.image)
+    ? [{ url: category.image, width: 800, height: 600 }]
+    : undefined;
   return {
     title: `${category.name} — Comprar online em Moçambique`,
-    description: `${category.description} Compre ${category.name.toLowerCase()} online na NorteShop com entrega para todo Moçambique.`,
+    description: `${category.description} Compre ${category.name.toLowerCase()} online na NorteShopMoz com entrega para todo Moçambique.`,
     openGraph: {
-      title: `${category.name} · NorteShop`,
+      title: `${category.name} · NorteShopMoz`,
       description: category.description,
-      images: [{ url: category.image, width: 800, height: 600 }],
+      ...(ogImage ? { images: ogImage } : {}),
     },
   };
 }
@@ -52,7 +59,7 @@ export default async function CategoryPage({ params }: PageProps) {
         position: i + 1,
         name: p.name,
         url: `${SITE_URL}/produto/${p.slug}`,
-        image: p.images[0],
+        ...(isValidImageSrc(p.images[0]) ? { image: p.images[0] } : {}),
         offers: {
           "@type": "Offer",
           priceCurrency: "MZN",
@@ -80,24 +87,26 @@ export default async function CategoryPage({ params }: PageProps) {
       <div className="container-nsm py-5">
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+          dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbJsonLd) }}
         />
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(collectionJsonLd) }}
+          dangerouslySetInnerHTML={{ __html: serializeJsonLd(collectionJsonLd) }}
         />
         <Breadcrumbs items={[{ label: category.name }]} />
 
         {/* Banner da categoria */}
-        <div className="relative mt-4 overflow-hidden rounded-3xl">
+        <div className="relative mt-4 overflow-hidden rounded-2xl">
           <div className="relative aspect-[3/1] min-h-36 sm:aspect-[21/6]">
-            <Image
+            <ProductImage
               src={category.image}
               alt={category.name}
               fill
               priority
               sizes="100vw"
-              className="object-cover"
+              emoji={category.emoji}
+              label={category.name}
+              imgClassName="object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-r from-navy-950/85 via-navy-950/50 to-transparent" />
           </div>

@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Utilitário para gerir cookies HttpOnly seguros para tokens JWT.
@@ -29,7 +30,7 @@ public class JwtCookieService {
     public JwtCookieService(
             @Value("${app.cookie.secure:true}") boolean secure,
             @Value("${app.cookie.domain:}") String domain,
-            @Value("${app.jwt.expiration-seconds:604800}") int accessTokenMaxAgeSeconds,
+            @Value("${app.jwt.expiration-seconds:3600}") int accessTokenMaxAgeSeconds,
             @Value("${app.jwt.refresh-expiration-seconds:2592000}") int refreshTokenMaxAgeSeconds) {
         this.secure = secure;
         this.domain = domain.isBlank() ? null : domain;
@@ -73,6 +74,23 @@ public class JwtCookieService {
     /** Lê refresh token do cookie. */
     public Optional<String> getRefreshToken(HttpServletRequest request) {
         return readCookie(request, REFRESH_COOKIE);
+    }
+
+    /**
+     * Gera um CSRF token, grava-o no cookie (legível por JS) e devolve-o.
+     *
+     * <p>O valor devolvido vai também no <strong>corpo</strong> das respostas de
+     * autenticação (e no endpoint {@code GET /api/auth/csrf}): o cookie só é
+     * legível por JavaScript quando o frontend está no mesmo domínio do cookie.
+     * Com a API num subdomínio (ex.: {@code api.loja.mz}) o cookie é host-only,
+     * o JS não o via e o header {@code X-CSRF-Token} seguia vazio — todos os
+     * pedidos autenticados que alteram estado eram rejeitados com 403.</p>
+     */
+    public String issueCsrfToken(HttpServletResponse response) {
+        String token = UUID.randomUUID().toString().replace("-", "")
+                + UUID.randomUUID().toString().replace("-", "");
+        setCsrfToken(response, token);
+        return token;
     }
 
     /** Lê CSRF token do cookie. */

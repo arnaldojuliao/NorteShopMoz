@@ -44,13 +44,13 @@ export function WishlistButton({
       aria-label={active ? "Remover dos favoritos" : "Adicionar aos favoritos"}
       aria-pressed={active}
       className={cn(
-        "flex items-center justify-center rounded-full bg-white text-slate-400 shadow-card transition-all duration-200 hover:text-red-500 active:scale-90",
-        size === "md" ? "size-9" : "size-8",
+        "flex items-center justify-center rounded-full bg-surface text-slate-400 shadow-card transition-all duration-200 hover:text-red-500 active:scale-90",
+        size === "md" ? "size-10" : "size-9",
         active && "text-red-500",
         className,
       )}
     >
-      <Heart className={size === "md" ? "size-[18px]" : "size-4"} fill={active ? "currentColor" : "none"} />
+      <Heart className={size === "md" ? "size-5" : "size-[18px]"} fill={active ? "currentColor" : "none"} />
       {label && <span className="ml-1.5 hidden text-sm font-medium sm:inline">{label}</span>}
     </button>
   );

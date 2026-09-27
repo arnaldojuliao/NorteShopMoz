@@ -42,7 +42,7 @@ export function Dropdown({
       {open && (
         <div
           className={cn(
-            "animate-slide-down absolute z-50 min-w-44 overflow-hidden rounded-xl border border-slate-200 bg-white py-1.5 shadow-card",
+            "animate-slide-down absolute z-50 min-w-44 overflow-hidden rounded-xl border border-slate-200 bg-surface py-1.5 shadow-card",
             placement === "top" ? "bottom-full mb-2" : "top-full mt-2",
             align === "left" ? "left-0" : "right-0",
             className,
