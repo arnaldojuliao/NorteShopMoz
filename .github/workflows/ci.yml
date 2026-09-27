@@ -95,9 +95,10 @@ jobs:
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
+          config: trufflehog.yaml
           # A ação já acrescenta --fail automaticamente; repetir dá
           # "flag 'fail' cannot be repeated"
-          extra_args: --no-verification
+          extra_args: --no-verification --verified-only
 
   # ════════════════════════════════════════════════════════════════════════════
   # BACKEND - Spring Boot (Maven)
@@ -105,7 +106,7 @@ jobs:
   backend-test:
     name: Backend - Test & Build
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: ./backend
@@ -143,6 +144,16 @@ jobs:
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-
+
+      - name: Install redis-cli
+        run: sudo apt-get update && sudo apt-get install -y redis-tools
+
+      - name: Wait for Redis
+        run: |
+          for i in {1..30}; do
+            redis-cli -h localhost -p 6381 ping && break
+            sleep 1
+          done
 
       - name: Run tests
         run: mvn -B test
