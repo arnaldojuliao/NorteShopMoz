@@ -164,6 +164,30 @@ cp .env.prod.example .env.prod    # preenche TODAS as variáveis obrigatórias
 Serviços: `nginx` (80/443) → `frontend` (:3000) + `api` (:8080) → `db` + `redis`
 (estado) + `redis-cache` (cache, `allkeys-lru`).
 
+### Deploy na Vercel
+
+A loja Next.js vive em `frontend/`, mas o projeto da Vercel tem a **raiz do
+repositório** como Root Directory. O Root Directory existe só no painel (não é
+configurável por `vercel.json` — o schema oficial não tem `rootDirectory`, e o
+próprio builder do Next da Vercel assume em comentário que essa definição «can't
+be triggered with vercel.json»), por isso o `vercel.json` da raiz traduz o que
+ele faria:
+
+| Campo | Porquê |
+|---|---|
+| `framework: nextjs` | sem `package.json` na raiz a deteção cairia em «Other» e o builder do Next não seria usado (perdia-se o SSR e o middleware) |
+| `installCommand` → `scripts/vercel-install.sh` | instala as dependências de `frontend/` e expõe `next` na raiz — o builder resolve-o a partir do Root Directory e aborta com `NEXT_NO_VERSION` se não o encontrar |
+| `buildCommand` → `scripts/vercel-build.sh` | corre o build dentro de `frontend/` |
+| `outputDirectory: frontend/.next` | o builder lê os artefactos (e o `public/` que fica ao lado deles) nesse caminho |
+
+Se o Root Directory passar a estar definido como `frontend` no painel, este
+`vercel.json` deixa de ser lido (fica fora do Root Directory) e pode ser removido
+com os dois scripts.
+
+As variáveis públicas (`NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_SITE_URL`,
+`NEXT_PUBLIC_APP_URL`) têm de existir como env vars do projeto na Vercel: sem
+elas o bundle cai no `http://localhost:8081` por omissão.
+
 ### Disco e registos
 
 Todos os serviços têm limite de log (`max-size: 10m`, `max-file: 5` → 50 MB máx.
