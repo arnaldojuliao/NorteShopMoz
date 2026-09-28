@@ -79,9 +79,12 @@ class FlywayMigrationTest {
                     allSucceeded &= rs.getBoolean("success");
                 }
             }
+            // A lista é deliberadamente explícita: crescer o schema obriga a
+            // passar por aqui e a confirmar que a migração nova foi mesmo
+            // aplicada (e que nenhuma foi saltada por um baseline).
             assertThat(applied)
                     .as("num schema vazio o Flyway aplica todas as migrações, sem baseline")
-                    .containsExactly("1", "2", "3");
+                    .containsExactly("1", "2", "3", "4", "5", "6", "7");
             assertThat(allSucceeded).isTrue();
             assertThat(applied).doesNotContain("0");
 
@@ -105,6 +108,21 @@ class FlywayMigrationTest {
             assertThat(indexExists(conn, "idx_orders_status")).isTrue();
             assertThat(indexExists(conn, "idx_orders_date")).isTrue();
             assertThat(indexExists(conn, "idx_order_items_product_id")).isTrue();
+
+            // A V4 acrescentou os índices das consultas por utilizador e por
+            // token (histórico de pedidos e reposição de palavra-passe).
+            assertThat(indexExists(conn, "idx_orders_user_id")).isTrue();
+            assertThat(indexExists(conn, "idx_users_reset_token")).isTrue();
+            assertThat(indexExists(conn, "idx_users_verification_token")).isTrue();
+
+            // A V6 tem de deixar a constraint de estado a aceitar CANCELADO —
+            // sem isso cancelar um pedido falha com violação de check constraint.
+            assertThat(constraintDefinition(conn, "orders", "orders_status_check"))
+                    .contains("CANCELADO");
+
+            // A V7 criou a tabela do ShedLock (uma só execução das tarefas
+            // periódicas por período, mesmo com várias réplicas da API).
+            assertThat(tableExists(conn, "shedlock")).isTrue();
         }
 
         // O contexto arrancou com ddl-auto=validate (senão o teste nem corria) e
@@ -139,6 +157,18 @@ class FlywayMigrationTest {
             ps.setString(2, column);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next();
+            }
+        }
+    }
+
+    private static String constraintDefinition(Connection conn, String table, String constraint) throws Exception {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "select pg_get_constraintdef(c.oid) from pg_constraint c "
+                        + "where c.conrelid = ?::regclass and c.conname = ?")) {
+            ps.setString(1, table);
+            ps.setString(2, constraint);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getString(1) : "";
             }
         }
     }

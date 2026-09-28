@@ -95,10 +95,22 @@ jobs:
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
-          config: trufflehog.yaml
           # A ação já acrescenta --fail automaticamente; repetir dá
-          # "flag 'fail' cannot be repeated"
-          extra_args: --no-verification --verified-only
+          # "flag 'fail' cannot be repeated".
+          #
+          # `--verified-only` NÃO existe no CLI do TruffleHog — o job falhava
+          # em ~2 s com "unknown long flag '--verified-only'". O que traduz a
+          # intenção (falhar só com segredos confirmados) é `--results=verified`.
+          # Note-se que `--no-verification` desligava a verificação: sem
+          # verificação nenhum resultado podia ser "verified", ou seja, as duas
+          # flags contradiziam-se.
+          #
+          # A ação não tem input `config` (só path/base/head/extra_args/version/
+          # image), por isso o antigo `config: trufflehog.yaml` era ignorado.
+          # Se forem precisas exclusões por caminho, a ação não consegue passar
+          # a flag global `--config`; usa-se `--exclude-paths=<ficheiro>` (opção
+          # do subcomando `git`, aceita nos extra_args).
+          extra_args: --results=verified
 
   # ════════════════════════════════════════════════════════════════════════════
   # BACKEND - Spring Boot (Maven)
