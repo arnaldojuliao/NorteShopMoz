@@ -21,7 +21,7 @@ Plataforma de **e-commerce / dropshipping** moderna, totalmente responsiva e oti
 
 | Camada | Tecnologia |
 |---|---|
-| Backend | Java 21 · Spring Boot 4 · Maven |
+| Backend | Java 21 · Spring Boot 4.1 · Maven |
 | Frontend | Next.js 16 · React 19 · Tailwind CSS |
 | Base de dados | PostgreSQL 16 |
 | Cache / carrinho | Redis 7 |
@@ -105,7 +105,7 @@ As mais importantes:
 | `CLOUDINARY_*` | Armazenamento de imagens de produto |
 | `GOOGLE_CLIENT_ID`, `FACEBOOK_APP_ID/SECRET` | Login social (opcional). O `GOOGLE_CLIENT_SECRET` **não** é usado (a validação é por ID token/`tokeninfo`) |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, `NEXT_PUBLIC_FACEBOOK_APP_ID` | Login social no browser (**build time**). Têm de ser **iguais** a `GOOGLE_CLIENT_ID`/`FACEBOOK_APP_ID`: o backend valida o `aud` do token do Google contra o seu Client ID, por isso um ID diferente (ou um cliente apagado no Google Cloud) faz o login falhar |
-| `PAYMENTS_MODE` | `simulated` (omissão) ou `live` |
+| `PAYMENTS_MODE` | `simulated` (omissão) ou `live` — `live` exige uma implementação real de `PaymentGateway`; sem ela o arranque em `prod` avisa que a loja **não** cobra online e o checkout esconde M-Pesa/e-Mola/cartão |
 | `NEXT_PUBLIC_API_BASE_URL` | URL da API consumido pelo frontend |
 | `APP_COOKIE_SECURE` | Cookies `Secure` (obrigatório `true` com HTTPS; `false` só enquanto a loja servir HTTP) |
 | `APP_DOMAIN` | Domínio público do TLS. Se não for definido é derivado de `APP_BASE_URL` |
@@ -152,6 +152,7 @@ O pipeline (`.github/workflows/ci.yml`) corre em cada push/PR para `main`/`devel
 | Secret Scanning | TruffleHog no histórico completo |
 | Security Scans | Trivy + OWASP Dependency Check → GitHub Security |
 | Validate Docker Compose | Validação dos ficheiros compose (com `--profile full`) + `scripts/hardening-check.sh` |
+| Integration – E2E & API contract | Sobe a stack real (Postgres + Redis + API + build do Next), corre os **7 specs do Playwright** e o `backend/scripts/validate-api.mjs` contra a API |
 | Build & Push Docker | Publica imagens em `ghcr.io/<owner>/norteshopmoz-{api,frontend}` |
 
 ## 🚢 Produção
@@ -166,23 +167,37 @@ Serviços: `nginx` (80/443) → `frontend` (:3000) + `api` (:8080) → `db` + `r
 
 ### Deploy na Vercel
 
-A loja Next.js vive em `frontend/`, mas o projeto da Vercel tem a **raiz do
-repositório** como Root Directory. O Root Directory existe só no painel (não é
-configurável por `vercel.json` — o schema oficial não tem `rootDirectory`, e o
-próprio builder do Next da Vercel assume em comentário que essa definição «can't
-be triggered with vercel.json»), por isso o `vercel.json` da raiz traduz o que
-ele faria:
+A loja Next.js vive em `frontend/` e o projeto da Vercel tem o **Root Directory**
+apontado para esse diretório (Settings → Build and Deployment), por isso a
+configuração do deployment vive em `frontend/vercel.json`, ao lado do
+`package.json` — e **não** na raiz do repositório.
+
+Com o Root Directory definido, o build corre dentro dele e não alcança nada
+acima: a documentação da Vercel diz que a app «will not be able to access files
+outside of that directory» e que não se pode usar `..` para subir um nível. Um
+`vercel.json` (ou um script) na raiz não serve, portanto: foi o que produziu
+`bash: scripts/vercel-install.sh: No such file or directory` (exit 127) enquanto
+a configuração ainda estava na raiz — o comando era lido, mas executava já
+dentro do Root Directory, onde `scripts/` não existe.
 
 | Campo | Porquê |
 |---|---|
-| `framework: nextjs` | sem `package.json` na raiz a deteção cairia em «Other» e o builder do Next não seria usado (perdia-se o SSR e o middleware) |
-| `installCommand` → `scripts/vercel-install.sh` | instala as dependências de `frontend/` e expõe `next` na raiz — o builder resolve-o a partir do Root Directory e aborta com `NEXT_NO_VERSION` se não o encontrar |
-| `buildCommand` → `scripts/vercel-build.sh` | corre o build dentro de `frontend/` |
-| `outputDirectory: frontend/.next` | o builder lê os artefactos (e o `public/` que fica ao lado deles) nesse caminho |
+| `framework: nextjs` | fixa o preset; sem ele a deteção podia cair em «Other» e perdia-se o SSR e o middleware |
+| `installCommand: npm ci --include=dev` | `tailwind`, `postcss` e `typescript` são devDependencies e o `next build` precisa delas |
+| `buildCommand: npm run build` | igual ao do `Dockerfile`; o `outputDirectory` fica por omissão (o `.next` do próprio Root Directory) |
 
-Se o Root Directory passar a estar definido como `frontend` no painel, este
-`vercel.json` deixa de ser lido (fica fora do Root Directory) e pode ser removido
-com os dois scripts.
+O `output: 'standalone'` do `next.config.ts` é para o Docker: o `next build`
+continua a escrever o `.next` normal (`BUILD_ID`, `static/`, `server/`) e é esse
+que a Vercel empacota.
+
+O `installCommand` e o `buildCommand` deste ficheiro **substituem** os valores
+correspondentes do painel (é o que a documentação do `vercel.json` indica: a
+propriedade serve para «override the Build Command in the Project Settings
+dashboard»). O que o ficheiro **não** define continua a vir do painel — em
+particular o *Output Directory*: um valor antigo lá deixado (ex.:
+`frontend/.next`, do desenho em que a raiz do repositório era o Root Directory)
+continua a aplicar-se e aponta para um caminho que não existe dentro de
+`frontend/`. Deve ficar vazio, para usar o `.next` do próprio Root Directory.
 
 As variáveis públicas (`NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_SITE_URL`,
 `NEXT_PUBLIC_APP_URL`) têm de existir como env vars do projeto na Vercel: sem

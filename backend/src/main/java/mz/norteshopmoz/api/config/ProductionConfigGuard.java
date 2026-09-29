@@ -1,8 +1,10 @@
 package mz.norteshopmoz.api.config;
 
 import java.util.List;
+import mz.norteshopmoz.api.service.PaymentGateway;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -27,6 +29,7 @@ public class ProductionConfigGuard implements ApplicationRunner {
 
     private final Environment environment;
     private final String paymentsMode;
+    private final ObjectProvider<PaymentGateway> gatewayProvider;
     private final boolean cookieSecure;
     private final String baseUrl;
     private final List<String> corsOrigins;
@@ -42,6 +45,7 @@ public class ProductionConfigGuard implements ApplicationRunner {
     public ProductionConfigGuard(
             Environment environment,
             @Value("${app.payments.mode:simulated}") String paymentsMode,
+            ObjectProvider<PaymentGateway> gatewayProvider,
             @Value("${app.cookie.secure:true}") boolean cookieSecure,
             @Value("${app.mail.base-url:}") String baseUrl,
             @Value("${app.cors.allowed-origins:}") List<String> corsOrigins,
@@ -55,6 +59,7 @@ public class ProductionConfigGuard implements ApplicationRunner {
             @Value("${app.social.facebook-app-secret:}") String facebookAppSecret) {
         this.environment = environment;
         this.paymentsMode = paymentsMode;
+        this.gatewayProvider = gatewayProvider;
         this.cookieSecure = cookieSecure;
         this.baseUrl = baseUrl;
         this.corsOrigins = corsOrigins;
@@ -74,14 +79,25 @@ public class ProductionConfigGuard implements ApplicationRunner {
             return;
         }
 
-        // Pagamentos: o gateway simulado não existe em prod (ver
-        // SimulatedPaymentGateway). Deixa-se o aviso para o operador saber que
-        // os métodos online estão indisponíveis de propósito.
+        // Pagamentos. O gateway simulado não é registado em prod (ver
+        // SimulatedPaymentGateway) e o gateway real ainda não existe: há dois
+        // erros de configuração possíveis e ambos deixam a loja sem cobrar
+        // online. Antes só o primeiro era avisado, porque a verificação olhava
+        // apenas para o MODO — com PAYMENTS_MODE=live e nenhum bean
+        // PaymentGateway registado, o operador ficava convencido de que os
+        // pagamentos online estavam ligados e não havia um único sinal no
+        // arranque (os métodos só apareciam ocultos no checkout e a resposta
+        // era 503 no fim).
         if (!"live".equalsIgnoreCase(paymentsMode)) {
             log.warn("[PROD] PAYMENTS_MODE={} — pagamentos online (M-Pesa/e-Mola/cartão) estão DESATIVADOS "
                     + "e respondem 503. Configure uma integração real e PAYMENTS_MODE=live "
                     + "para os aceitar. Pagamento na entrega e transferência continuam a funcionar.",
                     paymentsMode);
+        } else if (gatewayProvider.getIfAvailable() == null) {
+            log.warn("[PROD] PAYMENTS_MODE=live mas NÃO há nenhum PaymentGateway registado — a loja NÃO "
+                    + "cobra online: M-Pesa/e-Mola/cartão ficam ocultos no checkout e respondem 503. "
+                    + "Implemente a integração (implementar PaymentGateway com as credenciais) ou volte a "
+                    + "PAYMENTS_MODE=simulated. Pagamento na entrega e transferência continuam a funcionar.");
         }
 
         // Coerência cookies ↔ esquema. Este caso é fail-fast (e não aviso) porque

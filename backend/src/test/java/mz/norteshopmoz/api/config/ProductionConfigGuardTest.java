@@ -1,10 +1,19 @@
 package mz.norteshopmoz.api.config;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import java.math.BigDecimal;
 import java.util.List;
+import mz.norteshopmoz.api.service.PaymentGateway;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.core.env.Environment;
 import org.springframework.mock.env.MockEnvironment;
 
@@ -14,8 +23,26 @@ import org.springframework.mock.env.MockEnvironment;
  * <p>Com {@code APP_COOKIE_SECURE=true} e a loja a servir HTTP, o browser
  * descarta os cookies de sessão e o login "não funciona" sem deixar erro nenhum
  * no servidor — por isso este caso é fail-fast e não apenas um aviso.</p>
+ *
+ * <p>Cobre também o aviso dos pagamentos: com {@code PAYMENTS_MODE=live} e
+ * nenhum {@link PaymentGateway} registado a loja não cobra online e tem de o
+ * dizer no arranque — o operador não pode descobri-lo pelo primeiro cliente.</p>
  */
+@ExtendWith(OutputCaptureExtension.class)
 class ProductionConfigGuardTest {
+
+    /** Gateway de mentira: só interessa que o bean EXISTA. */
+    private static final PaymentGateway GATEWAY = new PaymentGateway() {
+        @Override
+        public String charge(String methodId, String phone, String cardLast4, BigDecimal amount, String currency) {
+            return "REF-TESTE";
+        }
+
+        @Override
+        public void refund(String reference) {
+            // nada a fazer num teste
+        }
+    };
 
     private static Environment prod() {
         MockEnvironment environment = new MockEnvironment();
@@ -23,8 +50,20 @@ class ProductionConfigGuardTest {
         return environment;
     }
 
+    @SuppressWarnings("unchecked")
+    private static ObjectProvider<PaymentGateway> provider(PaymentGateway gateway) {
+        ObjectProvider<PaymentGateway> mock = mock(ObjectProvider.class);
+        when(mock.getIfAvailable()).thenReturn(gateway);
+        return mock;
+    }
+
     private static ProductionConfigGuard guard(Environment environment, boolean cookieSecure, String baseUrl) {
-        return new ProductionConfigGuard(environment, "live", cookieSecure, baseUrl,
+        return guard(environment, "live", null, cookieSecure, baseUrl);
+    }
+
+    private static ProductionConfigGuard guard(Environment environment, String paymentsMode,
+            PaymentGateway gateway, boolean cookieSecure, String baseUrl) {
+        return new ProductionConfigGuard(environment, paymentsMode, provider(gateway), cookieSecure, baseUrl,
                 List.of("https://loja.mz"), "172.28.0.10", "re_chave", "cloud", 730,
                 "noreply@loja.mz", "google-cli", "fb-id", "fb-secret");
     }
@@ -59,5 +98,33 @@ class ProductionConfigGuardTest {
     void foraDeProducaoOsValoresDeDesenvolvimentoSaoNormais() {
         assertThatCode(() -> guard(new MockEnvironment(), true, "http://localhost:3000").run(null))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    void emProducaoComModoLiveSemGatewayAvisaQueNaoSeCobraOnline(CapturedOutput output) {
+        guard(prod(), "live", null, true, "https://loja.mz").run(null);
+
+        assertThat(output).contains("PAYMENTS_MODE=live mas NÃO há nenhum PaymentGateway");
+    }
+
+    @Test
+    void emProducaoComGatewayRegistadoNaoAvisa(CapturedOutput output) {
+        guard(prod(), "live", GATEWAY, true, "https://loja.mz").run(null);
+
+        assertThat(output).doesNotContain("PAYMENTS_MODE");
+    }
+
+    @Test
+    void emProducaoComModoSimuladoAvisaQueOsPagamentosOnlineEstaoDesativados(CapturedOutput output) {
+        guard(prod(), "simulated", null, true, "https://loja.mz").run(null);
+
+        assertThat(output).contains("estão DESATIVADOS");
+    }
+
+    @Test
+    void foraDeProducaoNaoAvisaDePagamentos(CapturedOutput output) {
+        guard(new MockEnvironment(), "live", null, true, "http://localhost:3000").run(null);
+
+        assertThat(output).doesNotContain("PAYMENTS_MODE");
     }
 }

@@ -40,6 +40,11 @@
 #                               deslizante esgotava o Redis noeviction com uns
 #                               milhares de IPs), travão nos emails públicos e
 #                               CSP definido num só sítio.
+# 12. Deployment web (Vercel) — a configuração vive em frontend/vercel.json: o
+#                               projeto tem o Root Directory em `frontend/` e o
+#                               build não alcança nada acima dele (nem com `..`),
+#                               por isso um vercel.json/scripts na raiz é lido mas
+#                               executado já dentro de frontend/ → exit 127.
 # =============================================================================
 
 set -uo pipefail
@@ -610,6 +615,61 @@ if has "$PROD" "./nginx/snippets:/etc/nginx/snippets:ro"; then
     pass "snippet dos cabeçalhos montado no nginx (o include não falha em runtime)"
 else
     fail "snippet não montado: o 'include' deixa o nginx sem arrancar"
+fi
+
+echo "12) Deployment web (Vercel) ao alcance do Root Directory"
+# O projeto da Vercel tem o Root Directory em `frontend/`. A documentação é
+# explícita — a app «will not be able to access files outside of that directory»
+# e não se pode usar `..` para subir um nível. A configuração do deployment tem,
+# portanto, de viver ao lado do package.json.
+#
+# Enquanto esteve na raiz, o `installCommand` era lido mas executado JÁ dentro de
+# `frontend/` (onde `scripts/` não existe): `bash: scripts/vercel-install.sh: No
+# such file or directory` — exit 127 em todos os deployments.
+VERCEL_CFG="frontend/vercel.json"
+if [[ -f "$VERCEL_CFG" ]]; then
+    pass "configuração do deployment em frontend/vercel.json (ao lado do package.json)"
+else
+    fail "frontend/vercel.json em falta: a Vercel cairia nos valores do painel, sem install/buildCommand próprios"
+fi
+if [[ -f "vercel.json" ]]; then
+    fail "vercel.json na raiz: inalcançável com o Root Directory=frontend (o build não vê acima dele)"
+else
+    pass "sem vercel.json na raiz (não seria alcançável pelo Root Directory)"
+fi
+# `compgen -G` devolve 1 quando o glob não casa — sem ele, um glob sem
+# correspondência passaria como argumento literal.
+if compgen -G "scripts/vercel-*.sh" > /dev/null; then
+    fail "scripts/vercel-*.sh na raiz: o deployment não os alcança a partir de frontend/ (exit 127)"
+else
+    pass "sem scripts de deployment em scripts/ (não seriam alcançáveis)"
+fi
+if [[ -f "$VERCEL_CFG" ]] && command -v python3 > /dev/null 2>&1; then
+    if python3 -c "import json;json.load(open('$VERCEL_CFG'))" 2> /dev/null; then
+        pass "vercel.json é JSON válido"
+    else
+        fail "vercel.json inválido: a Vercel ignora o ficheiro e usa os valores do painel"
+    fi
+fi
+# `tailwind`, `postcss` e `typescript` são devDependencies: com o `npm ci`
+# normal (que as omite quando o ambiente se apresenta como produção) o
+# `next build` falha por falta de módulos.
+if has "$VERCEL_CFG" '"installCommand": "npm ci --include=dev"'; then
+    pass "installCommand instala as devDependencies (tailwind/postcss/typescript)"
+else
+    fail "installCommand sem --include=dev: o next build não encontra tailwind/postcss/typescript"
+fi
+# Sem o preset explícito a deteção podia cair em «Other» e perdia-se o SSR e o
+# middleware (a loja passa a ser estática e o login deixa de funcionar).
+if has "$VERCEL_CFG" '"framework": "nextjs"'; then
+    pass "framework fixado em nextjs (sem ele a deteção podia cair em Other)"
+else
+    fail "framework não fixado no vercel.json: sem o preset nextjs perde-se o SSR e o middleware"
+fi
+if has "$VERCEL_CFG" '"buildCommand": "npm run build"'; then
+    pass "buildCommand explícito (igual ao do Dockerfile)"
+else
+    fail "buildCommand não explícito no vercel.json: o deployment depende do valor do painel"
 fi
 
 echo

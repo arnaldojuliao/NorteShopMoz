@@ -47,13 +47,16 @@ test.describe('preloader de entrada', () => {
     await expect(page.locator('.nsm-preloader')).toBeVisible();
     await expect(page.locator('.nsm-preloader')).toBeHidden({ timeout: 20000 });
 
-    // A segunda (mesma página, novo carregamento) deve ser a curta: sai muito
-    // mais depressa do que a viagem completa.
-    const start = Date.now();
+    // A segunda (mesma página, novo carregamento) deve ser a curta. O modo é
+    // decidido pelo /preloader-init.js ANTES da primeira pintura e exposto em
+    // `data-preloader-mode` — assere-se isso, e não um cronómetro: medir
+    // `Date.now()` à volta do `reload()` media o carregamento da página (rede,
+    // SSR, hidratação) e sob carga dava >5 s com a animação curta correta.
     await page.reload();
     const loader = page.locator('.nsm-preloader');
     await expect(loader).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('data-preloader-mode', 'short');
+    // E, de facto, sai antes de a viagem completa terminar (2,4 s + espera + fade).
     await expect(loader).toBeHidden({ timeout: 6000 });
-    expect(Date.now() - start).toBeLessThan(5000);
   });
 });

@@ -10,10 +10,9 @@ otimizada para conversão, feita para clientes de **Moçambique**.
 | Camada        | Tecnologia                                         |
 | ------------- | -------------------------------------------------- |
 | Frontend      | Next.js 16 (App Router) · React 19 · TypeScript    |
-| Estilos       | Tailwind CSS v4 · Design System NSM próprio        |
-| Dados (fase 1)| Dados mock em `src/lib/data` (prontos para trocar) |
+| Estilos       | Tailwind CSS v4 · Design System NSM próprio        || Dados (fase 1)| Dados mock em `src/lib/data` (fallback quando a API não responde) |
 | API (fase 2)  | Java · Spring Boot · REST (ver secção abaixo)      |
-| BD / Cache    | PostgreSQL · Redis (planeado)                      |
+| BD / Cache    | PostgreSQL · Redis (na API; o frontend fala só com o REST) |
 
 ## Começar
 
@@ -24,6 +23,7 @@ npm run build      # build de produção (SSG para produtos/categorias)
 npm run start      # servidor de produção
 npm run lint       # ESLint
 npm test           # Vitest (unitários em src/lib/*.test.ts)
+npm run test:e2e   # Playwright (precisa do backend a correr — ver "Testes")
 ```
 
 ## O que está implementado
@@ -137,11 +137,17 @@ página de acompanhamento (`/pedido/{id}`) e na área de conta
 pedido. O estado terminal `Cancelado` aparece na timeline com aviso próprio e
 já não avança para os passos seguintes.
 
-**Testes** — `npm test` corre Vitest (**16 testes**: format, utils e shipping,
-incluindo o fallback API↔local da config de envio). O contrato REST é validado
-de ponta a ponta pelo `backend/scripts/validate-api.mjs` (**79 verificações** —
-catálogo, auth, pedidos, pagamentos, avaliações, newsletter e endereços) contra
-a API a correr em `http://localhost:8081` (ver README do backend).
+**Testes** — `npm test` corre Vitest (**71 testes** em `src/lib/*.test.ts`:
+format, utils, currency, env, shipping, api, repo e orders, incluindo o
+fallback API↔local). `npm run test:e2e` corre o **Playwright** (7 specs em
+`tests/e2e`): checkout, cupões, cancelamento, admin, autenticação, pesquisa e
+preloader — precisa do **backend a correr** (o `global-setup` espera por ele e
+cria as contas de teste) e de um `npm run build` prévio. Em CI corre no job
+*Integration – E2E & API contract*, com Postgres e Redis próprios. O contrato
+REST é ainda validado de ponta a ponta pelo `backend/scripts/validate-api.mjs`
+(**79 verificações** — catálogo, auth, pedidos, pagamentos, avaliações,
+newsletter e endereços) contra a API a correr em `http://localhost:8081`
+(ver README do backend).
 
 ## Estrutura
 

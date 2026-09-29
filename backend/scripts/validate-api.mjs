@@ -5,6 +5,13 @@
  *   node backend/scripts/validate-api.mjs
  *   API_BASE=http://localhost:8081 node backend/scripts/validate-api.mjs
  *
+ * Autenticação: por COOKIE de sessão. O login/registo entrega o access token
+ * num cookie HttpOnly (`nsm_at`) e o token CSRF no corpo + cookie `nsm_csrf` —
+ * "tokens nunca no corpo" é uma invariante do projeto (ver
+ * scripts/hardening-check.sh). O script mantém cookies + CSRF por identidade e
+ * as chamadas continuam a escrever `Authorization: Bearer <sessão>`; o helper
+ * `api()` traduz esse id para os cookies reais.
+ *
  * Cobre: catálogo (filtros/pesquisa/ordenação/limit), categorias, reviews,
  * autenticação JWT (registo/login/me), pedidos (totais recalculados no servidor,
  * guest checkout e isolamento por utilizador), pagamentos online, transições de
@@ -14,16 +21,64 @@
 
 const B = process.env.API_BASE ?? "http://localhost:8081";
 
+/**
+ * Password dos utilizadores criados pelo script: a política do registo exige
+ * 8+ caracteres com maiúscula, minúscula, número e símbolo (@$!%*?&).
+ */
+const PASSWORD = "Segredo@123";
+
+/**
+ * Sufixo único por execução. O checkout tem travão de 3 pedidos/hora por
+ * CONTACTO (email/telefone, ver ORDERS_MAX_PER_CONTACT) e a base é reutilizada
+ * entre corridas: com contactos fixos, a 2.ª execução dentro da mesma hora
+ * recebia 429 em vez de validar o pedido — e logo a 1.ª esgotava a quota a meio
+ * (os pedidos inválidos devolviam 429 em vez do 400 esperado).
+ */
+const RUN = Date.now().toString(36);
+const contact = (prefix) => `${prefix}-${RUN}@teste.com`;
+
 let pass = 0, fail = 0;
 function check(name, cond, extra = "") {
   if (cond) { pass++; console.log(`  ✅ ${name}`); }
   else { fail++; console.log(`  ❌ ${name} ${extra}`); }
 }
 
+// ── Sessões por cookie ────────────────────────────────────────────
+// Cada identidade (cliente, admin, "outro cliente") tem a sua sessão: cookies
+// do login + token CSRF. `Authorization: Bearer <id>` é traduzido para eles.
+const sessions = new Map();
+let sessionSeq = 0;
+
+/** Regista a sessão de uma resposta de login/registo e devolve o seu id. */
+function newSession(res) {
+  const id = `sessao-${++sessionSeq}`;
+  sessions.set(id, { cookies: res.cookies, csrf: res.csrf });
+  return id;
+}
+
 async function api(path, opts = {}) {
-  const res = await fetch(B + path, opts);
+  const headers = { ...(opts.headers ?? {}) };
+
+  const bearer = headers.Authorization ?? headers.authorization;
+  const session = /^Bearer\s+(sessao-\d+)$/.exec(bearer ?? "");
+  if (session) {
+    const s = sessions.get(session[1]);
+    delete headers.Authorization;
+    delete headers.authorization;
+    // O cookie `nsm_at` é HttpOnly e o filtro JWT lê-o antes do header.
+    headers.Cookie = s.cookies.join("; ");
+    // Double-submit: o `X-CSRF-Token` tem de coincidir com o cookie `nsm_csrf`
+    // em TODOS os pedidos que alteram estado (o Bearer não dispensa o CSRF).
+    if (s.csrf) headers["X-CSRF-Token"] = s.csrf;
+  }
+
+  const res = await fetch(B + path, { ...opts, headers });
+  // `getSetCookie` devolve cada Set-Cookie da resposta (o login emite 3).
+  const cookies = (res.headers.getSetCookie?.() ?? [])
+    .map((c) => c.split(";")[0].trim())
+    .filter(Boolean);
   const body = await res.json().catch(() => null);
-  return { status: res.status, body };
+  return { status: res.status, body, cookies, csrf: body?.data?.csrfToken ?? null };
 }
 
 // ── 1. Catálogo ────────────────────────────────────────────────────
@@ -82,24 +137,31 @@ console.log("\n🔐 Autenticação JWT");
 const email = `cliente${Date.now()}@teste.com`;
 let token = null, userId = null;
 {
-  const { status, body } = await api("/api/auth/register", {
+  const res = await api("/api/auth/register", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ fullName: "Anabela Teste", email, password: "segredo123", phone: "+258840000000" }),
+    body: JSON.stringify({ fullName: "Anabela Teste", email, password: PASSWORD, phone: "+258840000000" }),
   });
-  check("POST /api/auth/register → 201 + token", status === 201 && typeof body?.data?.token === "string" && body?.data?.user?.email === email);
-  token = body?.data?.token; userId = body?.data?.user?.id;
+  const { status, body } = res;
+  check("POST /api/auth/register → 201 + utilizador, CSRF e cookie de sessão",
+        status === 201 && body?.data?.user?.email === email
+          && typeof body?.data?.csrfToken === "string"
+          && res.cookies.some((c) => c.startsWith("nsm_at=")),
+        `status=${status} cookies=${res.cookies.map((c) => c.split("=")[0]).join(",")}`);
+  token = newSession(res); userId = body?.data?.user?.id;
   const dup = await api("/api/auth/register", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ fullName: "X", email, password: "segredo123" }),
+    body: JSON.stringify({ fullName: "X", email, password: PASSWORD }),
   });
   check("email duplicado → 409 {error}", dup.status === 409);
 }
 {
   const { status, body } = await api("/api/auth/login", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password: "segredo123" }),
+    body: JSON.stringify({ email, password: PASSWORD }),
   });
-  check("POST /api/auth/login → token", status === 200 && typeof body?.data?.token === "string");
+  check("POST /api/auth/login → 200 + utilizador e CSRF (token só em cookie)",
+        status === 200 && body?.data?.user?.email === email && typeof body?.data?.csrfToken === "string",
+        `status=${status}`);
   const bad = await api("/api/auth/login", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password: "errada" }),
@@ -287,7 +349,7 @@ console.log("\n💳 Pagamentos online");
   const base = {
     items: [{ productId: "p-001", slug: "capa-para-iphone", name: "Capa para iPhone", image: "i", price: 15900, qty: 1 }],
     subtotal: 0, shipping: 0, discount: 0, total: 0,
-    address: { fullName: "Cliente Teste", phone: "+258840000000", email: "guest@teste.com",
+    address: { fullName: "Cliente Teste", phone: "+258840000000", email: contact("pago"),
                address: "Av. 1", city: "Maputo", province: "Maputo Cidade" },
   };
 
@@ -342,14 +404,14 @@ console.log("\n🛡️ Admin — estado dos pedidos");
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email: "admin@norteshopmoz.com", password: "Admin@2026" }),
   });
-  const adminToken = admin.body?.data?.token;
+  const adminToken = newSession(admin);
   check("login admin → token (role ADMIN)",
         admin.status === 200 && admin.body?.data?.user?.role === "ADMIN", `status=${admin.status}`);
 
   const adminOrder = {
     items: [{ productId: "p-001", slug: "capa-para-iphone", name: "Capa para iPhone", image: "i", price: 15900, qty: 1 }],
     subtotal: 0, shipping: 0, discount: 0, total: 0,
-    address: { fullName: "Cliente Teste", phone: "+258840000000", email: "guest@teste.com",
+    address: { fullName: "Cliente Teste", phone: "+258840000000", email: contact("guest"),
                address: "Av. 1", city: "Maputo", province: "Maputo Cidade" },
     paymentMethod: "Pagamento na entrega",
   };
@@ -468,9 +530,9 @@ console.log("\n📍 Endereços");
   const aToken = await api("/api/auth/register", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ fullName: "Cli Endereços", email: `addr-${Date.now()}@exemplo.co.mz`,
-                           password: "segredo123", phone: "+258841234567" }),
+                           password: PASSWORD, phone: "+258841234567" }),
   });
-  const aTok = aToken.body?.data?.token;
+  const aTok = newSession(aToken);
   const empty = await api("/api/addresses", { headers: { Authorization: `Bearer ${aTok}` } });
   check("GET /api/addresses (novo utilizador) → []", empty.status === 200 && empty.body?.data?.length === 0,
         `status=${empty.status}`);
@@ -506,7 +568,7 @@ console.log("\n🎟️  Cupões");
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email: "admin@norteshopmoz.com", password: "Admin@2026" }),
   });
-  const at = admin.body?.data?.token;
+  const at = newSession(admin);
   const authJson = { "Content-Type": "application/json", Authorization: `Bearer ${at}` };
   // Código único por execução (a base é reutilizada entre corridas).
   const code = `TESTE${Date.now().toString().slice(-6)}`;
@@ -566,7 +628,7 @@ console.log("\n🎟️  Cupões");
   const couponOrder = {
     items: [{ productId: "p-003", slug: "power-bank-20000-mah", name: "Power Bank", image: "i", price: 1150, qty: 1 }],
     subtotal: 0, shipping: 0, discount: 0, total: 0,
-    address: { fullName: "Cli Cupão", phone: "+258840000000", email: "cupao@teste.com",
+    address: { fullName: "Cli Cupão", phone: "+258840000000", email: contact("cupao"),
                address: "Av. 1", city: "Maputo", province: "Maputo Cidade" },
     paymentMethod: "Pagamento na entrega",
   };
@@ -613,12 +675,12 @@ console.log("\n🚫 Cancelamento de pedidos");
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email: "admin@norteshopmoz.com", password: "Admin@2026" }),
   });
-  const at = admin.body?.data?.token;
+  const at = newSession(admin);
 
   const orderBody = {
     items: [{ productId: "p-003", slug: "power-bank-20000-mah", name: "Power Bank", image: "i", price: 1150, qty: 1 }],
     subtotal: 0, shipping: 0, discount: 0, total: 0,
-    address: { fullName: "Cli Cancelamento", phone: "+258840000000", email: "cancel@teste.com",
+    address: { fullName: "Cli Cancelamento", phone: "+258840000000", email: contact("cancel"),
                address: "Av. 1", city: "Maputo", province: "Maputo Cidade" },
     paymentMethod: "Pagamento na entrega",
   };
@@ -651,11 +713,11 @@ console.log("\n🚫 Cancelamento de pedidos");
   const other = await api("/api/auth/register", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ fullName: "Outro Cliente", email: `outro-${Date.now()}@teste.com`,
-                           password: "segredo123", phone: "+258841111111" }),
+                           password: PASSWORD, phone: "+258841111111" }),
   });
   const otherId = (await createOrder({ Authorization: `Bearer ${token}` })).body?.data?.id;
   const forbidden = await api(`/api/orders/${otherId}`, {
-    method: "DELETE", headers: { Authorization: `Bearer ${other.body?.data?.token}` },
+    method: "DELETE", headers: { Authorization: `Bearer ${newSession(other)}` },
   });
   check("outro cliente a cancelar → 403", forbidden.status === 403, `status=${forbidden.status}`);
 
