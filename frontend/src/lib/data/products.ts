@@ -1052,13 +1052,6 @@ export const products: Product[] = [
     specs: [{ label: "Material", value: "Metal + couro" }, { label: "Mosquetão", value: "Sim" }],
     tags: ["chaveiro", "acessorio", "chaves"],
   }),
-  product({
-    id: "p-075", slug: "meias-pack-de-5", name: "Meias (pack de 5)",
-    category: "acessorios", brand: "NorteWear", price: 400,
-    shortDescription: "Pack de 5 pares de meias de algodão para o dia a dia.",
-    specs: [{ label: "Pack", value: "5 pares" }, { label: "Material", value: "Algodão" }],
-    tags: ["meias", "pack", "algodao"],
-  }),
 
   /* ── Joias ──────────────────────────────────────────────────── */
   product({

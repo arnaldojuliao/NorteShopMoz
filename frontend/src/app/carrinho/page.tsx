@@ -80,9 +80,12 @@ export default function CartPage() {
       <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
         {/* Itens */}
         <div className="space-y-3">
-          {items.map((item) => {
+          {items.map((item, itemIdx) => {
             const pct = item.oldPrice ? discountPct(item.oldPrice, item.price) : 0;
-            const removingKey = item.productId + (item.variant ?? "");
+            // Key com índice: o carrinho (ou o servidor) pode conter duas linhas
+            // com o mesmo produto+variante — sem o índice, React acusava keys
+            // duplicadas e podia omitir/duplicar filhos.
+            const removingKey = `${item.productId}|${item.variant ?? ""}|${itemIdx}`;
             return (
               <div
                 key={removingKey}

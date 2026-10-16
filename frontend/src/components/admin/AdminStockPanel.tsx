@@ -5,6 +5,7 @@ import { Boxes, Check, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
+import { apiGet } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { adjustStock, listStockMovements, type StockMovement } from "@/lib/admin";
 import { cn } from "@/lib/utils";
@@ -28,10 +29,14 @@ export function AdminStockPanel() {
     setLoading(true);
     setError(null);
     try {
-      // O alerta de stock baixo é a própria listagem ordenada por stock.
-      const res = await fetch(`/api/admin/stock/low?threshold=${t}`, { credentials: "include" });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Falha ao carregar");
+      // apiGet (e não fetch relativo): o path precisa da base da API
+      // (NEXT_PUBLIC_API_BASE_URL) — um fetch relativo caía no próprio Next e
+      // devolvia 404, porque o proxy do Next não cobre /api/admin/*.
+      const json = await apiGet<{ data: { products: { id: string; name: string; stock: number }[] } }>(
+        `/api/admin/stock/low?threshold=${t}`,
+        0,
+        true,
+      );
       setLowStock(json.data.products);
       setMovements(await listStockMovements(undefined, 50));
     } catch (err) {

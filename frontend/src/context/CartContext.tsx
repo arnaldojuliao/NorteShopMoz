@@ -43,6 +43,27 @@ function toServerPayload(items: CartItem[]) {
   }));
 }
 
+/**
+ * Deduplica itens por produto+variante somando as quantidades. O carrinho do
+ * servidor pode conter linhas repetidas (cartinhos antigos criados antes do
+ * dedupe do cliente); sem isto, o checkout renderizava duas filhos com a MESMA
+ * React key (`productId + variant`) — o warning "two children with the same
+ * key" e o risco de duplicação visual.
+ */
+function dedupeCart(items: CartItem[]): CartItem[] {
+  const merged = new Map<string, CartItem>();
+  for (const item of items) {
+    const key = `${item.productId}|${item.variant ?? ""}`;
+    const existing = merged.get(key);
+    if (existing) {
+      merged.set(key, { ...existing, qty: existing.qty + item.qty });
+    } else {
+      merged.set(key, item);
+    }
+  }
+  return [...merged.values()];
+}
+
 export function CartProvider({ children }: { children: ReactNode }) {
   // `user` identifica a sessão — quando muda (login/logout), os efeitos abaixo
   // re-executam para buscar/sincronizar o carrinho certo (token vs X-Guest-Id).
@@ -204,7 +225,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         if (!alive) return;
         if (data && data.length > 0) {
           skipSync.current = true;
-          setItems(data);
+          setItems(dedupeCart(data));
         } else if (itemsRef.current.length > 0) {
           // Servidor vazio mas carrinho local com itens → envia para o servidor.
           syncToServer();

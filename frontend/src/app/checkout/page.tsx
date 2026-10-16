@@ -42,13 +42,15 @@ const digitsOf = (value: string) => value.replace(/\D/g, "");
 const methodBg: Record<string, string> = {
   mpesa: "bg-white",
   emola: "bg-[#FFCE00]",
+  mkesh: "bg-white",
   card: "bg-white",
 };
 
-/** Logótipos oficiais (SVG local em /public/payments). */
+/** Logótipos oficiais (ficheiro local em /public/payments). */
 const methodLogos: Record<string, { src: string; alt: string }> = {
   mpesa: { src: "/payments/m-pesa.png", alt: "M-Pesa" },
   emola: { src: "/payments/emola.png", alt: "e-Mola" },
+  mkesh: { src: "/payments/mkesh.svg", alt: "mKesh" },
   card: { src: "/payments/visa.jpg", alt: "Visa / Mastercard" },
 };
 
@@ -274,7 +276,8 @@ export default function CheckoutPage() {
     const next = paymentMethods.find((m) => m.id === id);
     setMethod(id);
     // Pré-preenche a carteira móvel com o telefone de entrega (editável).
-    if ((id === "mpesa" || id === "emola") && !paymentPhone.trim() && form.phone.trim()) {
+    const wallet = id === "mpesa" || id === "emola" || id === "mkesh";
+    if (wallet && !paymentPhone.trim() && form.phone.trim()) {
       setPaymentPhone(form.phone);
     }
     // Com checkout hospedado não há dados a recolher aqui: os campos do método
@@ -685,7 +688,9 @@ export default function CheckoutPage() {
             </h2>
             {/* Logótipos oficiais numa única linha — sem descrições. Clicar
                 abre o modal fixo com os dados do método. */}
-            <div className="mt-4 grid grid-cols-3 gap-3 place-items-center">
+            {/* 4 métodos (M-Pesa, e-Mola, mKesh, cartão) — 2 colunas no telemóvel,
+                4 em linha no desktop. */}
+            <div className="mt-4 grid grid-cols-2 gap-3 place-items-center sm:grid-cols-4">
               {paymentMethods.map((m) => {
                 const logo = methodLogos[m.id];
                 const active = method === m.id;
@@ -740,8 +745,8 @@ export default function CheckoutPage() {
           <div>
             <h2 className="font-display text-lg font-bold text-slate-900">O seu pedido</h2>
             <ul className="mt-4 space-y-3">
-              {items.map((i) => (
-                <li key={i.productId + (i.variant ?? "")} className="flex items-center gap-3">
+              {items.map((i, itemIdx) => (
+                <li key={`${i.productId}|${i.variant ?? ""}|${itemIdx}`} className="flex items-center gap-3">
                   <span className="relative size-14 shrink-0 overflow-hidden rounded-lg bg-slate-100">
                     <ProductImage
                       src={i.image}
