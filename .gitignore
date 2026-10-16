@@ -57,3 +57,6 @@ backups/
 
 # conf do nginx gerada pelo deploy.sh a partir de nginx/nginx.conf.template
 nginx/.generated/
+
+# Configuração local do opencode (chave de API do utilizador)
+config.json

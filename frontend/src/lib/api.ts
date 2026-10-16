@@ -2,7 +2,7 @@
  * Cliente REST da API NorteShopMoz (backend Spring Boot).
  *
  * Ponto único de acesso HTTP ao backend. Características:
- *  - Base URL configurável via NEXT_PUBLIC_API_BASE_URL (padrão: http://localhost:8081);
+ *  - Base URL configurável via NEXT_PUBLIC_API_BASE_URL (padrão: http://localhost:8080);
  *  - timeout curto (4s) para não travar builds SSG nem o runtime quando a API está em baixo;
  *  - cache em memória com TTL (60s) para evitar chamadas repetidas;
  *  - janela de indisponibilidade (30s) — após uma falha, as chamadas seguintes falham
@@ -19,7 +19,7 @@ import { envOr } from "@/lib/env";
 
 // `envOr` (e não `??`) porque um build arg ausente produz string vazia: com
 // `API_BASE = ""` o `fetch` do Node rejeita o URL relativo e o SSR/SSG falha.
-export const API_BASE = envOr(process.env.NEXT_PUBLIC_API_BASE_URL, "http://localhost:8081").replace(/\/+$/, "");
+export const API_BASE = envOr(process.env.NEXT_PUBLIC_API_BASE_URL, "http://localhost:8080").replace(/\/+$/, "");
 
 /**
  * URL da API usada pelas chamadas que correm no SERVIDOR (route handlers do Next,

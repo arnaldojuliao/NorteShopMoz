@@ -2,6 +2,7 @@ package mz.norteshopmoz.api.service;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -23,7 +24,9 @@ import mz.norteshopmoz.api.web.dto.ReviewRequest;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -39,6 +42,10 @@ public class CatalogService {
 
     /** Teto do parâmetro `?limit=` — evita pedidos de catálogo inteiro em memória. */
     private static final int MAX_LIMIT = 200;
+
+    /** Paginação da moderação de avaliações (espelha OrderService). */
+    private static final int DEFAULT_PAGE_SIZE = 20;
+    private static final int MAX_PAGE_SIZE = 100;
 
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
@@ -307,6 +314,98 @@ public class CatalogService {
         productRepository.save(product);
 
         return saved;
+    }
+
+    /**
+     * Avaliação para a moderação no painel admin — acrescenta o produto
+     * (id/nome/slug) à review pública, para a lista ser legível sem N+1.
+     */
+    public record AdminReviewView(
+            Long id,
+            String productId,
+            String productName,
+            String productSlug,
+            String author,
+            int rating,
+            Instant date,
+            String title,
+            String comment,
+            boolean verified) {}
+
+    /**
+     * Lista TODAS as avaliações da loja (paginado no SQL) — apenas admin.
+     *
+     * <p>O nome/slug do produto é resolvido numa única query ({@code findAllById})
+     * em vez de deixar o acesso lazy disparar uma consulta por avaliação.</p>
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> listAllReviews(int page, int size) {
+        int safeSize = size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
+        // Desempate por id (como na lista de pedidos): datas iguais não trocam
+        // de posição entre páginas.
+        Pageable pageable = PageRequest.of(
+                Math.max(page, 0),
+                safeSize,
+                Sort.by(Sort.Order.desc("date"), Sort.Order.desc("id")));
+
+        Page<Review> result = reviewRepository.findAll(pageable);
+
+        List<String> productIds = result.getContent().stream()
+                .map(r -> r.getProduct().getId())
+                .distinct()
+                .toList();
+        Map<String, Product> products = productRepository.findAllById(productIds).stream()
+                .collect(Collectors.toMap(Product::getId, p -> p));
+
+        List<AdminReviewView> items = result.getContent().stream().map(r -> {
+            Product p = products.get(r.getProduct().getId());
+            return new AdminReviewView(
+                    r.getId(),
+                    r.getProduct().getId(),
+                    p == null ? null : p.getName(),
+                    p == null ? null : p.getSlug(),
+                    r.getAuthor(),
+                    r.getRating(),
+                    r.getDate(),
+                    r.getTitle(),
+                    r.getComment(),
+                    r.isVerified());
+        }).toList();
+
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("items", items);
+        out.put("page", result.getNumber());
+        out.put("size", result.getSize());
+        out.put("totalItems", result.getTotalElements());
+        out.put("totalPages", result.getTotalPages());
+        return out;
+    }
+
+    /**
+     * Remove uma avaliação (apenas admin) e recalcula a média do produto.
+     *
+     * <p>O rating é desfeito com o valor original da avaliação — sem isto, a
+     * média do produto ficava a incluir uma nota que já não existe.</p>
+     */
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "reviews", allEntries = true),
+            @CacheEvict(cacheNames = "product", allEntries = true)
+    })
+    public void deleteReview(Long id) {
+        Review review = reviewRepository.findById(id)
+                .orElseThrow(() -> ApiException.notFound("Avaliação não encontrada"));
+
+        Product product = review.getProduct();
+        int newCount = Math.max(0, product.getRatingCount() - 1);
+        double newAvg = newCount == 0
+                ? 0.0
+                : Math.max(0, (product.getRating() * product.getRatingCount() - review.getRating()) / newCount);
+        product.setRatingCount(newCount);
+        product.setRating(Math.round(newAvg * 10.0) / 10.0);
+        productRepository.save(product);
+
+        reviewRepository.delete(review);
     }
 
     /** Contrato de categoria do frontend + productCount. */

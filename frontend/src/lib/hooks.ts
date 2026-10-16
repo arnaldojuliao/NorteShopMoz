@@ -166,5 +166,9 @@ export function useLocalStorageState<T>(key: string, initial: T) {
     return () => window.removeEventListener("storage", onStorage);
   }, [key]);
 
-  return [state, setState] as const;
+  // Terceiro elemento: o valor só está lido depois da hidratação (o
+  // localStorage não existe no servidor). Quem NÃO pode decidir com o valor por
+  // omissão (ex.: o guard de sessão local da área de conta, que abria o modal de
+  // login antes de o perfil chegar) usa este sinal para esperar.
+  return [state, setState, hydrated] as const;
 }

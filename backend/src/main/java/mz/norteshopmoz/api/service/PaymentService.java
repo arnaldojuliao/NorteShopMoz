@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import mz.norteshopmoz.api.domain.PaymentIncident;
 import mz.norteshopmoz.api.exception.ApiException;
 import mz.norteshopmoz.api.web.dto.OrderRequest;
 import org.slf4j.Logger;
@@ -50,10 +51,14 @@ public class PaymentService {
                     List.of("MPESA"), true, true, false),
             new PaymentMethodInfo("emola", "e-Mola",
                     List.of("EMOLA"), true, true, false),
+            new PaymentMethodInfo("mkesh", "mKesh",
+                    List.of("MKESH"), true, true, false),
             new PaymentMethodInfo("card", "Cartão Visa / Mastercard",
                     List.of("Card", "Credit card", "CARD"), true, false, true));
 
     private final ObjectProvider<PaymentGateway> gatewayProvider;
+    /** Fila de reconciliação: estornos falhados ficam visíveis à operação. */
+    private final PaymentIncidentService incidentService;
     /** Bulkhead: teto de cobranças simultâneas ao gateway. */
     private final Semaphore chargeSlots;
     /** Tempo máximo de espera por uma vaga antes de responder 503. */
@@ -61,9 +66,11 @@ public class PaymentService {
 
     public PaymentService(
             ObjectProvider<PaymentGateway> gatewayProvider,
+            PaymentIncidentService incidentService,
             @Value("${app.payments.max-concurrent-charges:8}") int maxConcurrentCharges,
             @Value("${app.payments.charge-slot-timeout-seconds:10}") int chargeSlotTimeoutSeconds) {
         this.gatewayProvider = gatewayProvider;
+        this.incidentService = incidentService;
         this.chargeSlots = new Semaphore(Math.max(1, maxConcurrentCharges), true);
         this.chargeSlotTimeout = Duration.ofSeconds(Math.max(1, chargeSlotTimeoutSeconds));
     }
@@ -108,45 +115,65 @@ public class PaymentService {
     }
 
     /**
-     * Valida os dados de pagamento e, para métodos pagos online, cobra no
-     * gateway. Devolve a referência da cobrança (null para pagamento na
-     * entrega / transferência). Lança 400 se faltarem dados obrigatórios.
+     * O gateway ativo usa uma página de pagamento própria (PaySuite)?
+     *
+     * <p>O frontend consulta isto para não pedir telefone/cartão: quem os recolhe
+     * é a página do provedor. Sem isto, o cliente preenchia dados que nunca eram
+     * usados e o checkout aparentava cobrar ali.</p>
      */
-    public String authorize(PaymentMethodInfo method, OrderRequest.PaymentInfoRequest info, BigDecimal total) {
+    public boolean hostedCheckout() {
+        PaymentGateway gateway = gatewayProvider.getIfAvailable();
+        return gateway != null && gateway.hostedCheckout();
+    }
+
+    /**
+     * Valida os dados de pagamento e, para métodos pagos online, cria a cobrança
+     * no gateway. Devolve o resultado (null para pagamento na entrega /
+     * transferência). Lança 400 se faltarem dados obrigatórios.
+     *
+     * <p>Nos gateways com <strong>checkout hospedado</strong> (PaySuite) o
+     * telefone/cartão são recolhidos na página do provedor, pelo que não são
+     * exigidos aqui — a validação e os campos aplicam-se apenas a gateways que
+     * cobram diretamente.</p>
+     */
+    public PaymentGateway.PaymentCharge authorize(PaymentMethodInfo method, String reference,
+                                                  OrderRequest.PaymentInfoRequest info, BigDecimal total) {
         if (!method.paidOnline()) {
             return null;
         }
         if (total == null || total.signum() < 0) {
             throw ApiException.badRequest("Valor de cobrança inválido");
         }
-        String phone = info == null ? null : normalizePhone(info.phone());
-        String cardLast4 = info == null ? null : normalizeCardLast4(info.cardLast4());
-
-        if (method.needsPhone()) {
-            if (phone == null) {
-                throw ApiException.badRequest("Indique o número de telemóvel para pagar com " + method.label());
-            }
-            // Telemóvel moçambicano: 9 dígitos (8…) ou com prefixo +258.
-            if (!(phone.length() == 9 && phone.startsWith("8") || phone.length() == 12 && phone.startsWith("258"))) {
-                throw ApiException.badRequest("Número de telemóvel inválido para " + method.label()
-                        + " (use +258 8X XXX XXXX)");
-            }
-        }
-        if (method.needsCard()) {
-            if (cardLast4 == null) {
-                throw ApiException.badRequest("Indique os dados do cartão para concluir o pagamento");
-            }
-            // Últimos 4 dígitos do cartão (o frontend envia apenas estes — o resto
-            // do número nunca chega ao servidor).
-            if (cardLast4.length() != 4 || cardLast4.chars().anyMatch(c -> !Character.isDigit(c))) {
-                throw ApiException.badRequest("Dados do cartão inválidos");
-            }
-        }
         PaymentGateway gateway = gatewayProvider.getIfAvailable();
         if (gateway == null) {
             throw ApiException.serviceUnavailable(
                     "Pagamentos online temporariamente indisponíveis — gateway não configurado."
                             + " Escolha pagamento na entrega ou transferência bancária.");
+        }
+        String phone = info == null ? null : normalizePhone(info.phone());
+        String cardLast4 = info == null ? null : normalizeCardLast4(info.cardLast4());
+
+        if (!gateway.hostedCheckout()) {
+            if (method.needsPhone()) {
+                if (phone == null) {
+                    throw ApiException.badRequest("Indique o número de telemóvel para pagar com " + method.label());
+                }
+                // Telemóvel moçambicano: 9 dígitos (8…) ou com prefixo +258.
+                if (!(phone.length() == 9 && phone.startsWith("8") || phone.length() == 12 && phone.startsWith("258"))) {
+                    throw ApiException.badRequest("Número de telemóvel inválido para " + method.label()
+                            + " (use +258 8X XXX XXXX)");
+                }
+            }
+            if (method.needsCard()) {
+                if (cardLast4 == null) {
+                    throw ApiException.badRequest("Indique os dados do cartão para concluir o pagamento");
+                }
+                // Últimos 4 dígitos do cartão (o frontend envia apenas estes — o resto
+                // do número nunca chega ao servidor).
+                if (cardLast4.length() != 4 || cardLast4.chars().anyMatch(c -> !Character.isDigit(c))) {
+                    throw ApiException.badRequest("Dados do cartão inválidos");
+                }
+            }
         }
         // Bulkhead: cada cobrança ocupa uma thread do Tomcat durante a latência do
         // gateway (num gateway real é uma chamada HTTP). Sem limite, um gateway
@@ -165,7 +192,11 @@ public class PaymentService {
                     "Demasiados pagamentos em curso neste momento. Tente novamente dentro de instantes.");
         }
         try {
-            return gateway.charge(method.id(), phone, cardLast4, total, CURRENCY);
+            // A referência enviada ao provedor é o id do pedido: é única, liga o
+            // pagamento ao pedido nos relatórios do provedor e evita ter de gerar
+            // (e guardar) mais um identificador.
+            return gateway.charge(reference, method.id(), phone, cardLast4, total, CURRENCY,
+                    "Pedido " + reference + " — NorteShopMoz");
         } finally {
             chargeSlots.release();
         }
@@ -174,25 +205,53 @@ public class PaymentService {
     /**
      * Estorna uma cobrança (compensação).
      *
-     * <p>Chamado quando o pedido falha depois da cobrança (ex.: falha ao gravar,
-     * rollback no commit). É <strong>best-effort e nunca lança</strong>: corre no
-     * caminho de erro, onde a exceção original é a que interessa.</p>
+     * <p>Chamado quando o pedido falha depois de o pagamento ter sido criado
+     * (ex.: falha ao gravar, rollback no commit). É <strong>best-effort e nunca
+     * lança</strong>: corre no caminho de erro, onde a exceção original é a que
+     * interessa.</p>
+     *
+     * <p>Nota sobre o checkout hospedado: um pagamento ainda pendente (o cliente
+     * nunca chegou a pagar) não pode ser devolvido — a PaySuite recusa-o — mas
+     * isso é inofensivo, porque nunca houve dinheiro a devolver. O estorno só
+     * falha mesmo se o pagamento já tinha sido concluído, e aí fica o registo de
+     * erro para a operação tratar no painel do provedor.</p>
      */
-    public void refund(String reference) {
-        if (reference == null || reference.isBlank()) {
+    public void refund(String reference, BigDecimal amount) {
+        refund(reference, amount, null);
+    }
+
+    /**
+     * Estorno com contexto do pedido — falhas ficam registadas como incidência
+     * ({@code REFUND_FAILED}) na fila de reconciliação, não só no log.
+     *
+     * @param orderId id do pedido (opcional — liga a incidência ao painel)
+     */
+    public void refund(String reference, BigDecimal amount, String orderId) {
+        if (reference == null || reference.isBlank() || amount == null || amount.signum() <= 0) {
             return;
         }
         try {
             PaymentGateway gateway = gatewayProvider.getIfAvailable();
             if (gateway == null) {
                 log.warn("Sem gateway de pagamento para estornar a referência {}", reference);
+                incidentService.record(orderId, reference, PaymentIncident.TYPE_REFUND_FAILED,
+                        "Sem gateway configurado — o estorno não foi tentado.");
                 return;
             }
-            gateway.refund(reference);
+            gateway.refund(reference, amount);
         } catch (Exception e) {
             log.error("Falha ao estornar a referência {} — verifique manualmente no gateway",
                     reference, e);
+            incidentService.record(orderId, reference, PaymentIncident.TYPE_REFUND_FAILED,
+                    truncate(String.valueOf(e.getMessage()), 400));
         }
+    }
+
+    private static String truncate(String value, int max) {
+        if (value == null) {
+            return null;
+        }
+        return value.length() <= max ? value : value.substring(0, max);
     }
 
     /** Normaliza o número: remove espaços, hífenes, parênteses e o + inicial. */

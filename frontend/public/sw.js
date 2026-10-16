@@ -16,14 +16,18 @@
  * apaga todas as caches com outro nome (é também assim que se limpa a cache
  * antiga, que continha HTML e payloads RSC).
  */
-const CACHE = "nsm-static-v3";
+const CACHE = "nsm-static-v4";
 const CORE = [
   "/",
   "/manifest.webmanifest",
   "/icon.png",
   "/icon-192.png",
   "/icon-512.png",
-  "/og.png",
+  // O `/og.png` saiu (a imagem social é gerada por `app/opengraph-image.tsx`).
+  // Um caminho em falta fazia o `cache.addAll` rejeitar TODO o precache — e o
+  // `catch` abaixo engolia o erro, pelo que em produção a cache ficava vazia sem
+  // ninguém notar. Só entram aqui ficheiros que existem em `public/`.
+  "/logo-512.png",
 ];
 
 const isLocal = ["localhost", "127.0.0.1"].includes(self.location.hostname);

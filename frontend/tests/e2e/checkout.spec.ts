@@ -1,33 +1,10 @@
 import { test, expect } from './fixtures/test-fixtures';
-
-const PRODUCT_URL = '/produto/capa-para-iphone';
-
-/**
- * Adiciona o produto de teste ao carrinho a partir da página de detalhe.
- * O carrinho do utilizador de teste persiste no servidor entre corridas —
- * as asserções nunca assumem um total fixo, apenas que aumenta/é positivo.
- */
-async function addTestProductToCart(page: import('@playwright/test').Page): Promise<void> {
-  await page.goto(PRODUCT_URL);
-  const addBtn = page.locator('button[aria-label*="ao carrinho"]').first();
-  await expect(addBtn).toBeVisible({ timeout: 20000 });
-  await addBtn.click();
-
-  // Espera o aria-label do carrinho refletir a contagem (≥ 1 item).
-  await expect
-    .poll(
-      async () => {
-        const label = await page
-          .locator('a[href="/carrinho"]')
-          .first()
-          .getAttribute('aria-label');
-        const m = (label ?? '').match(/(\d+)/);
-        return m ? Number(m[1]) : 0;
-      },
-      { timeout: 15000 },
-    )
-    .toBeGreaterThan(0);
-}
+import {
+  addTestProductToCart,
+  placeOrder,
+  TEST_PRODUCT_NAME,
+  TEST_PRODUCT_URL,
+} from './fixtures/checkout-flow';
 
 test.describe('Checkout Flow', () => {
   // Serializado: os testes partilham o carrinho do mesmo utilizador de teste.
@@ -41,7 +18,7 @@ test.describe('Checkout Flow', () => {
 
     // O item aparece na página do carrinho.
     await authenticatedPage.goto('/carrinho');
-    await expect(authenticatedPage.locator('text=Capa para iPhone').first()).toBeVisible({
+    await expect(authenticatedPage.locator(`text=${TEST_PRODUCT_NAME}`).first()).toBeVisible({
       timeout: 15000,
     });
   });
@@ -69,30 +46,47 @@ test.describe('Checkout Flow', () => {
     await addTestProductToCart(authenticatedPage);
 
     await authenticatedPage.goto('/carrinho');
-    const productName = authenticatedPage.locator('text=Capa para iPhone').first();
+    const productName = authenticatedPage.locator(`text=${TEST_PRODUCT_NAME}`).first();
     await expect(productName).toBeVisible({ timeout: 15000 });
 
     // Remove a primeira ocorrência do produto de teste.
-    const removeButton = authenticatedPage
-      .locator('button[aria-label*="Remover"]')
-      .first();
+    const removeButton = authenticatedPage.locator('button[aria-label*="Remover"]').first();
     await removeButton.click();
 
     // O carrinho fica vazio OU com menos instâncias do produto removido.
     const emptyState = authenticatedPage.getByText(/carrinho.*vaz/i).first();
-    const remaining = await authenticatedPage.locator('text=Capa para iPhone').count();
+    const remaining = await authenticatedPage.locator(`text=${TEST_PRODUCT_NAME}`).count();
     const isEmpty = await emptyState.isVisible().catch(() => false);
     if (!isEmpty) {
       expect(remaining).toBeLessThan(1);
     }
   });
 
-  test('should complete checkout as guest', async () => {
-    test.skip(true, 'Skipping due to flaky selectors');
+  /**
+   * Checkout de convidado — o caminho principal da loja (sem conta).
+   *
+   * Estava desativado com `test.skip(true, 'Skipping due to flaky selectors')`;
+   * os «selectors flaky» eram a UI antiga (endereço inline e botão «Confirmar
+   * pedido»), substituída pelo modal de endereços e pelo CTA «Comprar». O fluxo
+   * real (endereço → pagamento → pedido) corre de ponta a ponta contra a API.
+   */
+  test('should complete checkout as guest', async ({ page }) => {
+    await page.goto(TEST_PRODUCT_URL);
+    const orderId = await placeOrder(page);
+
+    // O pedido existe no servidor e é consultável (convidado identifica-se pelo
+    // email usado no checkout).
+    expect(orderId).toMatch(/^NSM-/);
   });
 
-  test('should complete checkout as authenticated user', async () => {
-    test.skip(true, 'Requires online payment gateway simulation stability');
+  /** Checkout de cliente com sessão: o pedido fica ligado à conta. */
+  test('should complete checkout as authenticated user', async ({ authenticatedPage }) => {
+    await authenticatedPage.goto(TEST_PRODUCT_URL);
+    const orderId = await placeOrder(authenticatedPage);
+
+    // A área de conta lista o pedido acabado de criar (pedidos reais da conta).
+    await authenticatedPage.goto('/pedidos');
+    await expect(authenticatedPage.getByText(orderId).first()).toBeVisible({ timeout: 20000 });
   });
 });
 

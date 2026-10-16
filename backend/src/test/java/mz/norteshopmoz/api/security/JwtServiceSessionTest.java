@@ -20,7 +20,7 @@ class JwtServiceSessionTest {
     private final JwtService jwtService = new JwtService(new AppProperties(
             new AppProperties.Jwt(SECRET, 3600, 7200),
             new AppProperties.Cors(List.of("http://localhost:3000")),
-            null, null, null), new MockEnvironment());
+            null, null, null, null, null, null), new MockEnvironment());
 
     private static UserAccount user() {
         return UserAccount.builder()

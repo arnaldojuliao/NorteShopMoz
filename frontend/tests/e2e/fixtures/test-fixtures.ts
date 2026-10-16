@@ -79,7 +79,11 @@ export const test = base.extend<TestFixtures>({
 async function loginViaModal(page: Page, email: string, password: string): Promise<void> {
   for (let attempt = 1; attempt <= 3; attempt++) {
     await page.goto('/');
-    await expect(page.locator('header')).toBeVisible({ timeout: 20000 });
+    // `header:visible`: a loja renderiza DOIS cabeçalhos (o mobile e o do
+    // desktop) e alterna-os por CSS (ver ConditionalHeader) — só um está
+    // visível em cada viewport, mas ambos existem no DOM. Sem `:visible` o
+    // seletor é ambíguo (strict mode violation).
+    await expect(page.locator('header:visible')).toBeVisible({ timeout: 20000 });
 
     // Nota: a hidratação do React pode ainda estar em curso — se o clique não
     // abrir o modal, o loop recomeça (o 2.º attempt encontra a página hidratada).
@@ -118,7 +122,11 @@ async function loginViaModal(page: Page, email: string, password: string): Promi
 
     // Header ainda não atualizou — recarrega para revalidar a sessão.
     await page.reload();
-    await expect(page.locator('header')).toBeVisible({ timeout: 20000 });
+    // `header:visible`: a loja renderiza DOIS cabeçalhos (o mobile e o do
+    // desktop) e alterna-os por CSS (ver ConditionalHeader) — só um está
+    // visível em cada viewport, mas ambos existem no DOM. Sem `:visible` o
+    // seletor é ambíguo (strict mode violation).
+    await expect(page.locator('header:visible')).toBeVisible({ timeout: 20000 });
     if (await headerTrigger.isHidden({ timeout: 10000 }).catch(() => false)) return;
     // Sessão realmente não pegou — nova tentativa de login.
   }

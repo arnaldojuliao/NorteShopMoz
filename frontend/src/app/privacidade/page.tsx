@@ -10,7 +10,6 @@ export const metadata: Metadata = {
 export default function PrivacidadePage() {
   return (
     <InfoPage
-      crumb="Política de privacidade"
       title="Política de privacidade"
       updatedAt="Agosto de 2026"
       sections={[

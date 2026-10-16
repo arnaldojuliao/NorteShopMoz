@@ -52,6 +52,28 @@ export function clearUserOrders(userId?: string): void {
 export const ORDERS_KEY = "nsm:orders";
 
 /**
+ * Leitura da marca de sessão local (`nsm:user`) — sem efeitos secundários.
+ *
+ * Devolve `null` quando a chave não existe OU quando está vazia
+ * (`{"email":"","name":""}`): páginas públicas como o checkout gravam o valor
+ * por omissão do seu hook de armazenamento e, sem esta distinção, um convidado
+ * ficava marcado como "sessão existente" e era expulso para a página inicial no
+ * carregamento seguinte (o arranque falha em `/api/auth/me` e assume expiração).
+ */
+export function getStoredUser(): { email: string; name: string } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(USER_KEY);
+    if (raw == null) return null;
+    const parsed = JSON.parse(raw) as { email?: string; name?: string } | null;
+    if (!parsed || (!parsed.email && !parsed.name)) return null;
+    return { email: parsed.email ?? "", name: parsed.name ?? "" };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Há marca de sessão guardada neste navegador (`nsm:user`)?
  *
  * Serve para distinguir "a sessão expirou" de "visitante anónimo": o arranque
@@ -60,12 +82,7 @@ export const ORDERS_KEY = "nsm:orders";
  * convidado).
  */
 export function hasStoredUser(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.localStorage.getItem(USER_KEY) != null;
-  } catch {
-    return false;
-  }
+  return getStoredUser() != null;
 }
 
 /**
@@ -235,6 +252,19 @@ export async function fetchMyOrders(): Promise<Order[] | null> {
 }
 
 /**
+ * Como `fetchMyOrders`, mas LANÇA em vez de devolver `null`.
+ *
+ * Serve os ecrãs que têm de distinguir «não tenho pedidos» de «não consegui
+ * carregar os pedidos»: com o `null` os dois casos davam a mesma lista vazia e
+ * uma avaria da API aparecia como uma conta sem encomendas. O 401 fica à parte
+ * (sessão terminada) — quem chama decide tratá-lo como ausência, não como erro.
+ */
+export async function fetchMyOrdersStrict(): Promise<Order[]> {
+  const { data } = await apiGet<{ data: Order[] }>("/api/orders", 0, true);
+  return data;
+}
+
+/**
  * Tamanho da página da listagem de pedidos do painel. Tem de estar alinhado com
  * o teto do servidor (`MAX_PAGE_SIZE` em OrderService): pedir mais devolve o
  * teto, não um erro, mas o pager tem de saber o tamanho efetivo (`size`).
@@ -326,12 +356,30 @@ export async function fetchSalesStats(): Promise<SalesStats> {
 
 /**
  * Avança o estado do pedido (admin) via PATCH /api/orders/{id}/status.
- * Re-lança ApiError — a página mostra a mensagem do backend.
+ * `trackingCode` é opcional: grava o código de rastreamento do envio no
+ * mesmo pedido (aparece na página de acompanhamento do cliente). Re-lança
+ * ApiError — a página mostra a mensagem do backend.
  */
-export async function advanceOrderStatus(id: string, nextStatus: OrderStatus): Promise<Order> {
+export async function advanceOrderStatus(
+  id: string,
+  nextStatus: OrderStatus,
+  trackingCode?: string,
+): Promise<Order> {
   const res = await apiPatch<{ data: Order }>(
     `/api/orders/${encodeURIComponent(id)}/status`,
-    { status: nextStatus },
+    trackingCode === undefined ? { status: nextStatus } : { status: nextStatus, trackingCode },
+  );
+  return res.data;
+}
+
+/**
+ * Grava o código de tracking sem mudar o estado do pedido — PATCH com o
+ * estado atual + o código (o backend trata "-" como limpar).
+ */
+export async function updateOrderTracking(id: string, status: OrderStatus, trackingCode: string): Promise<Order> {
+  const res = await apiPatch<{ data: Order }>(
+    `/api/orders/${encodeURIComponent(id)}/status`,
+    { status, trackingCode: trackingCode.trim() },
   );
   return res.data;
 }

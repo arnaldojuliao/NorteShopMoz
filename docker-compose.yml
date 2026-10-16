@@ -62,6 +62,12 @@ services:
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
       # Gateway de pagamentos: simulated (padrão, sem cobrança) ou live (real)
       PAYMENTS_MODE: ${PAYMENTS_MODE:-simulated}
+      # Credenciais da PaySuite (só usadas com PAYMENTS_MODE=live).
+      PAYMENTS_BASE_URL: ${PAYMENTS_BASE_URL:-https://paysuite.tech/api/v1}
+      PAYMENTS_API_KEY: ${PAYMENTS_API_KEY:-}
+      PAYMENTS_WEBHOOK_SECRET: ${PAYMENTS_WEBHOOK_SECRET:-}
+      PAYMENTS_WEBHOOK_URL: ${PAYMENTS_WEBHOOK_URL:-}
+      PAYMENTS_RETURN_URL: ${PAYMENTS_RETURN_URL:-}
       # Login social (Google/Facebook) — OPCIONAL mas recomendado
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       FACEBOOK_APP_ID: ${FACEBOOK_APP_ID}

@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Mail, MapPin, Phone } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { FacebookIcon, InstagramIcon, WhatsAppIcon, XIcon } from "@/components/ui/SocialIcons";
@@ -9,6 +12,7 @@ const helpLinks = [
   { label: "Contactos", href: "/contactos" },
   { label: "Perguntas frequentes", href: "/ajuda" },
   { label: "Entregas", href: "/entregas" },
+  { label: "Métodos de pagamento", href: "/pagamentos" },
   { label: "Ajuda", href: "/ajuda" },
 ];
 
@@ -23,14 +27,19 @@ const socials = [
   { label: "Instagram", href: site.socials.instagram, icon: InstagramIcon },
   { label: "X (Twitter)", href: site.socials.x, icon: XIcon },
   { label: "WhatsApp", href: whatsappHref(), icon: WhatsAppIcon },
-];
+].filter((s) => s.href);
 
 export function Footer() {
+  const pathname = usePathname();
+  // Na página de produto o rodapé sai (a pedido): o foco é o produto e a saída
+  // é a seta do cabeçalho.
+  if (pathname.startsWith("/produto/")) return null;
+
   // `theme-inverse`: o footer é navy nos dois temas, por isso o conteúdo mantém
   // a paleta clara — senão os seus cinzas ficariam mais escuros que o fundo.
   return (
     <footer className="theme-inverse mt-16 hidden bg-navy-950 text-slate-300 lg:block">
-      <div className="container-nsm grid gap-10 py-14 md:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1.2fr]">
+      <div className="container-nsm grid gap-10 py-14 md:grid-cols-2 lg:grid-cols-[1.2fr_1fr_1fr_1.2fr]">
         {/* Marca */}
         <div>
           <Logo light />
@@ -126,7 +135,7 @@ export function Footer() {
           <p>© {new Date().getFullYear()} NorteShopMoz (NS). Todos os direitos reservados.</p>
           <div className="flex flex-wrap items-center justify-center gap-2">
             <span className="rounded-md bg-white/5 px-2.5 py-1 font-semibold text-slate-300">
-              Pagamento na entrega
+              M-Pesa · e-Mola · Cartão
             </span>
             <span className="rounded-md bg-white/5 px-2.5 py-1 font-semibold text-slate-300">
               Transferência

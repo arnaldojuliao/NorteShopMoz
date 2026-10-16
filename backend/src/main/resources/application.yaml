@@ -340,8 +340,29 @@ app:
     api-secret: ${CLOUDINARY_API_SECRET:}
   payments:
     # Modo do gateway de pagamentos: `simulated` (padrão, sem cobrança real) ou
-    # `live` (exige implementação real de PaymentGateway com credenciais).
+    # `live` (usa a PaySuite — ver PaySuitePaymentGateway).
     mode: ${PAYMENTS_MODE:simulated}
+    # Integração PaySuite (só usada com `mode: live`).
+    #
+    # base-url: raiz da API (https://paysuite.tech/api/v1 em produção;
+    #   https://paysuite.test/api/v1 no sandbox). O adaptador chama POST /payments
+    #   para criar o pagamento e POST /refunds para estornar.
+    # api-key: token do comerciante (PaySuite > Settings > API Access), enviado
+    #   em `Authorization: Bearer …`.
+    # webhook-secret: chave partilhada que assina as notificações de pagamento
+    #   (HMAC-SHA256 do corpo cru no cabeçalho X-Signature).
+    # webhook-url / return-url: URLs públicos da loja enviados em cada pagamento
+    #   (para onde a PaySuite notifica e devolve o cliente). Opcionais: sem eles
+    #   usa-se a configuração de conta no painel da PaySuite.
+    #
+    # Com `mode: live` e api-key vazia a aplicação NÃO arranca: um gateway
+    # "live" sem credenciais criaria pagamentos que nunca seriam cobrados.
+    base-url: ${PAYMENTS_BASE_URL:https://paysuite.tech/api/v1}
+    api-key: ${PAYMENTS_API_KEY:}
+    webhook-secret: ${PAYMENTS_WEBHOOK_SECRET:}
+    webhook-url: ${PAYMENTS_WEBHOOK_URL:}
+    return-url: ${PAYMENTS_RETURN_URL:}
+    timeout-ms: ${PAYMENTS_TIMEOUT_MS:15000}
     # Bulkhead das cobranças online (ver PaymentService): teto de cobranças
     # SIMULTÂNEAS ao gateway. Cada uma ocupa uma thread do Tomcat durante a
     # latência do gateway; sem teto, um gateway lento esgotava as 200 threads e
@@ -349,6 +370,20 @@ app:
     max-concurrent-charges: ${PAYMENTS_MAX_CONCURRENT:8}
     # Tempo máximo de espera por uma vaga antes de devolver 503.
     charge-slot-timeout-seconds: ${PAYMENTS_CHARGE_SLOT_TIMEOUT:10}
+  audit:
+    # Export opcional de eventos de auditoria (AUTH/AUTHZ/DATA/PAYMENT/ADMIN)
+    # para um destino externo — SIEM (Elastic/Splunk/Datadog) ou endpoint próprio.
+    # Vazio = desligado (só log local). O evento vai como POST JSON assíncrono;
+    # falhas de entrega são logadas e nunca afetam o fluxo auditado.
+    webhook-url: ${AUDIT_WEBHOOK_URL:}
+  whatsapp:
+    # Canal de notificações WhatsApp — consumidor das preferências
+    # notifWhatsapp* (toggles em /configuracoes). Provedor genérico: qualquer
+    # endpoint que aceite POST JSON {to, message} com Bearer opcional.
+    # Vazio = desligado (o backend loga a mensagem em vez de a enviar; o
+    # email transacional continua a ser o canal garantido).
+    api-url: ${WHATSAPP_API_URL:}
+    api-token: ${WHATSAPP_API_TOKEN:}
 
 logging:
   level:

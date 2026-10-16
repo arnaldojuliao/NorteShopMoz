@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { SearchIcon } from "lucide-react";
 
-import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 import { ProductListing } from "@/components/product/ProductListing";
 import { ProductGridSkeleton } from "@/components/ui/Skeleton";
 import { repo } from "@/lib/repo";
@@ -72,20 +70,18 @@ async function ExploreContent({ searchParams }: ExplorePageProps) {
     );
   }
 
+  // Sem termo de pesquisa mostra-se o catálogo completo. Antes disto a página
+  // era só um ícone e uma frase — e é o destino do botão «Filtrar e procurar»
+  // da home, que aterrava numa página praticamente vazia.
   if (!query) {
     return (
-      <div className="container-nsm py-16 text-center">
-        <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-primary-50 text-primary-700">
-          <SearchIcon className="size-6" aria-hidden />
-        </span>
-        <h1 className="mt-4 font-display text-2xl font-extrabold text-slate-900">
-          Pesquisar na NorteShopMoz
-        </h1>
-        <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
-          Escreva o que procura na barra de pesquisa em cima — produtos, marcas
-          e categorias.
-        </p>
-      </div>
+      <ListingView
+        state={{
+          title: "Explorar produtos",
+          emptyMessage: "Ainda não há produtos no catálogo.",
+        }}
+        products={await repo.getProducts()}
+      />
     );
   }
 
@@ -115,23 +111,12 @@ function ListingView({
 }) {
   return (
     <div className="container-nsm py-5">
-      <Breadcrumbs items={[{ label: state.title }]} />
-      <div className="mt-4 flex items-center gap-3">
-        <span className="flex size-11 items-center justify-center rounded-2xl bg-primary-50 text-primary-700">
-          <SearchIcon className="size-5" aria-hidden />
-        </span>
-        <div>
-          <h1 className="font-display text-2xl font-extrabold text-slate-900">
-            {state.title}
-          </h1>
-          <p className="text-sm text-slate-500">
-            {products.length}{" "}
-            {products.length === 1
-              ? "produto disponível"
-              : "produtos disponíveis"}
-          </p>
-        </div>
-      </div>
+      {/* Título e contagem saíram do ecrã (a pedido): o h1 continua estrutural
+          (SEO/leitores de ecrã), invisível. */}
+      <h1 className="sr-only">{state.title}</h1>
+      <p className="sr-only">
+        {products.length} {products.length === 1 ? "produto disponível" : "produtos disponíveis"}
+      </p>
 
       <div className="mt-6">
         {products.length > 0 ? (

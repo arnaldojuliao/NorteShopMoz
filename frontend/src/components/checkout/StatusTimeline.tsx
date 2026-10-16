@@ -21,6 +21,22 @@ const steps: { status: OrderStatus; icon: typeof Truck; label: string }[] = [
 ];
 
 export function StatusTimeline({ current }: { current: OrderStatus }) {
+  // Pagamento pendente (checkout hospedado da PaySuite) sai da timeline: o
+  // pedido foi criado mas nenhum passo do percurso está concluído — mostrá-lo
+  // como "Pedido recebido" dava a ideia errada de que já nada falta pagar.
+  if (current === "Aguarda pagamento") {
+    return (
+      <div className="flex items-center gap-3 rounded-2xl border border-amber-100 bg-amber-50/70 px-4 py-3">
+        <Wallet className="size-5 shrink-0 text-amber-700" aria-hidden />
+        <p className="text-sm leading-relaxed text-amber-800">
+          <strong className="font-semibold">Aguarda pagamento.</strong> Finalize o pagamento na
+          página do provedor para o pedido avançar. Se já pagou, a confirmação pode levar alguns
+          instantes.
+        </p>
+      </div>
+    );
+  }
+
   // Pedido cancelado sai da timeline: nenhum passo está "alcançado".
   if (current === "Cancelado") {
     return (

@@ -45,4 +45,10 @@ public interface ProductRepository
     /** Contagem de produtos por categoria — uma query em vez de N por categoria. */
     @Query("SELECT p.category AS category, COUNT(p) AS cnt FROM Product p GROUP BY p.category")
     List<Object[]> countProductsGroupedByCategory();
+
+    /** Número de produtos numa categoria (usado pelo admin antes de a apagar). */
+    long countByCategory(String category);
+
+    /** Produtos com stock igual ou abaixo do limite (alerta de stock baixo no painel). */
+    List<Product> findByStockLessThanEqualOrderByStockAsc(int threshold);
 }

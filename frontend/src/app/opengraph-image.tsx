@@ -67,7 +67,7 @@ export default function OpengraphImage() {
             }}
           >
             Eletrónica, moda, casa, beleza e muito mais. Entrega para todo o
-            Moçambique e pagamento na entrega.
+            Moçambique e pagamento por M-Pesa, e-Mola ou cartão.
           </span>
         </div>
 
@@ -82,7 +82,7 @@ export default function OpengraphImage() {
         >
           <span>Entrega em todas as províncias</span>
           <span style={{ opacity: 0.5 }}>·</span>
-          <span>Pagamento na entrega</span>
+          <span>M-Pesa · e-Mola · Cartão</span>
           <span style={{ opacity: 0.5 }}>·</span>
           <span>Garantia de 6 meses</span>
         </div>

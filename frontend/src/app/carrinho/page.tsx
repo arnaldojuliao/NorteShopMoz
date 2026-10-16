@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ArrowRight, Trash2, Truck, Lock } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowRight, PackageOpen, Trash2, Truck } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { Button } from "@/components/ui/Button";
 import { QuantityPicker } from "@/components/ui/QuantityPicker";
@@ -12,15 +13,10 @@ import { useCurrency } from "@/context/CurrencyContext";
 import { useAsyncData } from "@/lib/hooks";
 import { getShippingConfig, LOCAL_FREE_SHIPPING_THRESHOLD } from "@/lib/shipping";
 import { cn } from "@/lib/utils";
-import { useRequireAuth } from "@/components/auth/RequireAuth";
-import { useAuth } from "@/context/AuthContext";
-import { useRouter } from "next/navigation";
 
 export default function CartPage() {
   const { format } = useCurrency();
   const { items, subtotal, updateQty, removeItem, clear } = useCart();
-  const { user } = useAuth();
-  const { checkAuth } = useRequireAuth();
   const router = useRouter();
   const [removing, setRemoving] = useState<string | null>(null);
   // Limite de entrega grátis do servidor (fallback local enquanto não carrega).
@@ -29,10 +25,12 @@ export default function CartPage() {
   // Estimativa de envio: taxa da província predefinida (a primeira do checkout).
   const defaultFee = shipping?.provinces[0]?.fee ?? 150;
 
-  const shippingCost = subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : defaultFee;
+  // Sem artigos não há entrega a estimar: aplicar a taxa da província a um
+  // subtotal de 0 MT mostrava «TOTAL 120 MT» num carrinho vazio.
+  const shippingCost =
+    items.length === 0 || subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : defaultFee;
   const savings = items.reduce((acc, i) => acc + (i.oldPrice && i.oldPrice > i.price ? (i.oldPrice - i.price) * i.qty : 0), 0);
-
-  const isLoggedIn = Boolean(user);
+  const isEmpty = items.length === 0;
 
   const handleRemove = (productId: string, variant?: string) => {
     setRemoving(productId + (variant ?? ""));
@@ -42,12 +40,33 @@ export default function CartPage() {
     }, 200);
   };
 
+  // O checkout é público (o backend aceita convidados) — não se exige conta
+  // para avançar; o registo é oferecido no fim da compra.
   const handleCheckout = () => {
-    checkAuth(() => {
-      // Se autenticado, navega para checkout
-      router.push("/checkout");
-    });
+    router.push("/checkout");
   };
+
+  // Carrinho vazio: um resumo com «Subtotal 0 MT / TOTAL 0 MT» e um botão
+  // «Esvaziar carrinho» não dava nada a ninguém. Mostra-se uma saída para a loja.
+  if (isEmpty) {
+    return (
+      <div className="container-nsm py-16 text-center">
+        <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-primary-50 text-primary-700">
+          <PackageOpen className="size-6" aria-hidden />
+        </span>
+        <h1 className="mt-4 font-display text-2xl font-extrabold text-slate-900">
+          O seu carrinho está vazio
+        </h1>
+        <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
+          Adicione produtos para continuar. O carrinho fica guardado neste
+          dispositivo enquanto procura.
+        </p>
+        <Button href="/" size="lg" className="mt-6">
+          Ver produtos
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="container-nsm py-6">
@@ -91,7 +110,7 @@ export default function CartPage() {
                     <div className="min-w-0">
                       <Link
                         href={`/produto/${item.slug}`}
-                        className="line-clamp-2 text-sm font-semibold text-slate-800 hover:text-primary-700 sm:text-[15px]"
+                        className="line-clamp-2 text-sm font-semibold text-slate-800 hover:text-primary-700 sm:text-sm"
                       >
                         {item.name}
                       </Link>
@@ -106,7 +125,7 @@ export default function CartPage() {
                     </div>
                     <button
                       onClick={() => handleRemove(item.productId, item.variant)}
-                      className="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+                      className="h-9 w-9 rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
                       aria-label={`Remover ${item.name}`}
                     >
                       <Trash2 className="size-4" />
@@ -135,13 +154,14 @@ export default function CartPage() {
             );
           })}
 
-          <button
-            onClick={clear}
-            // `-my-2 py-2`: o alvo tinha 20px de altura (mínimo AA: 24).
-            className="-my-2 py-2 text-sm font-medium text-slate-400 underline-offset-2 transition hover:text-red-600 hover:underline"
-          >
-            Esvaziar carrinho
-          </button>
+          {!isEmpty && (
+            <button
+              onClick={clear}
+              className="mt-1 inline-flex h-10 items-center px-2 text-sm font-medium text-slate-400 underline-offset-2 transition hover:text-red-600 hover:underline"
+            >
+              Esvaziar carrinho
+            </button>
+          )}
         </div>
 
         {/* Resumo */}
@@ -158,15 +178,17 @@ export default function CartPage() {
                 <dd className="font-semibold">-{format(savings)}</dd>
               </div>
             )}
-            <div className="flex justify-between">
-              <dt className="flex items-center gap-1.5 text-slate-500">
-                <Truck className="size-4 text-primary-500" /> Entrega
-              </dt>
-              <dd className={cn("font-semibold", shippingCost === 0 ? "text-emerald-700" : "text-slate-800")}>
-                {shippingCost === 0 ? "Grátis" : format(shippingCost)}
-              </dd>
-            </div>
-            {shippingCost > 0 && (
+            {!isEmpty && (
+              <div className="flex justify-between">
+                <dt className="flex items-center gap-1.5 text-slate-500">
+                  <Truck className="size-4 text-primary-500" /> Entrega
+                </dt>
+                <dd className={cn("font-semibold", shippingCost === 0 ? "text-emerald-700" : "text-slate-800")}>
+                  {shippingCost === 0 ? "Grátis" : format(shippingCost)}
+                </dd>
+              </div>
+            )}
+            {!isEmpty && shippingCost > 0 && (
               <p className="text-xs text-slate-400">
                 Entrega grátis em compras acima de {format(FREE_SHIPPING_THRESHOLD)}.
               </p>
@@ -179,28 +201,19 @@ export default function CartPage() {
             </div>
           </dl>
 
-          <Button 
+          <Button
             onClick={handleCheckout}
-            size="lg" 
-            fullWidth 
+            size="lg"
+            fullWidth
             className="mt-5"
-            variant={isLoggedIn ? "primary" : "outline"}
+            disabled={isEmpty}
           >
-            {isLoggedIn ? (
-              <>Finalizar compra <ArrowRight className="size-4" /></>
-            ) : (
-              <>Entrar para finalizar <Lock className="size-4" /></>
-            )}
+            Finalizar compra <ArrowRight className="size-4" />
           </Button>
-          {isLoggedIn ? (
-            <p className="mt-3 text-center text-xs text-slate-400">
-              Pagamento na entrega disponível em todo Moçambique
-            </p>
-          ) : (
-            <p className="mt-3 text-center text-xs text-slate-500">
-              Faça login para prosseguir com a compra
-            </p>
-          )}
+          <p className="mt-3 text-center text-xs text-slate-500">
+            Pague com M-Pesa, e-Mola ou cartão · em todo Moçambique · sem conta
+            obrigatória
+          </p>
         </aside>
       </div>
     </div>

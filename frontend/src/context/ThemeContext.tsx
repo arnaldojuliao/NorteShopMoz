@@ -28,9 +28,13 @@ function systemPrefersDark(): boolean {
   );
 }
 
-/** Lê o tema guardado (compatível com valores já escritos por useLocalStorageState). */
+/** Lê o tema guardado (compatível com valores já escritos por useLocalStorageState).
+ * Por omissão, CLARO: é a identidade da loja (cabeçalho vermelho sobre branco, como
+ * no telemóvel e nas partilhas). Quem preferir escuro escolhe e fica guardado;
+ * "system" continua disponível nas definições. Assim, a primeira visita é igual
+ * em qualquer dispositivo. */
 function readStoredTheme(): Theme {
-  if (typeof window === "undefined") return "system";
+  if (typeof window === "undefined") return "light";
   try {
     const raw = window.localStorage.getItem(THEME_KEY);
     if (raw != null) {
@@ -45,7 +49,7 @@ function readStoredTheme(): Theme {
   } catch {
     /* armazenamento indisponível */
   }
-  return "system";
+  return "light";
 }
 
 /** Aplica (ou remove) a classe `.dark` e o color-scheme no <html>. */

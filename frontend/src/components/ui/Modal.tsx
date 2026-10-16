@@ -65,7 +65,7 @@ export function Modal({
           <h3 className="font-display text-lg font-bold">{title}</h3>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+            className="h-9 w-9 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
             aria-label="Fechar"
           >
             <X className="size-5" />

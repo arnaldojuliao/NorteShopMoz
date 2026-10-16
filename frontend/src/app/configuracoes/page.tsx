@@ -3,12 +3,15 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import type { LucideIcon } from "lucide-react";
 import {
-  ArrowLeft,
+  Bell,
   Camera,
   Check,
+  CheckCircle2,
   ChevronRight,
   Heart,
+  Info,
   Loader2,
   LogOut,
   MapPin,
@@ -17,10 +20,14 @@ import {
   Moon,
   Package,
   Plus,
+  ShieldCheck,
+  SlidersHorizontal,
   Star,
   Sun,
   Trash2,
+  User,
 } from "lucide-react";
+import { AccountSidebar } from "@/components/account/AccountSidebar";
 import { Modal } from "@/components/ui/Modal";
 import { OtpInput } from "@/components/ui/OtpInput";
 import { Toggle } from "@/components/ui/Toggle";
@@ -34,17 +41,15 @@ import { useFavorites } from "@/context/FavoritesContext";
 import { useLoginModal } from "@/context/LoginModalContext";
 import { useTheme, type Theme } from "@/context/ThemeContext";
 import { useToast } from "@/context/ToastContext";
-import { apiPatch, ApiError, clearApiCache } from "@/lib/api";
+import { apiPatch, clearApiCache } from "@/lib/api";
 import { useLocalStorageState } from "@/lib/hooks";
-import { useEmailVerificationCode } from "@/lib/useEmailVerificationCode";
+import { CODE_LENGTH, useEmailVerificationCode } from "@/lib/useEmailVerificationCode";
 import { fetchMyAddresses, saveMyAddresses } from "@/lib/addresses";
-import { cancelOrder, fetchMyOrders, fetchOrderStatus, getOrdersKey, ORDERS_KEY } from "@/lib/orders";
-import { formatDate } from "@/lib/format";
+import { getOrdersKey, ORDERS_KEY } from "@/lib/orders";
+import { accountPaymentMethods } from "@/lib/payments";
 import { provinces } from "@/lib/data/provinces";
-import { StatusTimeline } from "@/components/checkout/StatusTimeline";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Textarea } from "@/components/ui/Input";
-import { EmptyState } from "@/components/ui/EmptyState";
 import type { AddressBookEntry, Order, UserProfile } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -65,8 +70,7 @@ type Prefs = {
 const DEFAULT_PREFS: Prefs = {
   country: "Moçambique",
   currency: "MZN",
-  language: "Português",
-  region: "Moçambique",
+  language: "Português",  region: "Moçambique",
 };
 
 const THEME_LABELS: Record<Theme, string> = {
@@ -105,7 +109,6 @@ const currencies = [
   { code: "ZAR", hint: "Rand sul-africano" },
 ];
 
-const languages = ["Português", "Inglês"];
 
 const regions = [
   { name: "Moçambique", flag: "🇲🇿" },
@@ -113,49 +116,14 @@ const regions = [
   { name: "Portugal", flag: "🇵🇹" },
 ];
 
-const paymentMethods = [
-  {
-    name: "Pagamento na entrega",
-    description: "Pague em dinheiro quando receber o pedido em casa.",
-    available: true,
-  },
-  {
-    name: "Transferência bancária",
-    description: "MBCI · Standard Bank · BCI · BIM · Absa · FNB · Letshego",
-    available: true,
-  },
-  {
-    name: "M-Pesa",
-    description: "Carteira móvel — pagamento rápido pelo telemóvel.",
-    available: true,
-  },
-  {
-    name: "e-Mola",
-    description: "Carteira móvel do Movitel.",
-    available: true,
-  },
-  {
-    name: "Cartão Visa / Mastercard",
-    description: "Pagamento com cartão internacional.",
-    available: true,
-  },
-];
+/** Métodos de pagamento — a mesma fonte que o checkout (`@/lib/payments`). */
+const paymentMethods = accountPaymentMethods;
 
 const themeOptions: { id: Theme; label: string; icon: typeof Sun }[] = [
   { id: "system", label: "Igual ao sistema", icon: Monitor },
   { id: "light", label: "Claro", icon: Sun },
   { id: "dark", label: "Escuro", icon: Moon },
 ];
-
-const STATUS_PILL: Record<string, string> = {
-  "Pedido recebido": "bg-sky-50 text-sky-700",
-  "Pagamento confirmado": "bg-indigo-50 text-indigo-700",
-  "Em preparação": "bg-amber-50 text-amber-700",
-  Enviado: "bg-violet-50 text-violet-700",
-  "Em trânsito": "bg-blue-50 text-blue-700",
-  Entregue: "bg-emerald-50 text-emerald-700",
-  Cancelado: "bg-red-50 text-red-700",
-};
 
 /** Rótulos do método de entrada da conta (cartão de perfil). */
 const PROVIDER_LABEL: Record<string, string> = {
@@ -166,13 +134,34 @@ const PROVIDER_LABEL: Record<string, string> = {
 
 /* ── Peças de UI reutilizáveis ───────────────────────────────────── */
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+/**
+ * Cartão de uma secção das definições — mesmo desenho dos cartões da área de
+ * conta (`/pedidos`): cabeçalho com ícone e linhas divididas por hairline.
+ * `id` serve de âncora para os atalhos da sidebar (ex.: `#enderecos`).
+ */
+function Section({
+  title,
+  icon: Icon,
+  id,
+  children,
+}: {
+  title: string;
+  icon: LucideIcon;
+  id?: string;
+  children: ReactNode;
+}) {
   return (
-    <section className="mt-9">
-      <h2 className="px-1 text-xs font-bold uppercase tracking-widest text-slate-400">{title}</h2>
-      <div className="mt-2.5 divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-100 bg-surface shadow-sm">
-        {children}
-      </div>
+    <section
+      id={id}
+      className="scroll-mt-24 overflow-hidden rounded-2xl border border-slate-100 bg-surface shadow-card"
+    >
+      <h2 className="flex items-center gap-2.5 border-b border-slate-100 px-4 py-3.5 font-display text-sm font-extrabold text-slate-900 sm:px-5">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-700">
+          <Icon className="size-4" aria-hidden />
+        </span>
+        {title}
+      </h2>
+      <div className="divide-y divide-slate-100">{children}</div>
     </section>
   );
 }
@@ -193,7 +182,7 @@ function SettingsRow({
 }) {
   const inner = (
     <>
-      <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-slate-800">{label}</span>
+      <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">{label}</span>
       {value != null && (
         <span className="flex shrink-0 items-center gap-1.5 text-sm text-slate-400">{value}</span>
       )}
@@ -236,7 +225,7 @@ function OptionRow({
       onClick={onClick}
       className="flex w-full items-center gap-3 rounded-xl px-3 py-3.5 text-left transition hover:bg-slate-50 active:bg-slate-100"
     >
-      <span className="min-w-0 flex-1 text-[15px] font-medium text-slate-800">{label}</span>
+      <span className="min-w-0 flex-1 text-sm font-medium text-slate-800">{label}</span>
       {hint && <span className="shrink-0 text-sm text-slate-400">{hint}</span>}
       {selected && <Check className="size-4 shrink-0 text-primary-600" aria-hidden />}
     </button>
@@ -251,14 +240,11 @@ type SheetId =
   | "currency"
   | "language"
   | "region"
-  | "notifications"
   | "theme"
   | "privacy"
   | "cache"
   | "rate"
   | "addresses"
-  | "pedidos"
-  | "orders"
   | null;
 
 const SHEET_TITLES: Record<Exclude<SheetId, null>, string> = {
@@ -267,19 +253,16 @@ const SHEET_TITLES: Record<Exclude<SheetId, null>, string> = {
   currency: "Moeda",
   language: "Idioma",
   region: "Região",
-  notifications: "Configurações de notificações",
   theme: "Modo escuro",
   privacy: "Configurações de privacidade",
   cache: "Limpar cache",
   rate: "Avalie o aplicativo",
   addresses: "Endereços de entrega",
-  pedidos: "Pedidos",
-  orders: "Estado dos pedidos",
 };
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { format, setCurrency } = useCurrency();
+  const { setCurrency } = useCurrency();
   const { notify } = useToast();
   const { clear: clearCart } = useCart();
   const { clear: clearFavorites } = useFavorites();
@@ -394,7 +377,17 @@ export default function SettingsPage() {
     verifying,
     submit: verifyCodeSubmit,
     resend: resendVerificationCode,
+    expiresLabel: verifyExpiresLabel,
+    codeExpired: verifyCodeExpired,
+    startValidity: startVerifyValidity,
   } = useEmailVerificationCode();
+
+  /** Abre o modal e arranca a validade de 15 min do código (espelho do backend). */
+  const openVerifyModal = () => {
+    setVerifyCode("");
+    startVerifyValidity();
+    setVerifyOpen(true);
+  };
 
   /**
    * Confirma o email com o código de 6 dígitos que foi enviado no email e fecha o
@@ -457,77 +450,12 @@ export default function SettingsPage() {
     );
   };
 
-  // Pedidos (locais + servidor) e o estado real de cada um (lookup público por ID).
+  // Chave dos pedidos guardados no dispositivo (isolada por utilizador).
   const ordersKey = authUser ? getOrdersKey(authUser.id) : ORDERS_KEY;
-  const [localOrders] = useLocalStorageState<Order[]>(ordersKey, []);
-  const [orders, setOrders] = useState<Order[]>(localOrders);
-  const [live, setLive] = useState<Record<string, Order>>({});
-
-  useEffect(() => {
-    let alive = true;
-    const load = async () => {
-      // Sem sessão não existem pedidos no servidor: um GET /api/orders anónimo
-      // responde sempre 401 (pedido desperdiçado + ruído na consola).
-      if (!authUser?.id) {
-        setOrders(localOrders);
-        return;
-      }
-      const server = await fetchMyOrders();
-      if (!alive) return;
-      if (server && server.length > 0) {
-        // Merge por ID: servidor primeiro (completo), locais em falta no fim.
-        const byId = new Map(server.map((o) => [o.id, o]));
-        for (const o of localOrders) if (!byId.has(o.id)) byId.set(o.id, o);
-        setOrders([...byId.values()]);
-      } else {
-        setOrders(localOrders);
-      }
-    };
-    void load();
-    return () => {
-      alive = false;
-    };
-  }, [localOrders, authUser?.id]);
-
-  useEffect(() => {
-    let alive = true;
-    Promise.all(orders.map((o) => fetchOrderStatus(o.id))).then((results) => {
-      if (!alive) return;
-      const merged: Record<string, Order> = {};
-      for (const order of results) {
-        if (order) merged[order.id] = order;
-      }
-      setLive(merged);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [orders]);
-
-  /** Estado exibido: o real (backend) quando disponível, senão o local. */
-  const statusOf = (o: Order) => live[o.id]?.status ?? o.status;
-
-  const [cancellingId, setCancellingId] = useState<string | null>(null);
-
-  /** Cancela um pedido do utilizador — o servidor valida a propriedade e repõe o stock. */
-  const handleCancelOrder = async (o: Order) => {
-    if (cancellingId) return;
-    if (!window.confirm(`Cancelar o pedido ${o.id}? O stock será reposto.`)) return;
-    setCancellingId(o.id);
-    try {
-      const updated = await cancelOrder(o.id);
-      setLive((prev) => ({ ...prev, [updated.id]: updated }));
-      setOrders((prev) => prev.map((x) => (x.id === updated.id ? { ...x, status: updated.status } : x)));
-      notify("Pedido cancelado.");
-    } catch (err) {
-      notify(
-        err instanceof ApiError ? err.message : "Não foi possível cancelar o pedido.",
-        "error",
-      );
-    } finally {
-      setCancellingId(null);
-    }
-  };
+  // Só a lista local interessa nesta página: a lista de pedidos e o
+  // acompanhamento de estado vivem em /pedidos (aqui ficam os atalhos e a
+  // limpeza dos dados guardados no dispositivo).
+  const [, setLocalOrders] = useLocalStorageState<Order[]>(ordersKey, []);
 
   // Sessão terminada (logout) — o redirecionamento para a home é tratado no próprio
   // botão; este ref impede o guard de o sobrepor com o modal de login.
@@ -561,11 +489,6 @@ export default function SettingsPage() {
     router.replace("/");
   }, [authUser, initializing, sessionExpired, router, openLogin]);
 
-  const goBack = () => {
-    if (window.history.length > 1) router.back();
-    else router.push("/");
-  };
-
   const closeSheet = () => {
     setSheet(null);
     setConfirmClearAll(false);
@@ -595,6 +518,23 @@ export default function SettingsPage() {
 
   const flagOf = (name: string) => countries.find((c) => c.name === name)?.flag;
 
+  // Sessão local lida EM RENDER (sincronamente, uma vez): o guard não pode
+  // esperar pelo efeito para decidir — entre a primeira pintura e o efeito o
+  // layout das definições aparecia inteiro, com vestígios de contas antigas
+  // guardadas no dispositivo («Olá, {nome}» de um perfil anterior), antes do
+  // modal de login abrir. Lido aqui, sem sessão NUNCA pinta o layout.
+  const [localSession] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      const raw = window.localStorage.getItem("nsm:user");
+      if (!raw) return false;
+      const local = JSON.parse(raw) as { email?: string; name?: string };
+      return Boolean(local.email || local.name);
+    } catch {
+      return false;
+    }
+  });
+
   // Enquanto o perfil de sessão está a ser confirmado no arranque, mostra um
   // carregamento em vez de revelar a página (ou redirecionar prematuramente).
   if (initializing) {
@@ -605,42 +545,155 @@ export default function SettingsPage() {
     );
   }
 
-  return (
-    <div className="mx-auto w-full max-w-2xl animate-fade-up px-4 py-2 sm:px-6">
-      {/* Barra superior — voltar + título centralizado */}
-      <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-center border-b border-slate-100 py-3">
-        <button
-          type="button"
-          onClick={goBack}
-          aria-label="Voltar"
-          className="flex size-10 items-center justify-center rounded-full text-slate-600 transition hover:bg-slate-100 active:scale-90"
-        >
-          <ArrowLeft className="size-5" />
-        </button>
-        <h1 className="text-center font-display text-lg font-bold text-slate-900">Configurações</h1>
-        <span aria-hidden />
+  // Administradores vão para o painel (o efeito acima redireciona) — não ver
+  // sequer as definições a piscar.
+  if (authUser?.role === "ADMIN") {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader2 className="size-8 animate-spin text-primary-600" aria-hidden />
       </div>
+    );
+  }
 
-      {/* Cartão de perfil — boas-vindas, foto com edição e sair */}
-      {/* `theme-inverse`: cartão de perfil sempre navy — o seu conteúdo (texto
-          branco, chips claros) mantém a paleta do tema claro. */}
-      <div className="theme-inverse relative mt-4 overflow-hidden rounded-2xl bg-gradient-to-br from-navy-900 via-primary-800 to-primary-600 p-5 text-white shadow-card sm:p-6">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -right-16 -top-16 size-56 rounded-full bg-sky-400/20 blur-2xl"
-        />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -bottom-24 -left-10 size-64 rounded-full bg-primary-400/10 blur-3xl"
-        />
-        <div className="relative flex flex-wrap items-center justify-between gap-4">
+  // Sem sessão (nem local): fallback mínimo — o efeito do guard já abriu o
+  // modal de login e devolve à home. O layout das definições não é pintado,
+  // por isso não há vestígios de conta nenhuma antes do modal.
+  if (!authUser && !localSession) {
+    return (
+      <div className="container-nsm py-16 text-center">
+        <h1 className="font-display text-2xl font-extrabold text-slate-900">
+          Entre na sua conta
+        </h1>
+        <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
+          Esta área mostra o seu perfil, endereços e preferências depois de
+          iniciar sessão.
+        </p>
+        <Button onClick={openLogin} size="lg" className="mt-6">
+          Entrar / Registar-se
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container-nsm py-6">
+
+      <div className="mt-4 grid gap-6 md:grid-cols-[3.5rem_minmax(0,1fr)] lg:grid-cols-[15rem_minmax(0,1fr)]">
+        {/* Menu da conta: coluna completa no computador, só ícones no tablet. */}
+        <aside className="hidden md:block">
+          <div className="sticky top-24 hidden lg:block">
+            <AccountSidebar variant="desktop" />
+          </div>
+          <div className="sticky top-24 lg:hidden">
+            <AccountSidebar variant="rail" />
+          </div>
+        </aside>
+
+        <div className="min-w-0">
+          {/* Título + subtítulo */}
+          <div>
+            <h1 className="font-display text-2xl font-extrabold text-slate-900 sm:text-3xl">
+              Configurações
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Gere o teu perfil, endereços de entrega, métodos de pagamento e preferências.
+            </p>
+          </div>
+
+          {/* Perfil — âncora «#perfil». No telemóvel o bloco assenta direto na
+              página (sem caixa nem fundo); a partir de sm volta ao cartão navy
+              com gradiente. */}
+          <div id="perfil" className="mt-5 scroll-mt-24">
+        {/* Mobile (<640px): compacto, centrado e sem fundo — foto, saudação,
+            email e, no fim da linha do email, o estado de verificação: linha e
+            ícone em vermelho quando não verificado (toque abre a verificação),
+            visto verde quando verificado. */}
+        <div className="flex flex-col items-center gap-2.5 text-center sm:hidden">
+          <div className="relative shrink-0">
+            <span className="block rounded-full bg-surface p-[2px] ring-1 ring-slate-200">
+              <Avatar
+                src={avatarSrc}
+                name={profile?.fullName || user.name}
+                className="size-30"
+                textClassName="text-2xl"
+              />
+            </span>
+            <button
+              type="button"
+              onClick={() => setEditorOpen(true)}
+              aria-label="Alterar foto de perfil"
+              className="absolute bottom-3 right-3 flex size-10 items-center justify-center rounded-full bg-surface text-primary-700 shadow-md ring-2 ring-white transition active:scale-95"
+            >
+              <Camera className="size-8" />
+            </button>
+          </div>
+
+          <div className="min-w-0">
+            {/* h2: o h1 da página é o título "Configurações", acima. */}
+            <h2 className="font-display text-xl font-extrabold text-slate-900">
+              Olá, {displayName}
+            </h2>
+            {email && (
+              <p
+                className={cn(
+                  "mt-0.5 flex items-center justify-center gap-1.5 text-sm leading-tight",
+                  authUser?.emailVerified === false
+                    ? "font-medium text-red-600"
+                    : "text-slate-500",
+                )}
+              >
+                <span className="min-w-0 truncate">{email}</span>
+                {authUser?.emailVerified === false ? (
+                  <button
+                    type="button"
+                    onClick={openVerifyModal}
+                    aria-label="Email não verificado — toque para verificar"
+                    title="Email não verificado"
+                    className="shrink-0 transition active:scale-90"
+                  >
+                    <Info className="size-4" aria-hidden />
+                  </button>
+                ) : (
+                  <CheckCircle2
+                    className="size-4 shrink-0 text-emerald-600"
+                    aria-label="Email verificado"
+                  />
+                )}
+              </p>
+            )}
+          </div>
+
+          {/* Sem sessão: atalho para entrar (com sessão, a saída está na
+              secção «Sobre», no fundo da página). */}
+          {!logged && (
+            <button
+              type="button"
+              onClick={openLogin}
+              className="shrink-0 rounded-xl border border-slate-300 bg-surface px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 active:scale-95"
+            >
+              Entrar
+            </button>
+          )}
+        </div>
+
+        {/* ≥640px: cartão navy completo — igual ao desenho anterior. */}
+        <div className="theme-inverse relative hidden overflow-hidden rounded-2xl bg-gradient-to-br from-navy-900 via-primary-800 to-primary-600 p-5 text-white shadow-card sm:block sm:p-6">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -right-16 -top-16 size-56 rounded-full bg-sky-400/20 blur-2xl"
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -bottom-24 -left-10 size-64 rounded-full bg-primary-400/10 blur-3xl"
+          />
+          <div className="relative flex flex-wrap items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-4">
             <div className="relative shrink-0">
               <span className="block rounded-full bg-gradient-to-br from-white/60 to-white/20 p-[3px]">
                 <Avatar
                   src={avatarSrc}
                   name={profile?.fullName || user.name}
-                  className="size-16 sm:size-20"
+                  className="size-30"
                   textClassName="text-2xl sm:text-3xl"
                 />
               </span>
@@ -667,10 +720,7 @@ export default function SettingsPage() {
                 // código de 6 dígitos enviado no email.
                 <button
                   type="button"
-                  onClick={() => {
-                    setVerifyCode("");
-                    setVerifyOpen(true);
-                  }}
+                  onClick={openVerifyModal}
                   className="group mt-2 flex w-full items-center gap-2 rounded-xl border border-amber-200 bg-amber-50/50 p-3 text-left transition hover:bg-amber-50 active:scale-[0.99]"
                 >
                   <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-amber-100">
@@ -721,6 +771,7 @@ export default function SettingsPage() {
               Entrar / Registar-se
             </button>
           )}
+          </div>
         </div>
       </div>
 
@@ -734,62 +785,153 @@ export default function SettingsPage() {
         />
       )}
 
-      {/* Secção 1 — Conta */}
-      <Section title="Conta">
-        <SettingsRow
-          label="Endereços de entrega"
-          onClick={() => {
-            setAddingAddr(false);
-            setSheet("addresses");
-          }}
-        />
-        <SettingsRow label="Métodos de pagamento" onClick={() => setSheet("payment")} />
-        <SettingsRow label="Pedidos" onClick={() => setSheet("pedidos")} />
-        <SettingsRow label="Estado dos pedidos" onClick={() => setSheet("orders")} />
-        <SettingsRow label="Favoritos" href="/favoritos" />
-      </Section>
+          {/* Secções em cartões — a navegação vive na sidebar, os cartões
+              mostram as opções com o mesmo desenho da área de conta. */}
+          <div className="mt-5 space-y-5">
+            {/* Conta — atalhos para o que já existe (endereços e pagamentos abrem
+                as gavetas próprias; pedidos e favoritos têm página). */}
+            <Section title="Conta" icon={User} id="enderecos">
+              {/* «Dados de entrega» abre a secção só com o livro de endereços:
+                  inserir/guardar uma vez, o checkout pré-preenche daqui. Os
+                  pedidos vivem na página própria (/pedidos) e no menu lateral. */}
+              <SettingsRow
+                label="Dados de entrega"
+                onClick={() => {
+                  setAddingAddr(false);
+                  setSheet("addresses");
+                }}
+              />
+              <SettingsRow label="Métodos de pagamento" onClick={() => setSheet("payment")} />
+              <SettingsRow label="Meus pedidos" href="/pedidos" />
+              <SettingsRow label="Avaliações e favoritos" href="/favoritos" />
+            </Section>
 
-      {/* Secção 2 — Preferências */}
-      <Section title="Preferências">
-        <SettingsRow
-          label="Enviar o meu pedido para"
-          value={
-            <>
-              <span aria-hidden>{flagOf(prefs.country)}</span> {prefs.country}
-            </>
-          }
-          onClick={() => setSheet("country")}
-        />
-        <SettingsRow label="Moeda" value={prefs.currency} onClick={() => setSheet("currency")} />
-        <SettingsRow label="Idioma" value={prefs.language} onClick={() => setSheet("language")} />
-        <SettingsRow label="Região" value={prefs.region} onClick={() => setSheet("region")} />
-      </Section>
+            {/* Notificações — inline: são cinco interruptores, não precisam de
+                gaveta (e ficam visíveis a quem só quer desligar uma). */}
+            <Section title="Notificações" icon={Bell} id="notificacoes">
+              <div className="px-4 py-1 sm:px-5">
+                <div className="divide-y divide-slate-100">
+                  <Toggle
+                    checked={notifPrefs.emailOffers}
+                    onChange={(v) => updateNotifPref("emailOffers", v)}
+                    label="Email — ofertas e promoções"
+                    description="Descontos, campanhas e ofertas especiais por email"
+                  />
+                  <Toggle
+                    checked={notifPrefs.emailNews}
+                    onChange={(v) => updateNotifPref("emailNews", v)}
+                    label="Email — novidades"
+                    description="Novos produtos e lançamentos na loja"
+                  />
+                  <Toggle
+                    checked={notifPrefs.emailOrder}
+                    onChange={(v) => updateNotifPref("emailOrder", v)}
+                    label="Email — estado do pedido"
+                    description="Confirmações e atualizações de entrega"
+                  />
+                  <Toggle
+                    checked={notifPrefs.whatsappOffers}
+                    onChange={(v) => updateNotifPref("whatsappOffers", v)}
+                    label="WhatsApp — ofertas e promoções"
+                    description="Promoções enviadas por mensagem"
+                  />
+                  <Toggle
+                    checked={notifPrefs.whatsappOrder}
+                    onChange={(v) => updateNotifPref("whatsappOrder", v)}
+                    label="WhatsApp — estado do pedido"
+                    description="Acompanhe a entrega por mensagem"
+                  />
+                </div>
+                <p className="py-3 text-xs text-slate-400">
+                  Com sessão iniciada, as preferências ficam guardadas na sua conta e valem em
+                  qualquer dispositivo. Sem sessão, ficam apenas neste dispositivo.
+                </p>
+              </div>
+            </Section>
 
-      {/* Secção 3 — Geral */}
-      <Section title="Geral">
-        <SettingsRow label="Configurações de notificações" onClick={() => setSheet("notifications")} />
-        <SettingsRow label="Modo escuro" value={THEME_LABELS[theme]} onClick={() => setSheet("theme")} />
-        <SettingsRow label="Configurações de privacidade" onClick={() => setSheet("privacy")} />
-        <SettingsRow label="Limpar cache" onClick={() => setSheet("cache")} />
-      </Section>
+            <Section title="Preferências" icon={SlidersHorizontal} id="preferencias">
+              <SettingsRow
+                label="Enviar o meu pedido para"
+                value={
+                  <>
+                    <span aria-hidden>{flagOf(prefs.country)}</span> {prefs.country}
+                  </>
+                }
+                onClick={() => setSheet("country")}
+              />
+              <SettingsRow label="Moeda" value={prefs.currency} onClick={() => setSheet("currency")} />
+              <SettingsRow label="Idioma" value={prefs.language} onClick={() => setSheet("language")} />
+              <SettingsRow label="Região" value={prefs.region} onClick={() => setSheet("region")} />
+            </Section>
 
-      {/* Secção 4 — Sobre */}
-      <Section title="Sobre">
-        <SettingsRow label="Avalie o aplicativo" onClick={() => setSheet("rate")} />
-        <SettingsRow label="Configurações de privacidade" href="/privacidade" />
-        <SettingsRow label="Política de privacidade" href="/privacidade" />
-        <SettingsRow label="Informação legal" href="/termos" />
-        <SettingsRow label="Versão" value={APP_VERSION} last />
-      </Section>
+            {/* Segurança da conta — só o que a loja tem mesmo: confirmação de
+                email por código e recuperação de palavra-passe por email. */}
+            <Section title="Segurança da conta" icon={ShieldCheck} id="seguranca">
+              {authUser?.emailVerified === false ? (
+                <SettingsRow
+                  label="Confirmar email"
+                  value={<span className="text-amber-600">Não verificado</span>}
+                  onClick={openVerifyModal}
+                />
+              ) : (
+                <SettingsRow label="Email" value={email ?? "—"} last />
+              )}
+              <SettingsRow
+                label="Palavra-passe"
+                value="Redefinir por email"
+                href="/recuperar-password"
+              />
+            </Section>
 
-      {/* Rodapé */}
-      <footer className="mt-12 border-t border-slate-100 pt-6 pb-10 text-center">
-        <p className="font-display text-sm font-bold text-slate-600">{APP_NAME}</p>
-        <p className="mt-1 text-xs text-slate-400">Versão {APP_VERSION}</p>
-        <p className="mt-1.5 text-xs text-slate-400">
-          © 2026 {APP_NAME}. Todos os direitos reservados.
-        </p>
-      </footer>
+            {/* Aparência e privacidade */}
+            <Section title="Aparência e privacidade" icon={Monitor} id="geral">
+              <SettingsRow
+                label="Modo escuro"
+                value={THEME_LABELS[theme]}
+                onClick={() => setSheet("theme")}
+              />
+              <SettingsRow label="Configurações de privacidade" onClick={() => setSheet("privacy")} />
+              <SettingsRow label="Limpar cache" onClick={() => setSheet("cache")} />
+            </Section>
+
+            <Section title="Sobre" icon={Info} id="sobre">
+              <SettingsRow label="Avalie o aplicativo" onClick={() => setSheet("rate")} />
+              <SettingsRow label="Política de privacidade" href="/privacidade" />
+              <SettingsRow label="Informação legal" href="/termos" />
+              <SettingsRow label="Versão" value={APP_VERSION} last />
+              {/* Terminar a secção — e a sessão: no telemóvel o cartão de perfil
+                  ficou compacto (sem botão Sair), por isso a saída vive aqui, no
+                  fim da última secção, abaixo da versão. No computador o botão
+                  Sair continua no cartão de perfil. */}
+              {logged && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    loggedOutRef.current = true;
+                    authLogout();
+                    setUser(EMPTY_USER);
+                    setProfile(null);
+                    router.push("/");
+                  }}
+                  className="flex w-full items-center justify-center gap-2 px-5 py-4 text-sm font-semibold text-danger transition hover:bg-red-50 active:bg-red-100 sm:hidden"
+                >
+                  <LogOut className="size-4" aria-hidden />
+                  Terminar sessão
+                </button>
+              )}
+            </Section>
+          </div>
+
+          {/* Rodapé */}
+          <footer className="mt-10 border-t border-slate-100 pt-6 pb-10 text-center">
+            <p className="font-display text-sm font-bold text-slate-600">{APP_NAME}</p>
+            <p className="mt-1 text-xs text-slate-400">Versão {APP_VERSION}</p>
+            <p className="mt-1.5 text-xs text-slate-400">
+              © 2026 {APP_NAME}. Todos os direitos reservados.
+            </p>
+          </footer>
+        </div>
+      </div>
 
       {/* ── Bottom sheets / modais ─────────────────────────────── */}
       <Modal
@@ -797,11 +939,7 @@ export default function SettingsPage() {
         onClose={closeSheet}
         title={sheet ? SHEET_TITLES[sheet] : undefined}
         size={
-          sheet === "addresses" || sheet === "pedidos" || sheet === "orders"
-            ? "lg"
-            : sheet === "notifications" || sheet === "privacy" || sheet === "rate"
-              ? "md"
-              : "sm"
+          sheet === "addresses" ? "lg" : sheet === "privacy" || sheet === "rate" ? "md" : "sm"
         }
       >
         {sheet === "addresses" && (
@@ -1019,119 +1157,12 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {sheet === "pedidos" &&
-          (orders.length === 0 ? (
-            <EmptyState
-              icon={Package}
-              title="Nenhum pedido ainda"
-              description="Quando fizer a sua primeira compra, ela aparecerá aqui."
-              actionLabel="Começar a comprar"
-              actionHref="/"
-            />
-          ) : (
-            <div className="space-y-4">
-              {orders.map((o) => (
-                <div key={o.id} className="rounded-xl border border-slate-100 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="font-display font-bold text-slate-900">{o.id}</p>
-                      <p className="text-xs text-slate-400">{formatDate(live[o.id]?.date ?? o.date)}</p>
-                    </div>
-                    <span
-                      className={cn(
-                        "inline-flex rounded-full px-2.5 py-1 text-xs font-bold",
-                        STATUS_PILL[statusOf(o)] ?? "bg-slate-100 text-slate-600",
-                      )}
-                    >
-                      {statusOf(o)}
-                    </span>
-                  </div>
-                  <ul className="mt-3 space-y-1.5 text-sm">
-                    {o.items.map((i) => (
-                      <li key={i.productId + (i.variant ?? "")} className="flex justify-between gap-3">
-                        <Link
-                          href={`/produto/${i.slug}`}
-                          className="line-clamp-1 text-slate-600 hover:text-primary-700"
-                        >
-                          {i.qty}× {i.name}
-                        </Link>
-                        <span className="shrink-0 font-semibold text-slate-800">
-                          {format(i.price * i.qty)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-sm">
-                    <span className="text-slate-500">Total · {o.paymentMethod}</span>
-                    <span className="font-display text-lg font-bold text-slate-900">
-                      {format(live[o.id]?.total ?? o.total)}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSheet("orders")}
-                    className="mt-3 text-sm font-semibold text-primary-700 transition hover:underline"
-                  >
-                    Ver estado do pedido →
-                  </button>
-                </div>
-              ))}
-            </div>
-          ))}
-
-        {sheet === "orders" &&
-          (orders.length === 0 ? (
-            <EmptyState
-              icon={Package}
-              title="Sem pedidos para acompanhar"
-              description="Os seus pedidos e o estado de entrega aparecerão aqui."
-              actionLabel="Fazer a primeira compra"
-              actionHref="/"
-            />
-          ) : (
-            <div className="space-y-4">
-              {orders.map((o) => (
-                <div key={o.id} className="rounded-xl border border-slate-100 p-4">
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="font-display font-bold text-slate-900">{o.id}</p>
-                      <p className="text-xs text-slate-400">{formatDate(live[o.id]?.date ?? o.date)}</p>
-                    </div>
-                    <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
-                      {statusOf(o)}
-                    </span>
-                  </div>
-                  <StatusTimeline current={statusOf(o)} />
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 text-sm">
-                    <span className="text-slate-500">
-                      {o.paymentMethod} · {o.items.reduce((n, i) => n + i.qty, 0)}{" "}
-                      {o.items.reduce((n, i) => n + i.qty, 0) === 1 ? "item" : "itens"}
-                    </span>
-                    <span className="font-display text-base font-bold text-slate-900">
-                      {format(live[o.id]?.total ?? o.total)}
-                    </span>
-                  </div>
-                  {statusOf(o) !== "Entregue" && statusOf(o) !== "Cancelado" && (
-                    <button
-                      type="button"
-                      onClick={() => void handleCancelOrder(o)}
-                      disabled={cancellingId === o.id}
-                      className="mt-2 text-sm font-semibold text-red-600 transition hover:underline disabled:opacity-50"
-                    >
-                      {cancellingId === o.id ? "A cancelar…" : "Cancelar pedido"}
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          ))}
-
         {sheet === "payment" && (
           <div className="divide-y divide-slate-100">
             {paymentMethods.map((m) => (
               <div key={m.name} className="flex items-center justify-between gap-3 py-3.5">
                 <div className="min-w-0">
-                  <p className="text-[15px] font-semibold text-slate-800">{m.name}</p>
+                  <p className="text-sm font-semibold text-slate-800">{m.name}</p>
                   <p className="mt-0.5 text-sm text-slate-500">{m.description}</p>
                 </div>
                 {!m.available && (
@@ -1191,35 +1222,26 @@ export default function SettingsPage() {
 
         {sheet === "language" && (
           <div className="space-y-1">
-            {languages.map((l) => {
-              const comingSoon = l !== "Português";
-              return (
-                <button
-                  key={l}
-                  type="button"
-                  disabled={comingSoon}
-                  aria-disabled={comingSoon}
-                  onClick={() => {
-                    if (comingSoon) return;
-                    setPrefs((p) => ({ ...p, language: l }));
-                    closeSheet();
-                  }}
-                  className={cn(
-                    "flex w-full items-center gap-3 rounded-xl px-3 py-3.5 text-left transition",
-                    comingSoon ? "cursor-not-allowed opacity-60" : "hover:bg-slate-50 active:bg-slate-100",
-                  )}
-                >
-                  <span className="min-w-0 flex-1 text-[15px] font-medium text-slate-800">{l}</span>
-                  {comingSoon ? (
-                    <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-500">
-                      Em breve
-                    </span>
-                  ) : (
-                    prefs.language === l && <Check className="size-4 shrink-0 text-primary-600" aria-hidden />
-                  )}
-                </button>
-              );
-            })}
+            {/* A loja é monolingue (pt): sem framework de i18n, listar um idioma
+                indisponível prometia algo que o sistema não entrega. O seletor
+                volta quando existir tradução real. */}
+            {["Português"].map((l) => (
+              <button
+                key={l}
+                type="button"
+                onClick={() => {
+                  setPrefs((p) => ({ ...p, language: l }));
+                  closeSheet();
+                }}
+                className={cn(
+                  "flex w-full items-center gap-3 rounded-xl px-3 py-3.5 text-left transition",
+                  "hover:bg-slate-50 active:bg-slate-100",
+                )}
+              >
+                <span className="min-w-0 flex-1 text-sm font-medium text-slate-800">{l}</span>
+                {prefs.language === l && <Check className="size-4 shrink-0 text-primary-600" aria-hidden />}
+              </button>
+            ))}
           </div>
         )}
 
@@ -1243,7 +1265,7 @@ export default function SettingsPage() {
                     !available ? "cursor-not-allowed opacity-60" : "hover:bg-slate-50 active:bg-slate-100",
                   )}
                 >
-                  <span className="min-w-0 flex-1 text-[15px] font-medium text-slate-800">
+                  <span className="min-w-0 flex-1 text-sm font-medium text-slate-800">
                     {r.flag} {r.name}
                   </span>
                   {!available ? (
@@ -1262,44 +1284,6 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {sheet === "notifications" && (
-          <div className="divide-y divide-slate-100">
-            <Toggle
-              checked={notifPrefs.emailOffers}
-              onChange={(v) => updateNotifPref("emailOffers", v)}
-              label="Email — ofertas e promoções"
-              description="Descontos, campanhas e ofertas especiais por email"
-            />
-            <Toggle
-              checked={notifPrefs.emailNews}
-              onChange={(v) => updateNotifPref("emailNews", v)}
-              label="Email — novidades"
-              description="Novos produtos e lançamentos na loja"
-            />
-            <Toggle
-              checked={notifPrefs.emailOrder}
-              onChange={(v) => updateNotifPref("emailOrder", v)}
-              label="Email — estado do pedido"
-              description="Confirmações e atualizações de entrega"
-            />
-            <Toggle
-              checked={notifPrefs.whatsappOffers}
-              onChange={(v) => updateNotifPref("whatsappOffers", v)}
-              label="WhatsApp — ofertas e promoções"
-              description="Promoções enviadas por mensagem"
-            />
-            <Toggle
-              checked={notifPrefs.whatsappOrder}
-              onChange={(v) => updateNotifPref("whatsappOrder", v)}
-              label="WhatsApp — estado do pedido"
-              description="Acompanhe a entrega por mensagem"
-            />
-            <p className="pt-3 text-xs text-slate-400">
-              Com sessão iniciada, as preferências ficam guardadas na sua conta e valem em
-              qualquer dispositivo. Sem sessão, ficam apenas neste dispositivo.
-            </p>
-          </div>
-        )}
 
         {sheet === "theme" && (
           <div className="space-y-1">
@@ -1314,7 +1298,7 @@ export default function SettingsPage() {
                 className="flex w-full items-center gap-3 rounded-xl px-3 py-3.5 text-left transition hover:bg-slate-50 active:bg-slate-100"
               >
                 <t.icon className="size-4 shrink-0 text-slate-400" aria-hidden />
-                <span className="flex-1 text-[15px] font-medium text-slate-800">{t.label}</span>
+                <span className="flex-1 text-sm font-medium text-slate-800">{t.label}</span>
                 {theme === t.id && <Check className="size-4 shrink-0 text-primary-600" aria-hidden />}
               </button>
             ))}
@@ -1329,7 +1313,7 @@ export default function SettingsPage() {
                 clearCart();
                 notify("Carrinho esvaziado.");
               }}
-              className="flex w-full items-center gap-3 py-3.5 text-left text-[15px] font-semibold text-slate-700 transition hover:text-red-600"
+              className="flex w-full items-center gap-3 py-3.5 text-left text-sm font-semibold text-slate-700 transition hover:text-red-600"
             >
               <Trash2 className="size-4 shrink-0 text-slate-400" aria-hidden /> Esvaziar carrinho
             </button>
@@ -1339,7 +1323,7 @@ export default function SettingsPage() {
                 clearFavorites();
                 notify("Favoritos removidos.");
               }}
-              className="flex w-full items-center gap-3 py-3.5 text-left text-[15px] font-semibold text-slate-700 transition hover:text-red-600"
+              className="flex w-full items-center gap-3 py-3.5 text-left text-sm font-semibold text-slate-700 transition hover:text-red-600"
             >
               <Heart className="size-4 shrink-0 text-slate-400" aria-hidden /> Remover todos os favoritos
             </button>
@@ -1350,10 +1334,10 @@ export default function SettingsPage() {
                 Object.keys(window.localStorage)
                   .filter((k) => k === "nsm:orders" || k.startsWith("nsm:orders:"))
                   .forEach((k) => window.localStorage.removeItem(k));
-                setOrders([]);
+                setLocalOrders([]);
                 notify("Histórico local de pedidos removido.");
               }}
-              className="flex w-full items-center gap-3 py-3.5 text-left text-[15px] font-semibold text-slate-700 transition hover:text-red-600"
+              className="flex w-full items-center gap-3 py-3.5 text-left text-sm font-semibold text-slate-700 transition hover:text-red-600"
             >
               <Package className="size-4 shrink-0 text-slate-400" aria-hidden /> Limpar histórico de pedidos local
             </button>
@@ -1363,7 +1347,7 @@ export default function SettingsPage() {
                 window.localStorage.removeItem("nsm:addresses");
                 notify("Endereços guardados removidos.");
               }}
-              className="flex w-full items-center gap-3 py-3.5 text-left text-[15px] font-semibold text-slate-700 transition hover:text-red-600"
+              className="flex w-full items-center gap-3 py-3.5 text-left text-sm font-semibold text-slate-700 transition hover:text-red-600"
             >
               <MapPin className="size-4 shrink-0 text-slate-400" aria-hidden /> Apagar endereços guardados
             </button>
@@ -1400,7 +1384,7 @@ export default function SettingsPage() {
                 <button
                   type="button"
                   onClick={() => setConfirmClearAll(true)}
-                  className="flex w-full items-center justify-between gap-3 text-[15px] font-semibold text-red-600 transition hover:text-red-700"
+                  className="flex w-full items-center justify-between gap-3 text-sm font-semibold text-red-600 transition hover:text-red-700"
                 >
                   Apagar todos os dados deste dispositivo
                   <Trash2 className="size-4 shrink-0" aria-hidden />
@@ -1467,7 +1451,9 @@ export default function SettingsPage() {
         )}
       </Modal>
 
-      {/* Modal: confirmar o email com o código de 6 dígitos recebido no email. */}
+      {/* Modal: confirmar o email com o código de 6 dígitos recebido no email.
+          O código vale 15 min — o contador corre abaixo e, expirado, o campo
+          bloqueia até se pedir um novo código. */}
       <Modal
         open={verifyOpen}
         onClose={() => {
@@ -1481,7 +1467,7 @@ export default function SettingsPage() {
           <p className="text-sm leading-relaxed text-slate-600">
             Enviámos um código de 6 dígitos para{" "}
             <strong className="font-semibold text-slate-900">{email}</strong>. Cole-o aqui para
-            confirmar a sua conta.
+            confirmar a sua conta — vale <strong className="font-semibold">15 minutos</strong>.
           </p>
           {/* Um dígito por quadradinho — colar/autofill, avanço automático e
               Backspace a recuar são tratados pelo próprio componente. */}
@@ -1492,16 +1478,26 @@ export default function SettingsPage() {
             onComplete={() => void confirmWithCode()}
             autoFocus
             required
-            disabled={verifying}
-            error={verifyError ?? undefined}
-            hint={verifyError ? undefined : "Válido por 24 horas · verifique também o spam."}
+            disabled={verifying || verifyCodeExpired}
+            error={
+              verifyError ??
+              (verifyCodeExpired
+                ? "O código expirou — peça um novo código de verificação."
+                : null) ??
+              undefined
+            }
+            hint={
+              verifyCodeExpired
+                ? undefined
+                : `Expira em ${verifyExpiresLabel} · verifique também o spam.`
+            }
           />
           <Button
             type="submit"
             fullWidth
             size="lg"
             loading={verifying}
-            disabled={verifyCode.length !== 6}
+            disabled={verifyCodeExpired || verifyCode.length !== CODE_LENGTH}
           >
             Confirmar email
           </Button>
@@ -1510,7 +1506,9 @@ export default function SettingsPage() {
             onClick={() => void resendVerificationCode()}
             className="mx-auto block text-xs font-semibold text-primary-700 transition hover:text-primary-800 hover:underline"
           >
-            Não recebeu? Enviar novo código
+            {verifyCodeExpired
+              ? "Pedir um novo código de verificação"
+              : "Não recebeu? Enviar novo código"}
           </button>
         </form>
       </Modal>

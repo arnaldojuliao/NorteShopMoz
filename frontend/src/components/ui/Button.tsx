@@ -24,14 +24,14 @@ const variants: Record<Variant, string> = {
   // `bg-brand*` (e não `bg-primary-*`): o azul como superfície tem de manter o
   // tom da marca no tema escuro — os shades `primary-*` clareiam para servir texto.
   primary:
-    "bg-brand text-white hover:bg-brand-strong active:bg-brand-deep shadow-sm shadow-brand/25",
+    "bg-gradient-to-b from-brand to-brand-strong text-white hover:from-brand-strong hover:to-brand-deep active:from-brand-deep active:to-brand-deep shadow-lg shadow-brand/30",
   secondary:
     "bg-primary-50 text-primary-700 hover:bg-primary-100 active:bg-primary-200/70",
   outline:
-    "border border-slate-300 bg-surface text-slate-700 hover:border-primary-400 hover:text-primary-700 active:bg-slate-50",
+    "border border-slate-300 bg-surface text-slate-700 shadow-xs hover:border-primary-400 hover:text-primary-700 active:bg-slate-50",
   ghost: "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
-  danger: "bg-danger text-white hover:bg-danger-strong",
-  dark: "bg-navy-900 text-white hover:bg-navy-800",
+  danger: "bg-danger text-white shadow-md shadow-danger/25 hover:bg-danger-strong",
+  dark: "bg-navy-900 text-white shadow-md shadow-navy-950/30 hover:bg-navy-800",
 };
 
 const sizes: Record<Size, string> = {

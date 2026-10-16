@@ -18,6 +18,14 @@ public interface OrderRepository extends JpaRepository<Order, String> {
     List<Order> findByUserIdOrderByDateDesc(String userId);
 
     /**
+     * Pedido pela referência de cobrança online ({@code paymentReference}).
+     *
+     * <p>É o que as notificações do gateway trazem: o provedor conhece a
+     * referência que devolveu, não o id do pedido (ver PaymentWebhookService).</p>
+     */
+    java.util.Optional<Order> findByPaymentReference(String paymentReference);
+
+    /**
      * Histórico do utilizador com teto de linhas (mais recente primeiro).
      *
      * <p>{@code Order.items} é EAGER: devolver o histórico inteiro carregava cada
@@ -46,8 +54,6 @@ public interface OrderRepository extends JpaRepository<Order, String> {
      */
     @Query("select o.status, count(o) from Order o group by o.status")
     List<Object[]> countGroupedByStatus();
-
-    List<Order> findTop10ByOrderByDateDesc();
 
     /**
      * Transição ATÓMICA para CANCELADO.
@@ -193,4 +199,83 @@ public interface OrderRepository extends JpaRepository<Order, String> {
             + "group by year(o.date), month(o.date), day(o.date) "
             + "order by year(o.date) desc, month(o.date) desc, day(o.date) desc")
     List<Object[]> dailySeries(@Param("paid") Collection<OrderStatus> paid);
+
+    /* ── Estatísticas por PERÍODO (filtros from/to do painel) ───────────────
+     *
+     * As queries globais acima respondem à visão total; o painel permite agora
+     * recortar por período (ex.: só outubro). Janela [from, to): to é exclusivo
+     * — um filtro "até 31/10" inclui os pedidos do próprio dia 31.
+     */
+
+    long countByDateGreaterThanEqualAndDateLessThan(Instant from, Instant to);
+
+    long countByStatusAndDateGreaterThanEqualAndDateLessThan(
+            OrderStatus status, Instant from, Instant to);
+
+    long countByStatusInAndDateGreaterThanEqualAndDateLessThan(
+            Collection<OrderStatus> statuses, Instant from, Instant to);
+
+    @Query("select coalesce(sum(o.total), 0) from Order o "
+            + "where o.status in :statuses and o.date >= :from and o.date < :to")
+    BigDecimal sumTotalByStatusInBetween(@Param("statuses") Collection<OrderStatus> statuses,
+            @Param("from") Instant from, @Param("to") Instant to);
+
+    @Query("select coalesce(sum(o.shipping), 0) from Order o "
+            + "where o.status in :statuses and o.date >= :from and o.date < :to")
+    BigDecimal sumShippingByStatusInBetween(@Param("statuses") Collection<OrderStatus> statuses,
+            @Param("from") Instant from, @Param("to") Instant to);
+
+    @Query("select coalesce(sum(o.discount), 0) from Order o "
+            + "where o.status in :statuses and o.date >= :from and o.date < :to")
+    BigDecimal sumDiscountByStatusInBetween(@Param("statuses") Collection<OrderStatus> statuses,
+            @Param("from") Instant from, @Param("to") Instant to);
+
+    @Query("select coalesce(sum(o.total), 0) from Order o "
+            + "where o.status = :status and o.date >= :from and o.date < :to")
+    BigDecimal sumTotalByStatusBetween(@Param("status") OrderStatus status,
+            @Param("from") Instant from, @Param("to") Instant to);
+
+    @Query("select i.productId, i.name, sum(i.price * i.qty) from Order o join o.items i "
+            + "where o.status in :paid and o.date >= :from and o.date < :to "
+            + "group by i.productId, i.name order by sum(i.price * i.qty) desc")
+    List<Object[]> topProductsByRevenueBetween(@Param("paid") Collection<OrderStatus> paid,
+            @Param("from") Instant from, @Param("to") Instant to);
+
+    @Query("select year(o.date), month(o.date), day(o.date), count(o), "
+            + "coalesce(sum(case when o.status in :paid then o.total else 0 end), 0) "
+            + "from Order o where o.date >= :from and o.date < :to "
+            + "group by year(o.date), month(o.date), day(o.date) "
+            + "order by year(o.date) desc, month(o.date) desc, day(o.date) desc")
+    List<Object[]> dailySeriesBetween(@Param("paid") Collection<OrderStatus> paid,
+            @Param("from") Instant from, @Param("to") Instant to);
+
+    /* ── Exportação CSV (admin) ──────────────────────────────────────────────
+     *
+     * Uma projeção enxuta (sem carregar as entidades com os itens EAGER) — o
+     * relatório precisa dos totais e do endereço, não dos itens. Duas variantes
+     * (com/sem filtro de estado) em vez de um `:status is null or …`: esse
+     * padrão no PostgreSQL obriga o driver a adivinhar o tipo do parâmetro
+     * ("could not determine data type") — o mesmo motivo de listAllOrders ter
+     * findAll vs findByStatus.
+     *
+     * @return linhas [id, date, status, subtotal, discount, shipping, total,
+     *         paymentMethod, paymentReference, trackingCode, couponCode,
+     *         fullName, phone, email, province, city]
+     */
+    @Query("select o.id, o.date, o.status, o.subtotal, o.discount, o.shipping, o.total, "
+            + "o.paymentMethod, o.paymentReference, o.trackingCode, o.couponCode, "
+            + "o.address.fullName, o.address.phone, o.address.email, o.address.province, o.address.city "
+            + "from Order o "
+            + "where o.date >= :from and o.date < :to "
+            + "order by o.date desc, o.id desc")
+    List<Object[]> exportRowsBetween(@Param("from") Instant from, @Param("to") Instant to);
+
+    @Query("select o.id, o.date, o.status, o.subtotal, o.discount, o.shipping, o.total, "
+            + "o.paymentMethod, o.paymentReference, o.trackingCode, o.couponCode, "
+            + "o.address.fullName, o.address.phone, o.address.email, o.address.province, o.address.city "
+            + "from Order o "
+            + "where o.date >= :from and o.date < :to and o.status = :status "
+            + "order by o.date desc, o.id desc")
+    List<Object[]> exportRowsBetweenByStatus(@Param("from") Instant from, @Param("to") Instant to,
+            @Param("status") OrderStatus status);
 }

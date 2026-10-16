@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, BarChart3, PackageSearch, RefreshCw, TrendingUp } from "lucide-react";
+import { AlertTriangle, BarChart3, Download, PackageSearch, RefreshCw, TrendingUp } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { useCurrency } from "@/context/CurrencyContext";
@@ -17,12 +17,18 @@ import { cn } from "@/lib/utils";
  *
  * O gráfico é de barras em CSS puro (sem biblioteca): são poucos dias, o valor
  * vem pronto a somar e um gráfico deste tamanho não justifica dependências.
+ *
+ * `period`/`onPeriodChange` recortam as estatísticas por período (janela
+ * [from, to)); `exportHref` é o link do CSV do mesmo período.
  */
 interface SalesStatsPanelProps {
   stats: SalesStats | null;
   loading: boolean;
   error: string | null;
   onRetry: () => void;
+  period?: { from: string; to: string };
+  onPeriodChange?: (period: { from: string; to: string }) => void;
+  exportHref?: string;
 }
 
 function Kpi({
@@ -82,7 +88,7 @@ function shortDate(iso: string): string {
   return month && day ? `${day}/${month}` : iso;
 }
 
-export function SalesStatsPanel({ stats, loading, error, onRetry }: SalesStatsPanelProps) {
+export function SalesStatsPanel({ stats, loading, error, onRetry, period, onPeriodChange, exportHref }: SalesStatsPanelProps) {
   const { format } = useCurrency();
 
   if (loading && !stats) {
@@ -119,6 +125,45 @@ export function SalesStatsPanel({ stats, loading, error, onRetry }: SalesStatsPa
 
   return (
     <div className="mt-6 space-y-6">
+      {/* Filtro de período + export CSV */}
+      {(onPeriodChange || exportHref) && (
+        <section className="flex flex-wrap items-end gap-2 rounded-2xl border border-slate-100 bg-surface p-4">
+          {period && onPeriodChange && (
+            <>
+              <label className="text-sm">
+                <span className="font-semibold text-slate-700">De</span>
+                <input
+                  type="date"
+                  value={period.from}
+                  max={period.to || undefined}
+                  onChange={(e) => onPeriodChange({ ...period, from: e.target.value })}
+                  className="mt-1 block rounded-xl border border-slate-200 bg-surface px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-primary-400 focus:outline-none"
+                />
+              </label>
+              <label className="text-sm">
+                <span className="font-semibold text-slate-700">Até</span>
+                <input
+                  type="date"
+                  value={period.to}
+                  min={period.from || undefined}
+                  onChange={(e) => onPeriodChange({ ...period, to: e.target.value })}
+                  className="mt-1 block rounded-xl border border-slate-200 bg-surface px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-primary-400 focus:outline-none"
+                />
+              </label>
+            </>
+          )}
+          {exportHref && (
+            <a
+              href={exportHref}
+              download
+              className="ml-auto inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-surface px-3.5 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+            >
+              <Download className="size-3.5" /> Exportar CSV
+            </a>
+          )}
+        </section>
+      )}
+
       {/* Indicadores principais */}
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Kpi
@@ -215,7 +260,7 @@ export function SalesStatsPanel({ stats, loading, error, onRetry }: SalesStatsPa
                         }}
                       />
                     </span>
-                    <span className="text-[10px] font-semibold text-slate-400">
+                    <span className="text-xs font-semibold text-slate-400">
                       {shortDate(day.date)}
                     </span>
                   </div>

@@ -4,7 +4,7 @@ import { forwardRef, useId, type InputHTMLAttributes, type SelectHTMLAttributes,
 import { cn } from "@/lib/utils";
 
 const fieldBase =
-  "w-full rounded-xl border border-slate-300 bg-surface px-4 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-primary-500 focus:ring-4 focus:ring-primary-500/15 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-50";
+  "w-full rounded-xl border border-slate-300 bg-surface px-4 text-sm text-slate-900 placeholder:text-slate-400 inset-shadow-2xs transition focus:border-primary-500 focus:ring-4 focus:ring-primary-500/15 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-50";
 
 interface FieldWrapperProps {
   label?: string;

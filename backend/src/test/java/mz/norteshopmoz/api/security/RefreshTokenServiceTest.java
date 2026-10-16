@@ -28,7 +28,7 @@ class RefreshTokenServiceTest {
     private static final AppProperties PROPS = new AppProperties(
             new AppProperties.Jwt("segredo-de-teste-com-mais-de-32-caracteres", 3600, 7200),
             new AppProperties.Cors(List.of("http://localhost:3000")),
-            null, null, null);
+            null, null, null, null, null, null);
 
     private final StringRedisTemplate redis = mock(StringRedisTemplate.class);
 

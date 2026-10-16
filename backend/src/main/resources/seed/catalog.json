@@ -1,6 +1,34 @@
 {
  "categories": [
   {
+   "slug": "mulheres",
+   "name": "Mulheres",
+   "emoji": "👗",
+   "image": "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=800&q=70",
+   "description": "Roupa, calçado e acessórios para ela."
+  },
+  {
+   "slug": "homens",
+   "name": "Homens",
+   "emoji": "👔",
+   "image": "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?auto=format&fit=crop&w=800&q=70",
+   "description": "Roupa, calçado e acessórios para ele."
+  },
+  {
+   "slug": "casa",
+   "name": "Casa",
+   "emoji": "🏠",
+   "image": "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=800&q=70",
+   "description": "Mobiliário, cozinha e eletrodomésticos."
+  },
+  {
+   "slug": "calcados",
+   "name": "Calçados",
+   "emoji": "👟",
+   "image": "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=800&q=70",
+   "description": "Ténis, sandálias, sociais e chinelos."
+  },
+  {
    "slug": "eletronicos",
    "name": "Eletrónicos",
    "emoji": "📺",
@@ -15,25 +43,25 @@
    "description": "Smartphones e acessórios móveis."
   },
   {
-   "slug": "informatica",
-   "name": "Informática",
-   "emoji": "💻",
-   "image": "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=800&q=70",
-   "description": "Portáteis, periféricos e redes."
+   "slug": "joias",
+   "name": "Joias",
+   "emoji": "💍",
+   "image": "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=800&q=70",
+   "description": "Colares, pulseiras, anéis e brincos."
   },
   {
-   "slug": "casa",
-   "name": "Casa",
-   "emoji": "🏠",
-   "image": "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=800&q=70",
-   "description": "Mobiliário, cozinha e eletrodomésticos."
+   "slug": "desporto",
+   "name": "Desporto",
+   "emoji": "⚽",
+   "image": "https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&w=800&q=70",
+   "description": "Roupa e equipamento desportivo."
   },
   {
-   "slug": "moda",
-   "name": "Moda",
-   "emoji": "👕",
-   "image": "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=800&q=70",
-   "description": "Roupa, calçado e estilo."
+   "slug": "criancas",
+   "name": "Crianças",
+   "emoji": "🧸",
+   "image": "https://images.unsplash.com/photo-1503454537195-1dcabb73ffb9?auto=format&fit=crop&w=800&q=70",
+   "description": "Roupa, calçado e brinquedos."
   },
   {
    "slug": "beleza",
@@ -48,6 +76,27 @@
    "emoji": "⌚",
    "image": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=70",
    "description": "Relógios, óculos, malas e gadgets."
+  },
+  {
+   "slug": "moveis",
+   "name": "Móveis",
+   "emoji": "🛋️",
+   "image": "https://images.unsplash.com/photo-1533090161767-e6ffed986c88?auto=format&fit=crop&w=800&q=70",
+   "description": "Sofás, camas, mesas e armários."
+  },
+  {
+   "slug": "cozinha",
+   "name": "Cozinha",
+   "emoji": "🍳",
+   "image": "https://images.unsplash.com/photo-1584990347449-a63e2b662294?auto=format&fit=crop&w=800&q=70",
+   "description": "Utensílios, panelas e eletroportáteis."
+  },
+  {
+   "slug": "informatica",
+   "name": "Informática",
+   "emoji": "💻",
+   "image": "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=800&q=70",
+   "description": "Portáteis, periféricos e redes."
   }
  ],
  "products": [
@@ -133,7 +182,7 @@
    "images": [
     "https://images.unsplash.com/photo-1556656793-08538906a9f8?auto=format&fit=crop&w=900&q=70",
     "https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?auto=format&fit=crop&w=900&q=70",
-    "https://images.unsplash.com/photo-1609592806590-c4fb17ea506e?auto=format&fit=crop&w=900&q=70"
+    "https://images.unsplash.com/photo-1592899677977-9c10ca588bbd?auto=format&fit=crop&w=900&q=70"
    ],
    "shortDescription": "Capa com cantos reforçados e corte preciso para câmaras e portas.",
    "description": [
@@ -192,7 +241,7 @@
    "stock": 40,
    "images": [
     "https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?auto=format&fit=crop&w=900&q=70",
-    "https://images.unsplash.com/photo-1609592806590-c4fb17ea506e?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1592899677977-9c10ca588bbd?auto=format&fit=crop&w=900&q=70",
     "https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=900&q=70"
    ],
    "shortDescription": "Capa leve com textura mate que não deixa dedadas.",
@@ -236,7 +285,7 @@
    "sold": 180,
    "stock": 40,
    "images": [
-    "https://images.unsplash.com/photo-1609592806590-c4fb17ea506e?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1592899677977-9c10ca588bbd?auto=format&fit=crop&w=900&q=70",
     "https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=900&q=70",
     "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=70"
    ],
@@ -468,7 +517,7 @@
    "images": [
     "https://images.unsplash.com/photo-1556656793-08538906a9f8?auto=format&fit=crop&w=900&q=70",
     "https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?auto=format&fit=crop&w=900&q=70",
-    "https://images.unsplash.com/photo-1609592806590-c4fb17ea506e?auto=format&fit=crop&w=900&q=70"
+    "https://images.unsplash.com/photo-1592899677977-9c10ca588bbd?auto=format&fit=crop&w=900&q=70"
    ],
    "shortDescription": "Cabo Lightning certificado, compatível com iPhone e iPad.",
    "description": [
@@ -512,7 +561,7 @@
    "stock": 40,
    "images": [
     "https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?auto=format&fit=crop&w=900&q=70",
-    "https://images.unsplash.com/photo-1609592806590-c4fb17ea506e?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1592899677977-9c10ca588bbd?auto=format&fit=crop&w=900&q=70",
     "https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=900&q=70"
    ],
    "shortDescription": "Cabo USB-C para USB-C com suporte a carga rápida de até 65W.",
@@ -556,7 +605,7 @@
    "sold": 180,
    "stock": 40,
    "images": [
-    "https://images.unsplash.com/photo-1609592806590-c4fb17ea506e?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1592899677977-9c10ca588bbd?auto=format&fit=crop&w=900&q=70",
     "https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=900&q=70",
     "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=70"
    ],
@@ -2885,7 +2934,7 @@
    "slug": "t-shirt-basica",
    "name": "T-shirt básica",
    "brand": "NorteWear",
-   "category": "moda",
+   "category": "homens",
    "price": 900,
    "oldPrice": 1035,
    "rating": 4.5,
@@ -2968,7 +3017,7 @@
    "slug": "camisa-casual",
    "name": "Camisa casual",
    "brand": "NorteWear",
-   "category": "moda",
+   "category": "homens",
    "price": 1500,
    "oldPrice": 1725,
    "rating": 4.5,
@@ -3032,7 +3081,7 @@
    "slug": "calcas-de-ganga",
    "name": "Calças de ganga",
    "brand": "NorteWear",
-   "category": "moda",
+   "category": "homens",
    "price": 2500,
    "oldPrice": 2875,
    "rating": 4.5,
@@ -3096,7 +3145,7 @@
    "slug": "vestido-casual",
    "name": "Vestido casual",
    "brand": "NorteWear",
-   "category": "moda",
+   "category": "mulheres",
    "price": 2500,
    "oldPrice": 2875,
    "rating": 4.5,
@@ -3141,7 +3190,7 @@
    "slug": "blusa-feminina",
    "name": "Blusa feminina",
    "brand": "NorteWear",
-   "category": "moda",
+   "category": "mulheres",
    "price": 1600,
    "oldPrice": 1840,
    "rating": 4.5,
@@ -3186,7 +3235,7 @@
    "slug": "jaqueta",
    "name": "Jaqueta",
    "brand": "NorteWear",
-   "category": "moda",
+   "category": "homens",
    "price": 3500,
    "oldPrice": 4025,
    "rating": 4.5,
@@ -3232,7 +3281,7 @@
    "slug": "sweatshirt-com-capuz",
    "name": "Sweatshirt com capuz",
    "brand": "NorteWear",
-   "category": "moda",
+   "category": "homens",
    "price": 2200,
    "oldPrice": 2530,
    "rating": 4.5,
@@ -3277,7 +3326,7 @@
    "slug": "sapatilhas-desportivas",
    "name": "Sapatilhas desportivas",
    "brand": "PassoLeve",
-   "category": "moda",
+   "category": "calcados",
    "price": 3500,
    "oldPrice": 4025,
    "rating": 4.5,
@@ -3360,7 +3409,7 @@
    "slug": "sandalias",
    "name": "Sandálias",
    "brand": "PassoLeve",
-   "category": "moda",
+   "category": "calcados",
    "price": 1800,
    "oldPrice": 2070,
    "rating": 4.5,
@@ -3427,7 +3476,7 @@
    "slug": "sapatos-sociais",
    "name": "Sapatos sociais",
    "brand": "PassoLeve",
-   "category": "moda",
+   "category": "calcados",
    "price": 3000,
    "oldPrice": 3450,
    "rating": 4.5,
@@ -3494,7 +3543,7 @@
    "slug": "chinelos",
    "name": "Chinelos",
    "brand": "PassoLeve",
-   "category": "moda",
+   "category": "calcados",
    "price": 800,
    "oldPrice": 920,
    "rating": 4.5,
@@ -3558,7 +3607,7 @@
    "slug": "cinto-de-couro",
    "name": "Cinto de couro",
    "brand": "NorteWear",
-   "category": "moda",
+   "category": "acessorios",
    "price": 1000,
    "oldPrice": 1150,
    "rating": 4.5,
@@ -3603,7 +3652,7 @@
    "slug": "fato-de-treino",
    "name": "Fato de treino",
    "brand": "PassoLeve",
-   "category": "moda",
+   "category": "desporto",
    "price": 3500,
    "oldPrice": 4025,
    "rating": 4.5,
@@ -3648,7 +3697,7 @@
    "slug": "pijama",
    "name": "Pijama",
    "brand": "NorteWear",
-   "category": "moda",
+   "category": "mulheres",
    "price": 1800,
    "oldPrice": 2070,
    "rating": 4.5,
@@ -3693,7 +3742,7 @@
    "slug": "meias-pack-de-5",
    "name": "Meias (pack de 5)",
    "brand": "NorteWear",
-   "category": "moda",
+   "category": "acessorios",
    "price": 400,
    "oldPrice": 460,
    "rating": 4.5,
@@ -4886,6 +4935,484 @@
     "porta cartoes",
     "carteira",
     "acessorio"
+   ]
+  },
+  {
+   "id": "p-101",
+   "slug": "colar-dourado-classico",
+   "name": "Colar dourado clássico",
+   "brand": "NSM Select",
+   "category": "joias",
+   "price": 1200,
+   "oldPrice": 1380,
+   "rating": 4.6,
+   "ratingCount": 85,
+   "sold": 90,
+   "stock": 35,
+   "images": [
+    "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1573408301185-9146fe634ad0?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Colar dourado de aço inoxidável, ideal para o dia a dia ou presentes.",
+   "description": [
+    "Colar dourado de aço inoxidável, ideal para o dia a dia ou presentes.",
+    "Colar dourado clássico com envio para todas as províncias de Moçambique e pagamento na entrega."
+   ],
+   "specs": [
+    {
+     "label": "Material",
+     "value": "Aço inoxidável"
+    },
+    {
+     "label": "Comprimento",
+     "value": "45 cm"
+    }
+   ],
+   "badges": [
+    "OFERTA"
+   ],
+   "bestseller": false,
+   "variants": [
+    {
+     "type": "Cor",
+     "options": [
+      {
+       "name": "Dourado"
+      },
+      {
+       "name": "Prateado"
+      }
+     ]
+    }
+   ],
+   "deliveryDays": [
+    3,
+    7
+   ],
+   "tags": [
+    "colar",
+    "joia",
+    "dourado"
+   ]
+  },
+  {
+   "id": "p-102",
+   "slug": "anel-solitario",
+   "name": "Anel solitário",
+   "brand": "NSM Select",
+   "category": "joias",
+   "price": 1800,
+   "oldPrice": 2070,
+   "rating": 4.6,
+   "ratingCount": 85,
+   "sold": 90,
+   "stock": 35,
+   "images": [
+    "https://images.unsplash.com/photo-1605100804763-247f67b3557e?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Anel solitário com acabamento polido — elegante e resistente.",
+   "description": [
+    "Anel solitário com acabamento polido — elegante e resistente.",
+    "Anel solitário com envio para todas as províncias de Moçambique e pagamento na entrega."
+   ],
+   "specs": [
+    {
+     "label": "Material",
+     "value": "Aço inoxidável"
+    },
+    {
+     "label": "Tamanho",
+     "value": "Ajustável"
+    }
+   ],
+   "badges": [
+    "OFERTA"
+   ],
+   "bestseller": false,
+   "variants": [
+    {
+     "type": "Cor",
+     "options": [
+      {
+       "name": "Dourado"
+      },
+      {
+       "name": "Prateado"
+      }
+     ]
+    }
+   ],
+   "deliveryDays": [
+    3,
+    7
+   ],
+   "tags": [
+    "anel",
+    "joia",
+    "solitario"
+   ]
+  },
+  {
+   "id": "p-103",
+   "slug": "conjunto-brinquedos-educativo",
+   "name": "Conjunto de brinquedos educativo",
+   "brand": "NSM Select",
+   "category": "criancas",
+   "price": 950,
+   "oldPrice": 1090,
+   "rating": 4.6,
+   "ratingCount": 85,
+   "sold": 90,
+   "stock": 35,
+   "images": [
+    "https://images.unsplash.com/photo-1503454537195-1dcabb73ffb9?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1519238263530-99bdd11df2ea?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1522771930-78848d9293e8?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Brinquedos educativos que estimulam a criatividade dos mais pequenos.",
+   "description": [
+    "Brinquedos educativos que estimulam a criatividade dos mais pequenos.",
+    "Conjunto de brinquedos educativo com envio para todas as províncias de Moçambique e pagamento na entrega."
+   ],
+   "specs": [
+    {
+     "label": "Idade",
+     "value": "3+ anos"
+    },
+    {
+     "label": "Peças",
+     "value": "60"
+    }
+   ],
+   "badges": [
+    "OFERTA"
+   ],
+   "bestseller": false,
+   "variants": [
+    {
+     "type": "Tamanho",
+     "options": [
+      {
+       "name": "Único"
+      }
+     ]
+    }
+   ],
+   "deliveryDays": [
+    3,
+    7
+   ],
+   "tags": [
+    "brinquedos",
+    "crianca",
+    "educativo"
+   ]
+  },
+  {
+   "id": "p-104",
+   "slug": "tenis-crianca",
+   "name": "Ténis de criança",
+   "brand": "NSM Select",
+   "category": "criancas",
+   "price": 850,
+   "oldPrice": 980,
+   "rating": 4.6,
+   "ratingCount": 85,
+   "sold": 90,
+   "stock": 35,
+   "images": [
+    "https://images.unsplash.com/photo-1522771930-78848d9293e8?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1519238263530-99bdd11df2ea?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1503454537195-1dcabb73ffb9?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Ténis leves e resistentes, com fecho fácil para os mais pequenos.",
+   "description": [
+    "Ténis leves e resistentes, com fecho fácil para os mais pequenos.",
+    "Ténis de criança com envio para todas as províncias de Moçambique e pagamento na entrega."
+   ],
+   "specs": [
+    {
+     "label": "Material",
+     "value": "Têxtil"
+    },
+    {
+     "label": "Fecho",
+     "value": "Velcro"
+    }
+   ],
+   "badges": [
+    "OFERTA"
+   ],
+   "bestseller": false,
+   "variants": [
+    {
+     "type": "Tamanho",
+     "options": [
+      {
+       "name": "Único"
+      }
+     ]
+    }
+   ],
+   "deliveryDays": [
+    3,
+    7
+   ],
+   "tags": [
+    "tenis",
+    "crianca",
+    "calcado"
+   ]
+  },
+  {
+   "id": "p-105",
+   "slug": "sofa-2-lugares",
+   "name": "Sofá de 2 lugares",
+   "brand": "NSM Select",
+   "category": "moveis",
+   "price": 18500,
+   "oldPrice": 21275,
+   "rating": 4.7,
+   "ratingCount": 85,
+   "sold": 25,
+   "stock": 35,
+   "images": [
+    "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1567016432779-094069958ea5?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Sofá compacto de 2 lugares, tecido resistente e estrutura em madeira.",
+   "description": [
+    "Sofá compacto de 2 lugares, tecido resistente e estrutura em madeira.",
+    "Sofá de 2 lugares com envio para todas as províncias de Moçambique e pagamento na entrega."
+   ],
+   "specs": [
+    {
+     "label": "Lugares",
+     "value": "2"
+    },
+    {
+     "label": "Estrutura",
+     "value": "Madeira"
+    }
+   ],
+   "badges": [
+    "OFERTA"
+   ],
+   "bestseller": false,
+   "variants": [
+    {
+     "type": "Cor",
+     "options": [
+      {
+       "name": "Cinza"
+      },
+      {
+       "name": "Bege"
+      },
+      {
+       "name": "Preto"
+      }
+     ]
+    }
+   ],
+   "deliveryDays": [
+    3,
+    7
+   ],
+   "tags": [
+    "sofa",
+    "movel",
+    "sala"
+   ]
+  },
+  {
+   "id": "p-106",
+   "slug": "cadeira-escritorio",
+   "name": "Cadeira de escritório",
+   "brand": "NSM Select",
+   "category": "moveis",
+   "price": 4200,
+   "oldPrice": 4830,
+   "rating": 4.6,
+   "ratingCount": 85,
+   "sold": 90,
+   "stock": 35,
+   "images": [
+    "https://images.unsplash.com/photo-1598300042247-d088f8ab3a91?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Cadeira ergonómica com apoio lombar e altura ajustável.",
+   "description": [
+    "Cadeira ergonómica com apoio lombar e altura ajustável.",
+    "Cadeira de escritório com envio para todas as províncias de Moçambique e pagamento na entrega."
+   ],
+   "specs": [
+    {
+     "label": "Apoios",
+     "value": "Braços e lombar"
+    },
+    {
+     "label": "Rodas",
+     "value": "Silenciosas"
+    }
+   ],
+   "badges": [
+    "OFERTA"
+   ],
+   "bestseller": false,
+   "variants": [
+    {
+     "type": "Cor",
+     "options": [
+      {
+       "name": "Cinza"
+      },
+      {
+       "name": "Bege"
+      },
+      {
+       "name": "Preto"
+      }
+     ]
+    }
+   ],
+   "deliveryDays": [
+    3,
+    7
+   ],
+   "tags": [
+    "cadeira",
+    "escritorio",
+    "movel"
+   ]
+  },
+  {
+   "id": "p-107",
+   "slug": "panela-pressao-5l",
+   "name": "Panela de pressão 5 L",
+   "brand": "NSM Select",
+   "category": "cozinha",
+   "price": 2400,
+   "oldPrice": 2760,
+   "rating": 4.6,
+   "ratingCount": 85,
+   "sold": 90,
+   "stock": 35,
+   "images": [
+    "https://images.unsplash.com/photo-1590794056226-79ef3a8147e1?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1556911220-bff31c812dba?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1574269909862-7e1d70bb8078?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Panela de pressão de 5 litros, compatível com todo o tipo de fogões.",
+   "description": [
+    "Panela de pressão de 5 litros, compatível com todo o tipo de fogões.",
+    "Panela de pressão 5 L com envio para todas as províncias de Moçambique e pagamento na entrega."
+   ],
+   "specs": [
+    {
+     "label": "Capacidade",
+     "value": "5 L"
+    },
+    {
+     "label": "Material",
+     "value": "Aço inox"
+    }
+   ],
+   "badges": [
+    "OFERTA"
+   ],
+   "bestseller": false,
+   "variants": [
+    {
+     "type": "Cor",
+     "options": [
+      {
+       "name": "Cinza"
+      },
+      {
+       "name": "Bege"
+      },
+      {
+       "name": "Preto"
+      }
+     ]
+    }
+   ],
+   "deliveryDays": [
+    3,
+    7
+   ],
+   "tags": [
+    "panela",
+    "pressao",
+    "cozinha"
+   ]
+  },
+  {
+   "id": "p-108",
+   "slug": "jogo-panelas-3-pecas",
+   "name": "Jogo de panelas (3 peças)",
+   "brand": "NSM Select",
+   "category": "cozinha",
+   "price": 3100,
+   "oldPrice": 3565,
+   "rating": 4.6,
+   "ratingCount": 85,
+   "sold": 90,
+   "stock": 35,
+   "images": [
+    "https://images.unsplash.com/photo-1556911220-bff31c812dba?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1590794056226-79ef3a8147e1?auto=format&fit=crop&w=900&q=70",
+    "https://images.unsplash.com/photo-1574269909862-7e1d70bb8078?auto=format&fit=crop&w=900&q=70"
+   ],
+   "shortDescription": "Jogo de 3 panelas antiaderentes com tampas de vidro.",
+   "description": [
+    "Jogo de 3 panelas antiaderentes com tampas de vidro.",
+    "Jogo de panelas (3 peças) com envio para todas as províncias de Moçambique e pagamento na entrega."
+   ],
+   "specs": [
+    {
+     "label": "Peças",
+     "value": "3"
+    },
+    {
+     "label": "Antiaderente",
+     "value": "Sim"
+    }
+   ],
+   "badges": [
+    "OFERTA"
+   ],
+   "bestseller": false,
+   "variants": [
+    {
+     "type": "Cor",
+     "options": [
+      {
+       "name": "Cinza"
+      },
+      {
+       "name": "Bege"
+      },
+      {
+       "name": "Preto"
+      }
+     ]
+    }
+   ],
+   "deliveryDays": [
+    3,
+    7
+   ],
+   "tags": [
+    "panelas",
+    "cozinha",
+    "antiaderente"
    ]
   }
  ]

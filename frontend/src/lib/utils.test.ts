@@ -56,7 +56,7 @@ describe("isValidImageSrc", () => {
   it("aceita caminho absoluto, http(s) e data URI", () => {
     expect(isValidImageSrc("/img/produto.jpg")).toBe(true);
     expect(isValidImageSrc("https://cdn.exemplo.com/a.jpg")).toBe(true);
-    expect(isValidImageSrc("http://localhost:8081/uploads/a.jpg")).toBe(true);
+    expect(isValidImageSrc("http://localhost:8080/uploads/a.jpg")).toBe(true);
     expect(isValidImageSrc("data:image/svg+xml;charset=utf-8,%3Csvg%2F%3E")).toBe(true);
   });
 

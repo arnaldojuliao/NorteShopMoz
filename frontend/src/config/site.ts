@@ -33,19 +33,23 @@ export const site = {
   privacyEmail: envOr(process.env.NEXT_PUBLIC_PRIVACY_EMAIL, "privacidade@norteshopmoz.com"),
 
   /** Morada física. */
-  addressLine1: "Av. 24 de Julho",
-  addressCity: "Maputo",
-  addressCountry: "Moçambique",
+  addressLine1: envOr(process.env.NEXT_PUBLIC_ADDRESS_LINE1, "Av. 24 de Julho"),
+  addressCity: envOr(process.env.NEXT_PUBLIC_ADDRESS_CITY, "Maputo"),
+  addressCountry: envOr(process.env.NEXT_PUBLIC_ADDRESS_COUNTRY, "Moçambique"),
 
   /** Horário de atendimento. */
-  hoursWeekdays: "Seg–Sex, 8h–18h",
-  hoursSaturday: "Sábado, 8h–13h",
+  hoursWeekdays: envOr(process.env.NEXT_PUBLIC_HOURS_WEEKDAYS, "Seg–Sex, 8h–18h"),
+  hoursSaturday: envOr(process.env.NEXT_PUBLIC_HOURS_SATURDAY, "Sábado, 8h–13h"),
 
-  /** Redes sociais (substituir pelos perfis oficiais quando existirem). */
+  /**
+   * Redes sociais. Por omissão ficam **vazias**: sem perfil oficial, o Footer
+   * não mostra o ícone (antes apontavam para facebook.com/instagram.com/x.com
+   * genéricos — links quebrados para o cliente).
+   */
   socials: {
-    facebook: envOr(process.env.NEXT_PUBLIC_FACEBOOK_URL, "https://facebook.com"),
-    instagram: envOr(process.env.NEXT_PUBLIC_INSTAGRAM_URL, "https://instagram.com"),
-    x: envOr(process.env.NEXT_PUBLIC_X_URL, "https://x.com"),
+    facebook: envOr(process.env.NEXT_PUBLIC_FACEBOOK_URL, ""),
+    instagram: envOr(process.env.NEXT_PUBLIC_INSTAGRAM_URL, ""),
+    x: envOr(process.env.NEXT_PUBLIC_X_URL, ""),
   },
 } as const;
 

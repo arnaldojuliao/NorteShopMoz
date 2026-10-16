@@ -15,7 +15,6 @@ import { useCurrency } from "@/context/CurrencyContext";
 import { useToast } from "@/context/ToastContext";
 import { discountPct } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { useRequireAuth } from "@/components/auth/RequireAuth";
 
 export function BuyBox({ product }: { product: Product }) {
   const { addItem } = useCart();
@@ -25,25 +24,26 @@ export function BuyBox({ product }: { product: Product }) {
   const [qty, setQty] = useState(1);
   const [variant, setVariant] = useState<string | undefined>(undefined);
   const [selectedColor, setSelectedColor] = useState<string | undefined>(undefined);
-  const { checkAuth } = useRequireAuth();
 
   const out = product.stock <= 0;
   const pct = product.oldPrice ? discountPct(product.oldPrice, product.price) : 0;
   const colorVariant = product.variants?.find((v) => v.type === "Cor");
   const sizeVariant = product.variants?.find((v) => v.type === "Tamanho");
+  // Variante SEM opções (publicação com erro) é ignorada — nunca crashar.
+  const colorOptions = colorVariant?.options?.length ? colorVariant.options : [];
+  const defaultColor = colorOptions[0]?.name;
+  const hasColor = colorOptions.length > 0;
 
-  const chosenVariant = colorVariant ? selectedColor ?? colorVariant.options[0].name : undefined;
+  const chosenVariant = hasColor ? selectedColor ?? defaultColor : undefined;
 
+  // Adicionar ao carrinho **não** exige conta: o carrinho de convidado existe
+  // (identidade `X-Guest-Id` no backend e `localStorage` sem ligação). Exigir
+  // login no primeiro clique punha um muro à frente do CTA principal da loja.
   const handleAdd = (buyNow = false) => {
-    const handled = checkAuth(() => {
-      if (out) return;
-      addItem(product, qty, chosenVariant);
-      notify("Adicionado ao carrinho 🛒");
-      if (buyNow) router.push("/carrinho");
-    });
-    if (!handled) {
-      // O modal de login foi aberto pelo checkAuth
-    }
+    if (out) return;
+    addItem(product, qty, chosenVariant);
+    notify("Adicionado ao carrinho 🛒");
+    if (buyNow) router.push("/carrinho");
   };
 
   return (
@@ -59,7 +59,7 @@ export function BuyBox({ product }: { product: Product }) {
           {pct > 0 && <Badge tone="red">-{pct}%</Badge>}
         </div>
 
-        <h1 className="mt-3 font-display text-2xl font-extrabold leading-tight text-slate-900 sm:text-[1.75rem]">
+        <h1 className="mt-3 font-display text-2xl font-extrabold leading-tight text-slate-900 sm:text-3xl">
           {product.name}
         </h1>
 
@@ -89,21 +89,21 @@ export function BuyBox({ product }: { product: Product }) {
       </div>
 
       {/* Variantes */}
-      {colorVariant && (
+      {hasColor && (
         <div>
           <p className="mb-2 text-sm font-semibold text-slate-700">
-            Cor: <span className="font-normal text-slate-500">{selectedColor ?? colorVariant.options[0].name}</span>
+            Cor: <span className="font-normal text-slate-500">{selectedColor ?? defaultColor}</span>
           </p>
           <div className="flex flex-wrap gap-2">
-            {colorVariant.options.map((o) => (
+            {colorOptions.map((o) => (
               <button
                 key={o.name}
                 onClick={() => setSelectedColor(o.name)}
                 aria-label={`Cor ${o.name}`}
-                aria-pressed={selectedColor === o.name || (!selectedColor && o === colorVariant.options[0])}
+                aria-pressed={selectedColor === o.name || (!selectedColor && o.name === defaultColor)}
                 className={cn(
                   "flex h-10 items-center gap-2 rounded-xl border-2 px-3 text-sm font-medium transition",
-                  (selectedColor === o.name || (!selectedColor && o === colorVariant.options[0]))
+                  (selectedColor === o.name || (!selectedColor && o.name === defaultColor))
                     ? "border-primary-600 bg-primary-50 text-primary-700"
                     : "border-slate-200 text-slate-600 hover:border-slate-300",
                 )}
@@ -116,7 +116,7 @@ export function BuyBox({ product }: { product: Product }) {
                   />
                 )}
                 {o.name}
-                {(selectedColor === o.name || (!selectedColor && o === colorVariant.options[0])) && (
+                {(selectedColor === o.name || (!selectedColor && o.name === defaultColor)) && (
                   <Check className="size-3.5" />
                 )}
               </button>
@@ -148,17 +148,18 @@ export function BuyBox({ product }: { product: Product }) {
         </div>
       )}
 
-      {/* Quantidade + ações */}
+      {/* Quantidade + ações — no telemóvel os botões ficam altos (64px),
+          confortáveis para o polegar. */}
       <div className="flex flex-col sm:flex-row items-stretch gap-3">
-        <QuantityPicker size="lg" value={qty} onChange={setQty} max={Math.max(product.stock, 1)} className="sm:w-28" />
+        <QuantityPicker size="lg" value={qty} onChange={setQty} max={Math.max(product.stock, 1)} className="sm:w-28 max-sm:h-14" />
         <Button
           onClick={() => handleAdd(false)}
           disabled={out}
           size="lg"
-          className="flex-1"
+          className="flex-1 max-sm:h-16 py-4"
           aria-label={`Adicionar ${product.name} ao carrinho`}
         >
-          <ShoppingCart className="size-4" />
+          <ShoppingCart className="size-5" />
           Adicionar ao carrinho
         </Button>
       </div>
@@ -169,9 +170,9 @@ export function BuyBox({ product }: { product: Product }) {
         variant="dark"
         size="lg"
         fullWidth
-        className="group"
+        className="group max-sm:h-16 py-4"
       >
-        <Zap className="size-4" />
+        <Zap className="size-5" />
         Comprar agora
       </Button>
 
@@ -203,7 +204,7 @@ export function BuyBox({ product }: { product: Product }) {
         </p>
         <p className="flex items-center gap-2.5 text-slate-700">
           <PackageCheck className="size-4.5 shrink-0 text-primary-600" />
-          Pagamento na entrega ou por transferência
+          Pague com M-Pesa, e-Mola ou cartão
         </p>
       </div>
     </div>

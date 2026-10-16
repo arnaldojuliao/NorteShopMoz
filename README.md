@@ -12,9 +12,11 @@ Plataforma de **e-commerce / dropshipping** moderna, totalmente responsiva e oti
 - 🛒 **Carrinho de compras** para visitantes (armazenado em Redis) e clientes registados
 - 👤 **Autenticação JWT** com verificação de email e login social (Google / Facebook)
 - 📦 **Checkout para visitantes** (guest checkout) com chaves de idempotência
-- 💳 **Pagamentos** em modo `simulated` (sem cobrança real) ou `live` (gateway real)
-- 📧 **Email transacional** via Resend (verificação de conta, notificações)
-- 🔐 **Segurança**: rate limiting por endpoint, CORS configurável, scans automáticos no CI
+- 💳 **Pagamentos** em modo `simulated` (sem cobrança real) ou `live` (PaySuite: M-Pesa, e-Mola, mKesh e cartão, com checkout hospedado e confirmação por webhook)
+- 🔁 **Devoluções** com fluxo próprio: pedido do cliente dentro da janela, aprovação da operação e reembolso automático (pagamento online) — falhas de webhook e estornos vão para a fila de reconciliação
+- 🧑‍💼 **Painel admin** completo: pedidos com pastas semanais e tracking, estatísticas por período com export CSV, CRUD de produtos, categorias, cupões, inventário com histórico de stock, avaliações, utilizadores (promover/bloquear) e incidências de pagamento
+- 📧 **Email transacional** via Resend (verificação de conta, notificações) e canal WhatsApp opcional (provedor genérico, respeita as preferências do cliente)
+- 🔐 **Segurança**: rate limiting por endpoint, CORS configurável, scans automáticos no CI, auditoria com export opcional para SIEM
 - 📊 **Observabilidade**: health checks, métricas Prometheus e dashboards Grafana
 
 ## 🛠️ Tecnologias
@@ -105,7 +107,11 @@ As mais importantes:
 | `CLOUDINARY_*` | Armazenamento de imagens de produto |
 | `GOOGLE_CLIENT_ID`, `FACEBOOK_APP_ID/SECRET` | Login social (opcional). O `GOOGLE_CLIENT_SECRET` **não** é usado (a validação é por ID token/`tokeninfo`) |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, `NEXT_PUBLIC_FACEBOOK_APP_ID` | Login social no browser (**build time**). Têm de ser **iguais** a `GOOGLE_CLIENT_ID`/`FACEBOOK_APP_ID`: o backend valida o `aud` do token do Google contra o seu Client ID, por isso um ID diferente (ou um cliente apagado no Google Cloud) faz o login falhar |
-| `PAYMENTS_MODE` | `simulated` (omissão) ou `live` — `live` exige uma implementação real de `PaymentGateway`; sem ela o arranque em `prod` avisa que a loja **não** cobra online e o checkout esconde M-Pesa/e-Mola/cartão |
+| `PAYMENTS_MODE` | `simulated` (omissão) ou `live` — `live` usa a PaySuite e exige `PAYMENTS_API_KEY`; sem ela a API **não arranca** e, com `simulated`, o arranque em `prod` avisa que a loja **não** cobra online (o checkout esconde M-Pesa/e-Mola/cartão) |
+| `PAYMENTS_API_KEY` / `PAYMENTS_WEBHOOK_SECRET` | Token da PaySuite (Settings → API Access) e chave que assina as notificações (`X-Signature`). Sem o segredo, os pedidos ficam presos em "Aguarda pagamento", porque a PaySuite confirma só por webhook |
+| `PAYMENTS_WEBHOOK_URL` / `PAYMENTS_RETURN_URL` | URLs públicos da loja enviados em cada pagamento (notificação e regresso do cliente). Omitir usa a configuração de conta na PaySuite |
+| `WHATSAPP_API_URL` / `WHATSAPP_API_TOKEN` | Canal WhatsApp (consumidor das preferências `notifWhatsapp*`). Provedor genérico: POST JSON `{to, message}` com Bearer opcional. Vazio = desligado (o email continua a ser o canal garantido; só contas com a preferência ligada recebem) |
+| `AUDIT_WEBHOOK_URL` | Export opcional dos eventos de auditoria para um SIEM/endpoint próprio (POST JSON assíncrono; falha aberta). Vazio = só log local |
 | `NEXT_PUBLIC_API_BASE_URL` | URL da API consumido pelo frontend |
 | `APP_COOKIE_SECURE` | Cookies `Secure` (obrigatório `true` com HTTPS; `false` só enquanto a loja servir HTTP) |
 | `APP_DOMAIN` | Domínio público do TLS. Se não for definido é derivado de `APP_BASE_URL` |
@@ -201,7 +207,7 @@ continua a aplicar-se e aponta para um caminho que não existe dentro de
 
 As variáveis públicas (`NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_SITE_URL`,
 `NEXT_PUBLIC_APP_URL`) têm de existir como env vars do projeto na Vercel: sem
-elas o bundle cai no `http://localhost:8081` por omissão.
+elas o bundle cai no `http://localhost:8080` por omissão.
 
 ### Disco e registos
 

@@ -35,8 +35,14 @@ public class SimulatedPaymentGateway implements PaymentGateway {
     /** Alfabeto da referência (sem caracteres ambíguos). */
     private static final char[] CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".toCharArray();
 
+    /**
+     * Cobrança síncrona simulada: confirma logo, devolve uma referência realista
+     * e <strong>nunca</strong> um {@code checkout_url} — em dev/demo o checkout
+     * segue o fluxo normal, sem redirecionar para um provedor externo.
+     */
     @Override
-    public String charge(String methodId, String phone, String cardLast4, BigDecimal amount, String currency) {
+    public PaymentCharge charge(String reference, String methodId, String phone, String cardLast4,
+                                BigDecimal amount, String currency, String description) {
         // Sem valor não há simulação que valha — o chamador valida antes, mas é a
         // última linha de defesa contra uma cobrança "sem valor".
         if (amount == null || amount.signum() < 0) {
@@ -49,16 +55,16 @@ public class SimulatedPaymentGateway implements PaymentGateway {
             default -> "PAY";
         };
         String code = randomCode(10);
-        if (cardLast4 != null && !cardLast4.isBlank()) {
-            return prefix + "-" + code + "\u00b7\u2022\u2022\u2022\u2022" + cardLast4;
-        }
-        return prefix + "-" + code;
+        String simulated = cardLast4 != null && !cardLast4.isBlank()
+                ? prefix + "-" + code + "\u00b7\u2022\u2022\u2022\u2022" + cardLast4
+                : prefix + "-" + code;
+        return PaymentCharge.confirmed(simulated);
     }
 
     /** No modo simulado não há dinheiro a devolver: apenas se regista o estorno. */
     @Override
-    public void refund(String reference) {
-        log.info("[PAGAMENTO SIMULADO] Estorno registado para a referência {}", reference);
+    public void refund(String reference, BigDecimal amount) {
+        log.info("[PAGAMENTO SIMULADO] Estorno registado para a referência {} ({})", reference, amount);
     }
 
     private static String randomCode(int length) {

@@ -15,7 +15,7 @@ test.describe('Pesquisa (combobox) e página /explore', () => {
     });
 
     await page.goto('/');
-    await expect(page.locator('header')).toBeVisible({ timeout: 20000 });
+    await expect(page.locator('header:visible')).toBeVisible({ timeout: 20000 });
 
     const input = page.getByRole('combobox', { name: /pesquisar produtos/i }).first();
     await input.click();
@@ -31,7 +31,7 @@ test.describe('Pesquisa (combobox) e página /explore', () => {
 
   test('digitar mostra sugestões categorizadas e Enter navega para /explore?q=', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('header')).toBeVisible({ timeout: 20000 });
+    await expect(page.locator('header:visible')).toBeVisible({ timeout: 20000 });
 
     const input = page.getByRole('combobox', { name: /pesquisar produtos/i }).first();
     await input.click();
@@ -52,7 +52,7 @@ test.describe('Pesquisa (combobox) e página /explore', () => {
 
   test('sugestão de produto leva à página do produto; categoria à categoria', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('header')).toBeVisible({ timeout: 20000 });
+    await expect(page.locator('header:visible')).toBeVisible({ timeout: 20000 });
 
     const input = page.getByRole('combobox', { name: /pesquisar produtos/i }).first();
     await input.click();
@@ -82,7 +82,7 @@ test.describe('Pesquisa (combobox) e página /explore', () => {
     });
 
     await page.goto('/');
-    await expect(page.locator('header')).toBeVisible({ timeout: 20000 });
+    await expect(page.locator('header:visible')).toBeVisible({ timeout: 20000 });
 
     const input = page.getByRole('combobox', { name: /pesquisar produtos/i }).first();
     await input.click();
@@ -99,7 +99,9 @@ test.describe('Pesquisa (combobox) e página /explore', () => {
 
   test('página /explore sem q mostra instruções e permanece indexável', async ({ page }) => {
     await page.goto('/explore');
-    await expect(page.locator('h1')).toContainText('Pesquisar na NorteShopMoz');
+    // O `h1` do /explore passou a ser «Explorar produtos» (redesign da página);
+    // continua a ser o título único e visível para leitores de ecrã.
+    await expect(page.locator('h1')).toContainText('Explorar produtos');
 
     // Indexável: robots de índice (sem meta noindex) e canónica.
     const robots = await page.locator('meta[name="robots"]').getAttribute('content');

@@ -3,17 +3,24 @@
 import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { ProductImage } from "@/components/product/ProductImage";
-import { cn } from "@/lib/utils";
 import type { Product } from "@/lib/types";
-import { categoryEmoji } from "@/lib/data/categories";
+import { newCategoryEmoji as categoryEmoji } from "@/lib/new-categories";
 
+/**
+ * Galeria do produto: imagem principal com setas e contador.
+ *
+ * No telemóvel é **full-bleed**: sem moldura, sem borda e a sangrar até aos
+ * cantos do ecrã e ao header (o `-mx-3` cancela o padding do contentor e a
+ * página remove o topo no mobile). As miniaturas abaixo saíram (a pedido) — a
+ * navegação entre imagens é feita pelas setas e o contador mostra a posição.
+ */
 export function ProductGallery({ product }: { product: Product }) {
   const [active, setActive] = useState(0);
   const images = product.images;
 
   return (
-    <div className="lg:sticky lg:top-28">
-      <div className="relative overflow-hidden rounded-2xl border border-slate-100 bg-slate-50">
+    <div className="max-sm:-mx-3 lg:sticky lg:top-28">
+      <div className="relative overflow-hidden rounded-2xl border border-slate-100 bg-slate-50 max-sm:rounded-none max-sm:border-0">
         <div className="relative aspect-square">
           <ProductImage
             src={images[active]}
@@ -49,35 +56,6 @@ export function ProductGallery({ product }: { product: Product }) {
           </>
         )}
       </div>
-
-      {images.length > 1 && (
-        <div className="mt-3 grid grid-cols-4 gap-2.5">
-          {images.map((img, i) => (
-            <button
-              key={i}
-              onClick={() => setActive(i)}
-              aria-label={`Ver imagem ${i + 1}`}
-              aria-current={i === active}
-              className={cn(
-                "relative aspect-square overflow-hidden rounded-xl border-2 transition-all",
-                i === active
-                  ? "border-primary-600 ring-2 ring-primary-600/20"
-                  : "border-transparent opacity-70 hover:opacity-100",
-              )}
-            >
-              <ProductImage
-                src={img}
-                alt=""
-                fill
-                sizes="120px"
-                emoji={categoryEmoji(product.category)}
-                label=""
-                imgClassName="object-cover"
-              />
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

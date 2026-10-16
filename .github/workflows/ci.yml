@@ -609,6 +609,12 @@ jobs:
       - name: Validate REST contract
         # Verificações de ponta a ponta contra a API a correr: catálogo, auth,
         # pedidos, pagamentos, cupões, cancelamento, newsletter e endereços.
+        #
+        # API_BASE explícito: o valor por omissão do script (:8081) não coincide
+        # com a porta desta stack (:8080) e o passo morria com ECONNREFUSED — o
+        # mesmo host que `NEXT_PUBLIC_API_BASE_URL` já usa acima.
+        env:
+          API_BASE: http://localhost:8080
         run: node backend/scripts/validate-api.mjs
 
       - name: Upload Playwright report

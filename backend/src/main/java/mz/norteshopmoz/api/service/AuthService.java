@@ -37,8 +37,20 @@ public class AuthService {
     private static final Duration VERIFICATION_TTL = Duration.ofHours(24);
 
     /**
-     * Tentativas falhadas com o código antes de o invalidar. São 1M de combinações
-     * e a janela de validade é longa — sem limite, a força bruta era viável.
+     * Validade do CÓDIGO de verificação (distinta da do link): 15 minutos.
+     *
+     * <p>15 min e não 40 s: o código é lido DENTRO do email (o cliente tem de sair
+     * da loja, abrir a caixa de correio, voltar e escrevê-lo). Com 40 s a maioria
+     * dos clientes chegava tarde e tinha de pedir outro código — e cada pedido
+     * consome a cota de envio. Continua a ser uma janela curta face às 24 h do
+     * link, e cada erro consome uma das {@value #MAX_CODE_ATTEMPTS} tentativas.
+     */
+    private static final Duration CODE_TTL = Duration.ofMinutes(15);
+
+    /**
+     * Tentativas falhadas com o código antes de o invalidar. São 1 milhão de
+     * combinações e a janela de 15 min mantém a força bruta inviável; o limite
+     * mantém-se por defesa em profundidade.
      */
     private static final int MAX_CODE_ATTEMPTS = 5;
 
@@ -105,6 +117,7 @@ public class AuthService {
                 .verificationToken(newVerificationToken())
                 .verificationTokenExpiry(Instant.now().plus(VERIFICATION_TTL))
                 .verificationCode(newVerificationCode())
+                .verificationCodeSentAt(Instant.now())
                 .build();
         userRepository.save(user);
         emailService.sendVerification(user, verificationUrl(user.getVerificationToken()), user.getVerificationCode());
@@ -139,6 +152,10 @@ public class AuthService {
      * Confirma o email com o **código de 6 dígitos** do email — alternativa ao
      * link (o utilizador cola-o na página de configurações da conta).
      *
+     * <p>O código vale apenas {@code CODE_TTL} (15 min) a contar do envio — expirado,
+     * é preciso pedir um novo ({@code resend-verification}). O link do email
+     * continua válido por 24 h e confirma por si só.
+     *
      * <p>Só a própria conta pode usar o seu código (endpoint autenticado) e cada
      * erro consome uma tentativa: ao fim de {@value #MAX_CODE_ATTEMPTS} o código é
      * invalidado e é preciso pedir um novo.
@@ -155,19 +172,23 @@ public class AuthService {
             throw ApiException.conflict("O seu email já está verificado");
         }
         String expected = user.getVerificationCode();
+        Instant sentAt = user.getVerificationCodeSentAt();
+        // Sem `sentAt` (linhas antigas à partida da migração) o código conta como
+        // expirado: pede-se um novo, que já nasce com a validade curta.
         if (expected == null
-                || user.getVerificationTokenExpiry() == null
-                || user.getVerificationTokenExpiry().isBefore(Instant.now())) {
+                || sentAt == null
+                || sentAt.plus(CODE_TTL).isBefore(Instant.now())) {
             throw ApiException.badRequest("Código expirado — peça um novo código de verificação");
         }
         if (!expected.equals(code == null ? "" : code.trim())) {
             int attempts = user.getVerificationCodeAttempts() + 1;
             if (attempts >= MAX_CODE_ATTEMPTS) {
                 // Invalida link e código: obriga a pedir um novo (não fica a janela
-                // aberta a tentativas ilimitadas dentro das 24 horas).
+                // aberta a tentativas ilimitadas dentro da validade).
                 user.setVerificationCode(null);
                 user.setVerificationToken(null);
                 user.setVerificationTokenExpiry(null);
+                user.setVerificationCodeSentAt(null);
                 user.setVerificationCodeAttempts(0);
                 userRepository.save(user);
                 throw ApiException.badRequest("Demasiadas tentativas — peça um novo código de verificação");
@@ -191,6 +212,7 @@ public class AuthService {
         user.setVerificationToken(newVerificationToken());
         user.setVerificationTokenExpiry(Instant.now().plus(VERIFICATION_TTL));
         user.setVerificationCode(newVerificationCode());
+        user.setVerificationCodeSentAt(Instant.now());
         user.setVerificationCodeAttempts(0);
         userRepository.save(user);
         // Mesmo sendo a própria conta, o envio passa pelo travão: é ele que impede
@@ -307,6 +329,13 @@ public class AuthService {
             auditService.logAuthEvent(AuditService.AuthEvent.LOGIN_FAILURE, email, clientIp, userAgent, false, "Invalid password");
             throw ApiException.unauthorized("Credenciais inválidas");
         }
+        // Conta bloqueada pela operação (gestão no painel admin): recusa com 403
+        // após validar as credenciais — não revela se o email existe a quem não
+        // sabe a password.
+        if (user.isBanned()) {
+            auditService.logAuthEvent(AuditService.AuthEvent.LOGIN_FAILURE, email, clientIp, userAgent, false, "Account banned");
+            throw ApiException.forbidden("Esta conta está bloqueada. Contacte o suporte.");
+        }
         
         // Login bem-sucedido — limpa contadores
         loginAttemptService.recordSuccess(clientIp, email);
@@ -348,6 +377,12 @@ public class AuthService {
         });
         if (user.getAvatar() == null && profile.avatar() != null) {
             user.setAvatar(profile.avatar());
+        }
+        // Bloqueio da operação vale também no login social (mesma decisão do login
+        // por email: mensagem genérica, sem expor o motivo interno).
+        if (user.isBanned()) {
+            auditService.logAuthEvent(AuditService.AuthEvent.LOGIN_FAILURE, email, clientIp, userAgent, false, "Account banned (social)");
+            throw ApiException.forbidden("Esta conta está bloqueada. Contacte o suporte.");
         }
         if (!user.isEmailVerified()) {
             user.setEmailVerified(true);

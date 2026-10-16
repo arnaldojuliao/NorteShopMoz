@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { repo } from "@/lib/repo";
-import { formatMZN } from "@/lib/format";
-import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Reveal } from "@/components/ui/Reveal";
 import { ProductGallery } from "@/components/product/ProductGallery";
@@ -111,7 +109,7 @@ export default async function ProductPage({ params }: PageProps) {
   };
 
   return (
-    <div className="container-nsm py-5">
+    <div className="container-nsm pb-5 pt-0 lg:pt-5">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbJsonLd) }}
@@ -121,14 +119,8 @@ export default async function ProductPage({ params }: PageProps) {
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
 
-      <Breadcrumbs
-        items={[
-          { label: category?.name ?? "Produtos", href: category ? `/categoria/${category.slug}` : "/explore" },
-          { label: product.name },
-        ]}
-      />
 
-      <div className="mt-5 grid gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,4fr)] lg:gap-12">
+      <div className="mt-5 max-sm:mt-0 grid gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,4fr)] lg:gap-12">
         <ProductGallery product={product} />
         <BuyBox product={product} />
       </div>
@@ -142,11 +134,6 @@ export default async function ProductPage({ params }: PageProps) {
         />
         <ProductGrid products={related} />
       </Reveal>
-
-      <p className="mt-10 rounded-2xl bg-slate-50 p-4 text-center text-xs text-slate-500">
-                Preço indicativo em Meticais (MZN). O preço final, prazos de entrega e a
-                disponibilidade são confirmados no checkout. · {formatMZN(product.price)}
-              </p>
     </div>
   );
 }

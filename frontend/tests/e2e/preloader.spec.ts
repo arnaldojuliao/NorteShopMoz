@@ -26,7 +26,7 @@ test.describe('preloader de entrada', () => {
     await expect(loader).toBeHidden({ timeout: 20000 });
 
     // O site fica utilizável: o conteúdo voltou e o scroll está livre.
-    await expect(page.locator('header')).toBeVisible();
+    await expect(page.locator('header:visible')).toBeVisible();
     await expect(page.locator('body')).not.toHaveCSS('overflow', 'hidden');
   });
 
@@ -38,7 +38,7 @@ test.describe('preloader de entrada', () => {
 
     await page.getByRole('button', { name: /saltar introdução/i }).click();
     await expect(loader).toBeHidden({ timeout: 5000 });
-    await expect(page.locator('header')).toBeVisible();
+    await expect(page.locator('header:visible')).toBeVisible();
   });
 
   test('visita repetida no mesmo dia corre a versão curta', async ({ page }) => {

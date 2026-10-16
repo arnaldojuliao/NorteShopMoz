@@ -19,7 +19,23 @@
  * de pedidos (dono/admin, repor stock, estados terminais).
  */
 
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 const B = process.env.API_BASE ?? "http://localhost:8081";
+
+/**
+ * Catálogo semeado — a fonte de verdade da contagem de categorias.
+ *
+ * A verificação estava a esperar 7 categorias, um número fixo que ficou
+ * desatualizado quando a taxonomia cresceu (V9: 14 categorias reais). Com o
+ * valor lido do seed, o teste acompanha o catálogo em vez de o contradizer.
+ */
+const SEED = JSON.parse(
+  readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../src/main/resources/seed/catalog.json"), "utf8"),
+);
+const EXPECTED_CATEGORIES = SEED.categories.length;
 
 /**
  * Password dos utilizadores criados pelo script: a política do registo exige
@@ -35,7 +51,11 @@ const PASSWORD = "Segredo@123";
  * (os pedidos inválidos devolviam 429 em vez do 400 esperado).
  */
 const RUN = Date.now().toString(36);
-const contact = (prefix) => `${prefix}-${RUN}@teste.com`;
+// Contador próprio: CADA pedido tem de usar um contacto distinto. O travão é por
+// contacto (3/hora) e uma execução cria vários pedidos — reutilizar o mesmo email
+// fazia os últimos receberem 429 em vez do resultado esperado.
+let contactSeq = 0;
+const contact = (prefix) => `${prefix}-${RUN}-${++contactSeq}@teste.com`;
 
 let pass = 0, fail = 0;
 function check(name, cond, extra = "") {
@@ -120,8 +140,9 @@ console.log("\n🗂️  Categorias");
 {
   const { status, body } = await api("/api/categories");
   check("GET /api/categories → {data} com productCount",
-        status === 200 && body?.data?.length === 7 && typeof body.data[0].productCount === "number",
-        `n=${body?.data?.length}`);
+        status === 200 && body?.data?.length === EXPECTED_CATEGORIES
+          && typeof body.data[0].productCount === "number",
+        `n=${body?.data?.length} (esperado ${EXPECTED_CATEGORIES} do seed)`);
 }
 
 // ── 3. Reviews ─────────────────────────────────────────────────────
@@ -182,7 +203,9 @@ console.log("\n✍️  Submeter avaliação");
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ rating: 5, title: "Teste", comment: "Muito bom!" }),
   });
-  check("POST review sem token → 401", anon.status === 401, `status=${anon.status}`);
+  // O filtro CSRF corre antes da autorização: sem cookie de sessão nem header
+  // X-CSRF-Token, o pedido mutante é recusado com 403 antes de chegar ao 401.
+  check("POST review sem token → 403 (CSRF antes da autorização)", anon.status === 403, `status=${anon.status}`);
 
   const bad = await api("/api/products/capa-para-iphone/reviews", {
     method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -295,7 +318,9 @@ async function computeExpected(province) {
   const order = {
     items: [
       { productId: "p-001", slug: "capa-para-iphone", name: "Capa para iPhone", image: "img1", price: 1, qty: 1 },
-      { productId: "p-006", slug: "coluna-bluetooth-portatil", name: "Coluna Bluetooth portátil", image: "img2", price: 1, qty: 2 },
+      // O servidor resolve pelo productId (não pelo slug): tem de ser o MESMO
+      // produto, senão o subtotal recalculado não bate com computeExpected.
+      { productId: "p-018", slug: "coluna-bluetooth-portatil", name: "Coluna Bluetooth portátil", image: "img2", price: 1, qty: 2 },
     ],
     subtotal: 99999, shipping: 999, discount: 999, total: 1, // valores do cliente — devem ser ignorados
     address: { fullName: "Anabela Teste", phone: "+258840000000", email, address: "Av. 24 de Julho, 100",
@@ -334,11 +359,16 @@ async function computeExpected(province) {
   });
   check("POST /api/orders sem token (guest checkout) → 201", guest.status === 201 && guest.body?.data?.id !== o.id, `status=${guest.status}`);
 
-  // Lookup de estado por ID — GET /api/orders/{id} é público (IDs de alta entropia)
+  // Lookup de estado por ID — um pedido de convidado exige prova de contacto
+  // (`?email=` ou o telefone usados no checkout); sem ela devolve 404 (e não
+  // 401), para não confirmar a existência do pedido a quem só tem o ID.
   const guestId = guest.body?.data?.id;
-  const lookup = await api(`/api/orders/${guestId}`);
-  check("GET /api/orders/{id} sem token (lookup guest) → 200",
+  const lookup = await api(`/api/orders/${guestId}?email=${encodeURIComponent(email)}`);
+  check("GET /api/orders/{id}?email= (lookup guest com prova de contacto) → 200",
         lookup.status === 200 && lookup.body?.data?.id === guestId, `status=${lookup.status}`);
+  const lookupNoProof = await api(`/api/orders/${guestId}`);
+  check("GET /api/orders/{id} sem prova de contacto → 404",
+        lookupNoProof.status === 404, `status=${lookupNoProof.status}`);
   const anonUserOrder = await api(`/api/orders/${o.id}`);
   check("GET /api/orders/{id} de utilizador sem token → 401", anonUserOrder.status === 401, `status=${anonUserOrder.status}`);
 }
@@ -378,21 +408,28 @@ console.log("\n💳 Pagamentos online");
         card.status === 201 && (card.body?.data?.paymentReference ?? "").endsWith("••••1234"),
         `status=${card.status} ref=${card.body?.data?.paymentReference}`);
 
+  // Os pedidos inválidos usam um contacto NOVO cada um: com o mesmo email, o
+  // travão (3/hora) recusava-os com 429 antes de a validação do pagamento correr
+  // e o 400 esperado nunca aparecia.
+  const withContact = (extra) => ({
+    ...base, address: { ...base.address, email: contact("pago-inv") }, ...extra,
+  });
+
   const noPhone = await api("/api/orders", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...base, paymentMethod: "M-Pesa" }),
+    body: JSON.stringify(withContact({ paymentMethod: "M-Pesa" })),
   });
   check("M-Pesa sem telefone → 400 {error}", noPhone.status === 400 && noPhone.body?.error, `status=${noPhone.status}`);
 
   const badPhone = await api("/api/orders", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...base, paymentMethod: "e-Mola", paymentInfo: { phone: "12345" } }),
+    body: JSON.stringify(withContact({ paymentMethod: "e-Mola", paymentInfo: { phone: "12345" } })),
   });
   check("e-Mola com telefone inválido → 400", badPhone.status === 400, `status=${badPhone.status}`);
 
   const unknown = await api("/api/orders", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...base, paymentMethod: "Bitcoin" }),
+    body: JSON.stringify(withContact({ paymentMethod: "Bitcoin" })),
   });
   check("método desconhecido → 400", unknown.status === 400, `status=${unknown.status}`);
 }
@@ -408,10 +445,12 @@ console.log("\n🛡️ Admin — estado dos pedidos");
   check("login admin → token (role ADMIN)",
         admin.status === 200 && admin.body?.data?.user?.role === "ADMIN", `status=${admin.status}`);
 
+  // Pedido de convidado (sem token) — o lookup exige a prova de contacto.
+  const adminOrderEmail = contact("guest");
   const adminOrder = {
     items: [{ productId: "p-001", slug: "capa-para-iphone", name: "Capa para iPhone", image: "i", price: 15900, qty: 1 }],
     subtotal: 0, shipping: 0, discount: 0, total: 0,
-    address: { fullName: "Cliente Teste", phone: "+258840000000", email: contact("guest"),
+    address: { fullName: "Cliente Teste", phone: "+258840000000", email: adminOrderEmail,
                address: "Av. 1", city: "Maputo", province: "Maputo Cidade" },
     paymentMethod: "Pagamento na entrega",
   };
@@ -433,7 +472,7 @@ console.log("\n🛡️ Admin — estado dos pedidos");
   }
   check("transição admin: 6 estados até Entregue", walked);
 
-  const lookup = await api(`/api/orders/${oid}`);
+  const lookup = await api(`/api/orders/${oid}?email=${encodeURIComponent(adminOrderEmail)}`);
   check("estado real refletido no lookup (Entregue)", lookup.body?.data?.status === "Entregue", `status=${lookup.body?.data?.status}`);
 
   // Página admin de pedidos (paginada NO SERVIDOR) + filtro por estado
@@ -497,7 +536,60 @@ console.log("\n🛡️ Admin — estado dos pedidos");
     method: "PATCH", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status: "Pagamento confirmado" }),
   });
-  check("PATCH sem token → 401", anon.status === 401, `status=${anon.status}`);
+  check("PATCH sem token → 403 (CSRF antes da autorização)", anon.status === 403, `status=${anon.status}`);
+}
+
+// ── 6b. Admin — moderação de avaliações ───────────────────────────
+console.log("\n🧹 Admin — moderação de avaliações");
+{
+  const admin = await api("/api/auth/login", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: "admin@norteshopmoz.com", password: "Admin@2026" }),
+  });
+  const at = newSession(admin);
+  const authJson = { "Content-Type": "application/json", Authorization: `Bearer ${at}` };
+
+  // Cria uma avaliação identificável para remover a seguir.
+  const created = await api("/api/products/pelicula-de-vidro/reviews", {
+    method: "POST", headers: authJson,
+    body: JSON.stringify({ rating: 1, title: "Spam", comment: `Avaliação a moderar ${RUN}.` }),
+  });
+  const reviewId = created.body?.data?.id;
+  check("avaliação criada para moderar", created.status === 201 && Number.isInteger(reviewId),
+        `status=${created.status} id=${reviewId}`);
+
+  const list = await api("/api/admin/reviews?size=100", { headers: { Authorization: `Bearer ${at}` } });
+  check("GET /api/admin/reviews (admin) → página com o produto",
+        list.status === 200 && Array.isArray(list.body?.data?.items)
+          && typeof list.body.data.totalItems === "number"
+          && list.body.data.items.some((r) => r.id === reviewId && r.productSlug === "pelicula-de-vidro"),
+        `status=${list.status} n=${list.body?.data?.items?.length} total=${list.body?.data?.totalItems}`);
+  const huge = await api("/api/admin/reviews?size=100000", { headers: { Authorization: `Bearer ${at}` } });
+  check("teto do tamanho de página (?size=100000 → 100)",
+        huge.status === 200 && huge.body?.data?.size === 100, `size=${huge.body?.data?.size}`);
+
+  const customer = await api("/api/admin/reviews", { headers: { Authorization: `Bearer ${token}` } });
+  check("avaliações com token de cliente → 403", customer.status === 403, `status=${customer.status}`);
+  const anon = await api("/api/admin/reviews");
+  check("avaliações sem token → 401", anon.status === 401, `status=${anon.status}`);
+
+  const removed = await api(`/api/admin/reviews/${reviewId}`, {
+    method: "DELETE", headers: { Authorization: `Bearer ${at}` },
+  });
+  check("DELETE /api/admin/reviews/{id} (admin) → 200 {deleted:true}",
+        removed.status === 200 && removed.body?.data?.deleted === true, `status=${removed.status}`);
+  const removedAgain = await api(`/api/admin/reviews/${reviewId}`, {
+    method: "DELETE", headers: { Authorization: `Bearer ${at}` },
+  });
+  check("DELETE repetido → 404", removedAgain.status === 404, `status=${removedAgain.status}`);
+
+  const publicList = await api("/api/products/pelicula-de-vidro/reviews");
+  check("avaliação removida desaparece da lista pública",
+        publicList.status === 200 && !publicList.body?.data?.some((r) => r.id === reviewId));
+  const customerDelete = await api(`/api/admin/reviews/1`, {
+    method: "DELETE", headers: { Authorization: `Bearer ${token}` },
+  });
+  check("cliente a remover avaliação → 403", customerDelete.status === 403, `status=${customerDelete.status}`);
 }
 
 // ── 7. Newsletter ─────────────────────────────────────────────────
@@ -626,18 +718,27 @@ console.log("\n🎟️  Cupões");
 
   // Cupão aplicado ao pedido: grava o código e desconta no total.
   const couponOrder = {
-    items: [{ productId: "p-003", slug: "power-bank-20000-mah", name: "Power Bank", image: "i", price: 1150, qty: 1 }],
+    // productId e slug do MESMO produto (o servidor resolve pelo id): p-012 =
+    // power-bank-20000-mah (3500) — acima do mínimo de 1000 do cupão.
+    items: [{ productId: "p-012", slug: "power-bank-20000-mah", name: "Power Bank", image: "i", price: 1150, qty: 1 }],
     subtotal: 0, shipping: 0, discount: 0, total: 0,
     address: { fullName: "Cli Cupão", phone: "+258840000000", email: contact("cupao"),
                address: "Av. 1", city: "Maputo", province: "Maputo Cidade" },
     paymentMethod: "Pagamento na entrega",
   };
+  // Contactos distintos: o travão é por contacto (3/hora) e dois pedidos seguidos
+  // com o mesmo email consomem quota sem necessidade.
   const plain = await api("/api/orders", {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(couponOrder),
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...couponOrder, address: { ...couponOrder.address, email: contact("cupao-sem") } }),
   });
   const withCoupon = await api("/api/orders", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...couponOrder, couponCode: code }),
+    body: JSON.stringify({
+      ...couponOrder,
+      address: { ...couponOrder.address, email: contact("cupao-com") },
+      couponCode: code,
+    }),
   });
   check("pedido com couponCode → 201 + código gravado",
         withCoupon.status === 201 && withCoupon.body?.data?.couponCode === code,
@@ -678,16 +779,18 @@ console.log("\n🚫 Cancelamento de pedidos");
   const at = newSession(admin);
 
   const orderBody = {
-    items: [{ productId: "p-003", slug: "power-bank-20000-mah", name: "Power Bank", image: "i", price: 1150, qty: 1 }],
+    items: [{ productId: "p-012", slug: "power-bank-20000-mah", name: "Power Bank", image: "i", price: 1150, qty: 1 }],
     subtotal: 0, shipping: 0, discount: 0, total: 0,
     address: { fullName: "Cli Cancelamento", phone: "+258840000000", email: contact("cancel"),
                address: "Av. 1", city: "Maputo", province: "Maputo Cidade" },
     paymentMethod: "Pagamento na entrega",
   };
+  // Cada pedido usa um contacto NOVO: o travão é por contacto (3/hora) e esta
+  // secção cria quatro pedidos — com o mesmo email o último recebia 429.
   const createOrder = (headers = {}) =>
     api("/api/orders", {
       method: "POST", headers: { "Content-Type": "application/json", ...headers },
-      body: JSON.stringify(orderBody),
+      body: JSON.stringify({ ...orderBody, address: { ...orderBody.address, email: contact("cancel") } }),
     });
 
   // O dono autenticado cancela o próprio pedido.
@@ -701,8 +804,10 @@ console.log("\n🚫 Cancelamento de pedidos");
   check("DELETE /api/orders/{id} (dono) → 200 Cancelado",
         cancelled.status === 200 && cancelled.body?.data?.status === "Cancelado",
         `status=${cancelled.status} estado=${cancelled.body?.data?.status}`);
-  const lookup = await api(`/api/orders/${mineId}`);
-  check("estado Cancelado refletido no lookup público",
+  // Pedido de CONTA: o lookup exige ser o dono (ao contrário do de convidado,
+  // que aceita a prova de contacto).
+  const lookup = await api(`/api/orders/${mineId}`, { headers: { Authorization: `Bearer ${token}` } });
+  check("estado Cancelado refletido no lookup (dono)",
         lookup.body?.data?.status === "Cancelado", `estado=${lookup.body?.data?.status}`);
   const twice = await api(`/api/orders/${mineId}`, {
     method: "DELETE", headers: { Authorization: `Bearer ${token}` },
@@ -722,7 +827,7 @@ console.log("\n🚫 Cancelamento de pedidos");
   check("outro cliente a cancelar → 403", forbidden.status === 403, `status=${forbidden.status}`);
 
   const anonCancel = await api(`/api/orders/${otherId}`, { method: "DELETE" });
-  check("DELETE sem token → 401", anonCancel.status === 401, `status=${anonCancel.status}`);
+  check("DELETE sem token → 403 (CSRF antes da autorização)", anonCancel.status === 403, `status=${anonCancel.status}`);
 
   const missing = await api("/api/orders/NSM-NAOEXISTE000", {
     method: "DELETE", headers: { Authorization: `Bearer ${at}` },

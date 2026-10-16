@@ -154,7 +154,7 @@ export function ProductTabs({ product }: { product: Product }) {
         className="pt-6"
       >
         {active === "descricao" && (
-          <div className="max-w-3xl space-y-4 text-[15px] leading-relaxed text-slate-600">
+          <div className="max-w-3xl space-y-4 text-sm leading-relaxed text-slate-600">
             {product.description.map((p, i) => (
               <p key={i}>{p}</p>
             ))}

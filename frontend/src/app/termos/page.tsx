@@ -9,7 +9,6 @@ export const metadata: Metadata = {
 export default function TermosPage() {
   return (
     <InfoPage
-      crumb="Termos e condições"
       title="Termos e condições"
       updatedAt="Agosto de 2026"
       sections={[
@@ -28,8 +27,7 @@ export default function TermosPage() {
           body: (
             <p>
               Uma encomenda só é considerada confirmada após a sua validação. Os métodos de
-              pagamento disponíveis são: pagamento na entrega, transferência bancária,
-              M-Pesa, e-Mola e cartão Visa/Mastercard.
+              pagamento disponíveis são: M-Pesa, e-Mola e cartão Visa/Mastercard.
             </p>
           ),
         },

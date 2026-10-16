@@ -9,7 +9,7 @@ import {
   products as localProducts,
   searchProducts as localSearch,
 } from "@/lib/data/products";
-import { categories as localCategories } from "@/lib/data/categories";
+import { newCategories as localCategories } from "@/lib/new-categories";
 
 /**
  * Repositório de dados — ÚNICO ponto de acesso aos dados.

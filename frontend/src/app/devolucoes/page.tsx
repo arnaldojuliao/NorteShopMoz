@@ -10,7 +10,6 @@ export const metadata: Metadata = {
 export default function DevolucoesPage() {
   return (
     <InfoPage
-      crumb="Política de devolução"
       title="Política de devolução"
       subtitle="Devolução simples, rápida e sem complicações."
       updatedAt="Agosto de 2026"

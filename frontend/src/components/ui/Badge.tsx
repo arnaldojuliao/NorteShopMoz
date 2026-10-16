@@ -43,4 +43,5 @@ export const badgeTone: Record<string, Tone> = {
   NOVO: "green",
   OFERTA: "red",
   "MAIS VENDIDO": "amber",
+  DESTAQUE: "blue",
 };

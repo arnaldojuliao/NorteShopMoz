@@ -50,6 +50,7 @@ public class CsrfProtectionFilter extends OncePerRequestFilter {
             "/api/auth/revoke-refresh",
             "/api/newsletter/subscribe",
             "/api/upload",                   // POST - admin, multipart
+            "/api/admin/reviews",            // DELETE - moderação de avaliações (só admin)
             "/actuator/health",
             "/actuator/info"
     };

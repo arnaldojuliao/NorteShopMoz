@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 import { envOr } from "./src/lib/env";
 
 // `envOr` porque um build arg ausente chega como string vazia (não undefined).
-const API_BASE = envOr(process.env.NEXT_PUBLIC_API_BASE_URL, "http://localhost:8081");
+const API_BASE = envOr(process.env.NEXT_PUBLIC_API_BASE_URL, "http://localhost:8080");
 
 const remotePatterns: NonNullable<NextConfig["images"]>["remotePatterns"] = [
   { protocol: "https", hostname: "images.unsplash.com" },

@@ -29,6 +29,7 @@ function VerifyEmailContent() {
   // Confirmação pelo código de 6 dígitos do email — alternativa ao link, útil
   // quando ele expira ou se abre a página sem link. O endpoint identifica a
   // conta pela sessão (é autenticado), por isso sem sessão só resta o link.
+  // O código vale 15 min: o contador arranca quando o formulário fica disponível.
   const {
     code,
     setCode,
@@ -36,8 +37,15 @@ function VerifyEmailContent() {
     verifying,
     submit: submitCode,
     resend: resendCode,
+    expiresLabel,
+    codeExpired,
+    startValidity,
   } = useEmailVerificationCode();
   const canUseCode = Boolean(user && user.emailVerified !== true);
+
+  useEffect(() => {
+    if (canUseCode && state.status === "error") startValidity();
+  }, [canUseCode, state.status, startValidity]);
 
   /** Confirma pelo código e passa para o estado de sucesso. */
   const confirmWithCode = async () => {
@@ -162,24 +170,28 @@ function VerifyEmailContent() {
                 className="mt-5 w-full rounded-xl border border-slate-200 bg-slate-50 p-4 text-left"
               >
                 <p className="text-xs font-semibold text-slate-600">
-                  Ou insira o código de 6 dígitos que enviámos para o seu email:
+                  Ou insira o código de 6 dígitos que enviámos para o seu email (vale 15 minutos):
                 </p>
                 <OtpInput
                   label="Código de verificação"
                   value={code}
                   onChange={setCode}
                   onComplete={() => void confirmWithCode()}
-                  disabled={verifying}
+                  disabled={verifying || codeExpired}
                   required
-                  error={error ?? undefined}
-                  hint={error ? undefined : "Válido por 24 horas · verifique também o spam."}
+                  error={
+                    error ?? (codeExpired ? "O código expirou — peça um novo código." : null) ?? undefined
+                  }
+                  hint={
+                    codeExpired ? undefined : `Expira em ${expiresLabel} · verifique também o spam.`
+                  }
                   className="mt-3"
                 />
                 <Button
                   type="submit"
                   fullWidth
                   loading={verifying}
-                  disabled={code.length !== 6}
+                  disabled={codeExpired || code.length !== 5}
                   className="mt-3"
                 >
                   Confirmar com o código

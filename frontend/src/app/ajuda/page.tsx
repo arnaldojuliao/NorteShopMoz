@@ -10,15 +10,15 @@ export const metadata: Metadata = {
 const faqs = [
   {
     q: "Como faço uma encomenda?",
-    a: "Procure o produto, adicione ao carrinho e finalize a compra no checkout. Pode pagar na entrega ou por transferência bancária.",
+    a: "Procure o produto, adicione ao carrinho e finalize a compra no checkout. Pode pagar por M-Pesa, e-Mola ou cartão Visa/Mastercard.",
   },
   {
     q: "Quanto demora a entrega?",
     a: "Maputo: 1–3 dias úteis. Restantes províncias: 2–10 dias úteis conforme a localização. O prazo exato é indicado no checkout.",
   },
   {
-    q: "Posso pagar na entrega?",
-    a: "Sim! O pagamento na entrega (dinheiro) está disponível em todo Moçambique. Também aceitamos transferência bancária.",
+    q: "Que métodos de pagamento aceitam?",
+    a: "Aceitamos M-Pesa, e-Mola e cartão Visa/Mastercard — tudo pago online no checkout, disponível em todo Moçambique.",
   },
   {
     q: "E se o produto não for o que esperava?",
@@ -30,7 +30,7 @@ const faqs = [
   },
   {
     q: "Aceitam M-Pesa ou e-Mola?",
-    a: "Estamos a preparar a integração com as carteiras móveis M-Pesa e e-Mola. Enquanto isso, use pagamento na entrega ou transferência.",
+    a: "Sim! M-Pesa e e-Mola estão totalmente integrados no checkout — escolha a carteira móvel e insira o número para confirmar o pagamento.",
   },
 ];
 
@@ -52,7 +52,6 @@ export default function AjudaPage() {
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(faqJsonLd) }}
       />
       <InfoPage
-      crumb="Ajuda"
       title="Perguntas frequentes"
       subtitle="Tudo o que precisa de saber para comprar com confiança."
       updatedAt="Agosto de 2026"

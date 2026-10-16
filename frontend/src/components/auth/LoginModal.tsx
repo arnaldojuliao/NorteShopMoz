@@ -154,7 +154,8 @@ export function LoginModal() {
 
   // Confirmação do email pelo código de 6 dígitos no próprio ecrã de registo: o
   // `register` já deixa a sessão ativa, e o endpoint da confirmação por código
-  // identifica a conta pela sessão.
+  // identifica a conta pela sessão. O código vale 15 min — o contador arranca
+  // quando o ecrã «Conta criada» aparece.
   const {
     code,
     setCode,
@@ -162,8 +163,15 @@ export function LoginModal() {
     verifying,
     submit: submitCode,
     resend: resendCode,
+    expiresLabel,
+    codeExpired,
+    startValidity,
   } = useEmailVerificationCode();
   const [codeConfirmed, setCodeConfirmed] = useState(false);
+
+  useEffect(() => {
+    if (registered) startValidity();
+  }, [registered, startValidity]);
 
   /** Confirma o código e passa a mostrar a conta como verificada. */
   const confirmWithCode = async () => {
@@ -392,7 +400,7 @@ export function LoginModal() {
                 </ul>
 
                 <p className="relative mt-auto pt-12 text-xs text-white/50">
-                  Entrega para todo Moçambique · Pagamento na entrega
+                  Entrega para todo Moçambique · M-Pesa · e-Mola · Cartão
                 </p>
               </aside>
 
@@ -514,7 +522,9 @@ export function LoginModal() {
                         <Link
                           href="/recuperar-password"
                           onClick={closeLogin}
-                          className="text-xs font-semibold text-primary-700 transition hover:text-primary-800 hover:underline"
+                          // `inline-block py-1.5`: o alvo tinha 16px de altura
+                          // (mínimo WCAG 2.2 AA para alvos: 24px).
+                          className="inline-block py-1.5 text-xs font-semibold text-primary-700 transition hover:text-primary-800 hover:underline"
                         >
                           Esqueceu a palavra-passe?
                         </Link>
@@ -523,11 +533,11 @@ export function LoginModal() {
 
                     {/* Remember me checkbox (apenas login) */}
                     {mode === "login" && (
-                      <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                      <label className="flex min-h-6 cursor-pointer items-center gap-2 py-0.5 text-sm text-slate-600">
                         <input
                           type="checkbox"
                           name="rememberMe"
-                          className="size-4 rounded border-slate-300 text-primary-700 focus:ring-primary-500"
+                          className="size-4 shrink-0 rounded border-slate-300 text-primary-700 focus:ring-primary-500"
                         />
                         Lembrar-me (30 dias)
                       </label>
@@ -634,7 +644,8 @@ export function LoginModal() {
           <p className="mt-1.5 max-w-xs text-sm leading-relaxed text-slate-500">
             Enviámos um código de 6 dígitos para{" "}
             <span className="font-semibold text-slate-700">{registered?.email}</span>. Insira-o em
-            baixo para confirmar a sua conta — também pode confirmar pelo link do email.
+            baixo em 15 minutos para confirmar a sua conta — também pode confirmar pelo link do
+            email.
           </p>
 
           {codeConfirmed ? (
@@ -653,16 +664,22 @@ export function LoginModal() {
                 value={code}
                 onChange={setCode}
                 onComplete={() => void confirmWithCode()}
-                disabled={verifying}
+                disabled={verifying || codeExpired}
                 required
-                error={codeError ?? undefined}
-                hint={codeError ? undefined : "Válido por 24 horas · verifique também o spam."}
+                error={
+                  codeError ??
+                  (codeExpired ? "O código expirou — peça um novo código." : null) ??
+                  undefined
+                }
+                hint={
+                  codeExpired ? undefined : `Expira em ${expiresLabel} · verifique também o spam.`
+                }
               />
               <Button
                 type="submit"
                 fullWidth
                 loading={verifying}
-                disabled={code.length !== 6}
+                disabled={codeExpired || code.length !== 5}
                 className="mt-3"
               >
                 Confirmar email

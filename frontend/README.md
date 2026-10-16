@@ -28,10 +28,10 @@ npm run test:e2e   # Playwright (precisa do backend a correr — ver "Testes")
 
 ## O que está implementado
 
-- **Home page completa**: hero carousel (autoplay + navegação manual), barra
-  de benefícios, *Ofertas de hoje* com contador dinâmico, categorias com
-  scroll horizontal no mobile, produtos em destaque, mais vendidos,
-  novidades, *Você também pode gostar* (carousel), newsletter e footer.
+- **Home page em formato marketplace**: barra de confiança (compra segura,
+  privacidade, pagamentos, entrega), *Ofertas relâmpago*, faixa de métodos de
+  pagamento e o catálogo completo com carregamento progressivo — sem hero, sem
+  contadores e sem carrosséis pesados (CSS/Tailwind e os cartões já existentes).
 - **Páginas internas**: produto (galeria, variantes, tabs com avaliações
   submetidas por clientes, JSON-LD), categoria (filtros + ordenação), pesquisa,
   carrinho, checkout com os 5 métodos de pagamento moçambicanos (pagamento na
@@ -88,12 +88,14 @@ pedido devolvido pelo servidor; a página de conta consulta o estado real por ID
 (admin — encaminha o `Authorization`; só avança na timeline, 400 ao recuar) e
 `GET /api/admin/orders` (lista admin de todos os pedidos, com filtro `?status=`).
 
-**Pagamentos online (M-Pesa, e-Mola, cartão)** — ativos no checkout com dados
-por método (telemóvel para carteiras móveis; número/validade/CVC para cartão,
-validados no navegador). O servidor revalida, cobra no gateway (em modo
-`simulated` por omissão gera uma referência sem cobrar; `PAYMENTS_MODE=live`
-para gateway real) e os pedidos pagos online já entram em
-“Pagamento confirmado” com `paymentReference`.
+**Pagamentos online (M-Pesa, e-Mola, cartão)** — ativos no checkout. Com o
+gateway real (PaySuite, `PAYMENTS_MODE=live`) o servidor devolve `checkoutUrl` e o
+checkout **redireciona** o cliente para a página de pagamento do provedor, que
+recolhe os dados do método; o pedido entra em **“Aguarda pagamento”** e só passa a
+“Pagamento confirmado” quando o webhook do provedor chega. Em modo `simulated`
+(dev) a cobrança é imediata, com referência gerada localmente, e não há
+redirecionamento — `GET /api/payments/methods` expõe `hostedCheckout` para o
+checkout escolher entre os dois fluxos.
 
 **Painel de administração** — `frontend/src/app/admin/page.tsx` (`/admin`):
 login com conta ADMIN (o `/entrar` guarda o token JWT em `localStorage`;
@@ -114,9 +116,10 @@ do utilizador; administradores vão diretos ao `/admin`.
 (`X-Guest-Id`), o carrinho é guardado no servidor (`GET/PUT /api/cart`) com
 merge no arranque; sem ligação fica em `localStorage` e sincroniza depois.
 
-**Newsletter** — a subscrição da home liga ao backend (`POST
-/api/newsletter/subscribe`, idempotente por email) e envia boas-vindas via
-Resend; a lista de subscritores está no painel admin (`/api/newsletter/subscribers`).
+**Newsletter (apenas API)** — a secção de subscrição saiu da loja e a lista de
+subscritores saiu do painel admin; o backend mantém `POST
+/api/newsletter/subscribe` (idempotente por email, boas-vindas via Resend) e
+`GET /api/newsletter/subscribers`, ambos cobertos pelo `validate-api.mjs`.
 
 **Avaliações** — clientes autenticados avaliam produtos (aba “Avaliações” da
 página de produto; `POST /api/products/{slug}/reviews`). O selo “Compra
@@ -131,13 +134,18 @@ no servidor ao criar o pedido (`couponCode` no payload). A gestão de cupões
 (criar/listar/remover) está no painel `/admin`, secção **Cupões**
 (`GET/POST/DELETE /api/admin/coupons`).
 
+**Moderação de avaliações** — o painel `/admin` tem a secção **Avaliações**
+(`GET /api/admin/reviews`, `DELETE /api/admin/reviews/{id}`): lista todas as
+avaliações da loja (autor, estrelas, produto, data) e permite remover as que
+violam as regras, recalculando a média do produto.
+
 **Cancelamento de pedidos** — o cliente pode cancelar um pedido em curso na
 página de acompanhamento (`/pedido/{id}`) e na área de conta
 (`DELETE /api/orders/{id}`); o admin também tem o botão **Cancelar** em cada
 pedido. O estado terminal `Cancelado` aparece na timeline com aviso próprio e
 já não avança para os passos seguintes.
 
-**Testes** — `npm test` corre Vitest (**71 testes** em `src/lib/*.test.ts`:
+**Testes** — `npm test` corre Vitest (**81 testes** em `src/lib/*.test.ts`:
 format, utils, currency, env, shipping, api, repo e orders, incluindo o
 fallback API↔local). `npm run test:e2e` corre o **Playwright** (7 specs em
 `tests/e2e`): checkout, cupões, cancelamento, admin, autenticação, pesquisa e
@@ -145,9 +153,9 @@ preloader — precisa do **backend a correr** (o `global-setup` espera por ele e
 cria as contas de teste) e de um `npm run build` prévio. Em CI corre no job
 *Integration – E2E & API contract*, com Postgres e Redis próprios. O contrato
 REST é ainda validado de ponta a ponta pelo `backend/scripts/validate-api.mjs`
-(**79 verificações** — catálogo, auth, pedidos, pagamentos, avaliações,
-newsletter e endereços) contra a API a correr em `http://localhost:8081`
-(ver README do backend).
+(**117 verificações** — catálogo, auth, pedidos, pagamentos, avaliações,
+moderação, cupões, cancelamento, newsletter e endereços) contra a API a correr
+em `http://localhost:8081` (ver README do backend).
 
 ## Estrutura
 

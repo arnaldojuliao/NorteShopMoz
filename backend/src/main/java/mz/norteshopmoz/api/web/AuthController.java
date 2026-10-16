@@ -156,7 +156,7 @@ public class AuthController {
 
     /**
      * Confirma o email com o código de 6 dígitos recebido no email (autenticado —
-     * o utilizador cola-o na página de configurações da conta).
+     * o utilizador cola-o na página de configurações da conta; vale 15 min).
      */
     @PostMapping("/verify-email-code")
     public ResponseEntity<?> verifyEmailWithCode(@AuthenticationPrincipal UserPrincipal principal,

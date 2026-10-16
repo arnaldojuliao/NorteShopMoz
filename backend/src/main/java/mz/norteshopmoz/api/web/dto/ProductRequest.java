@@ -1,8 +1,10 @@
 package mz.norteshopmoz.api.web.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
@@ -25,8 +27,8 @@ public record ProductRequest(
         List<String> images,
         List<String> tags,
         List<String> badges,
-        List<SpecRequest> specs,
-        List<VariantRequest> variants,
+        List<@Valid SpecRequest> specs,
+        List<@Valid VariantRequest> variants,
         @Size(min = 2, max = 2, message = "Dias de entrega deve ser [min, max]") List<Integer> deliveryDays,
         Boolean featured,
         Boolean bestseller,
@@ -36,7 +38,14 @@ public record ProductRequest(
 
     public record SpecRequest(String label, String value) {}
 
-    public record VariantRequest(String type, List<OptionRequest> options) {}
+    /**
+     * Variante do produto (Cor, Tamanho…). As opções são {@code @NotEmpty}: um
+     * payload com variantes vazias criava produtos que crashavam a página de
+     * detalhe no frontend (acesso a {@code options[0]}).
+     */
+    public record VariantRequest(
+            @NotBlank(message = "Tipo de variante é obrigatório") String type,
+            @NotEmpty(message = "Variante sem opções") List<@Valid OptionRequest> options) {}
 
-    public record OptionRequest(String name, String hex) {}
+    public record OptionRequest(@NotBlank(message = "Opção sem nome") String name, String hex) {}
 }

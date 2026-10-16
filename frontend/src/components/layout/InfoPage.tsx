@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 
 export interface InfoSection {
   title?: string;
@@ -7,13 +6,11 @@ export interface InfoSection {
 }
 
 export function InfoPage({
-  crumb,
   title,
   subtitle,
   updatedAt,
   sections,
 }: {
-  crumb: string;
   title: string;
   subtitle?: string;
   updatedAt?: string;
@@ -21,7 +18,6 @@ export function InfoPage({
 }) {
   return (
     <div className="container-nsm max-w-3xl py-6">
-      <Breadcrumbs items={[{ label: crumb }]} />
       <h1 className="mt-4 font-display text-3xl font-extrabold text-slate-900">{title}</h1>
       {subtitle && <p className="mt-2 text-slate-500">{subtitle}</p>}
       {updatedAt && (
@@ -33,7 +29,7 @@ export function InfoPage({
             {s.title && (
               <h2 className="mb-2 font-display text-lg font-bold text-slate-900">{s.title}</h2>
             )}
-            <div className="text-[15px] leading-relaxed text-slate-600">{s.body}</div>
+            <div className="text-sm leading-relaxed text-slate-600">{s.body}</div>
           </section>
         ))}
       </div>

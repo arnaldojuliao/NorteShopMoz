@@ -1,0 +1,10 @@
+import { chromium } from "@playwright/test";
+const b = await chromium.launch({ channel: "chrome" });
+const c = await b.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+const p = await c.newPage();
+const pageErrs = [];
+p.on("pageerror", (e) => pageErrs.push(String(e).slice(0, 200)));
+await p.goto("http://localhost:3000/suporte", { waitUntil: "domcontentloaded" });
+await p.waitForTimeout(2500);
+console.log("pageerrors:", JSON.stringify(pageErrs.slice(0, 5), null, 2));
+await b.close();

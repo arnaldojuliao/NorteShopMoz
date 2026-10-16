@@ -1,0 +1,11 @@
+-- V8 — validade própria do código de verificação de email (15 min).
+--
+-- Motivo: o código de 6 dígitos passa a expirar 15 minutos após o envio —
+-- expirado, o utilizador pede um novo (POST /api/auth/resend-verification).
+-- Para o servidor saber quando o código nasceu, guardamos o momento em que foi
+-- gerado; sem esta coluna a validade do código era a do link (24 h).
+--
+-- Idempotente: aplicável tanto a uma base nova como a uma existente. Linhas
+-- antigas ficam com NULL → o código delas é tratado como expirado (pede-se
+-- outro), que é precisamente o comportamento desejado.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_code_sent_at timestamptz;

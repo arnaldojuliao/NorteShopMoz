@@ -5,7 +5,7 @@
    ponto de troca entre dados locais e a API real.
    ──────────────────────────────────────────────────────────────── */
 
-export type Badge = "NOVO" | "OFERTA" | "MAIS VENDIDO";
+export type Badge = "NOVO" | "OFERTA" | "MAIS VENDIDO" | "DESTAQUE";
 
 export interface VariantOption {
   name: string;
@@ -92,6 +92,7 @@ export interface Province {
 }
 
 export type OrderStatus =
+  | "Aguarda pagamento"
   | "Pedido recebido"
   | "Pagamento confirmado"
   | "Em preparação"
@@ -152,8 +153,16 @@ export interface Order {
   paymentMethod: string;
   /** Referência da cobrança online (M-Pesa/e-Mola/cartão) — opcional. */
   paymentReference?: string;
+  /**
+   * URL da página de pagamento do provedor (PaySuite) — presente apenas na
+   * resposta que cria o pedido, quando o pagamento exige que o cliente pague
+   * fora da loja. Nunca vem no histórico (o servidor não o guarda).
+   */
+  checkoutUrl?: string;
   /** Código do cupão aplicado ao pedido — opcional. */
   couponCode?: string;
+  /** Código de rastreamento do envio (definido pela operação) — opcional. */
+  trackingCode?: string;
 }
 
 export interface UserProfile {

@@ -218,8 +218,25 @@ services:
       # Caminho fixo, montado num volume com o mesmo nome — ver volumes:.
       UPLOAD_DIR: /app/uploads
 
-      # Payments
+      # Payments (PaySuite)
+      # `simulated` deixa os pagamentos online desativados em produção (os três
+      # métodos do checkout respondem 503). Para cobrar a sério: PAYMENTS_MODE=live
+      # + PAYMENTS_API_KEY (PaySuite > Settings > API Access) — sem a chave a API
+      # NÃO arranca (ver PaySuitePaymentGateway), de propósito: um gateway "live"
+      # sem credenciais criaria pagamentos que nunca seriam cobrados.
       PAYMENTS_MODE: ${PAYMENTS_MODE:-simulated}
+      PAYMENTS_BASE_URL: ${PAYMENTS_BASE_URL:-https://paysuite.tech/api/v1}
+      PAYMENTS_API_KEY: ${PAYMENTS_API_KEY:-}
+      # Chave partilhada para validar as notificações de pagamento
+      # (HMAC-SHA256 do corpo em X-Signature). Vazia → /api/payments/webhook
+      # responde 503 e, como a PaySuite confirma SÓ por webhook, todos os pedidos
+      # ficariam em "Aguarda pagamento".
+      PAYMENTS_WEBHOOK_SECRET: ${PAYMENTS_WEBHOOK_SECRET:-}
+      # URLs públicos da loja enviados em cada pagamento (notificação e regresso
+      # do cliente). Omitir usa a configuração de conta no painel da PaySuite.
+      PAYMENTS_WEBHOOK_URL: ${PAYMENTS_WEBHOOK_URL:-}
+      PAYMENTS_RETURN_URL: ${PAYMENTS_RETURN_URL:-}
+      PAYMENTS_TIMEOUT_MS: ${PAYMENTS_TIMEOUT_MS:-15000}
 
       # Social Login
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}

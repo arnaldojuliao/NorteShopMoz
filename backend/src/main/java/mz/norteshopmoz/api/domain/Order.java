@@ -12,6 +12,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderColumn;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -91,4 +92,24 @@ public class Order {
     /** Referência da cobrança online (M-Pesa/e-Mola/cartão) — null se pago na entrega/transferência. */
     @Column(length = 80)
     private String paymentReference;
+
+    /**
+     * Código de rastreamento do envio (definido pela operação quando o pedido
+     * avança para "Enviado"/"Em trânsito" — ex.: número da transportadora).
+     * Aparece na página de acompanhamento do cliente.
+     */
+    @Column(length = 80)
+    private String trackingCode;
+
+    /**
+     * URL da página de pagamento do provedor (PaySuite), quando o pedido exige
+     * que o cliente pague fora da loja.
+     *
+     * <p>{@code @Transient} de propósito: é um dado de <em>trânsito</em>, válido
+     * apenas na resposta que cria o pedido — não faz sentido guardar no histórico
+     * um URL de checkout que expira, e os pedidos lidos da base de dados nunca o
+     * trazem (fica null).</p>
+     */
+    @Transient
+    private String checkoutUrl;
 }

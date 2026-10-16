@@ -62,6 +62,8 @@ backend/src/main/java/mz/norteshopmoz/api/
 │   ├── OrderIdempotencyService.java  # anti duplo-submit (Idempotency-Key)
 │   ├── PaymentService.java           # registo/validação dos métodos de pagamento
 │   ├── PaymentGateway.java           # contrato de cobrança (interface extensível)
+│   ├── PaySuitePaymentGateway.java   # adaptador da PaySuite (PAYMENTS_MODE=live)
+│   ├── PaymentWebhookService.java    # confirmação assíncrona (X-Signature)
 │   ├── SimulatedPaymentGateway.java  # gateway simulado (PAYMENTS_MODE=simulated)
 │   ├── AuthService.java              # registo/login (BCrypt) + verificação/reset
 │   ├── CartService / FavoriteService / AddressService / NewsletterService
@@ -89,7 +91,7 @@ backend/src/main/java/mz/norteshopmoz/api/
 docker compose up -d db redis api
 ```
 
-Levanta: PostgreSQL (`localhost:5434`), Redis (`localhost:6381`) e a API (`http://localhost:8081`).
+Levanta: PostgreSQL (`localhost:5434`), Redis (`localhost:6381`) e a API (`http://localhost:8080`).
 Na primeira subida o `DataSeeder` semeia **10 categorias, 44 produtos e 88 avaliações**
 a partir de `backend/src/main/resources/seed/catalog.json` (gerado do catálogo real do frontend).
 
@@ -104,8 +106,8 @@ cd backend
 ./mvnw spring-boot:run          # ou: mvn spring-boot:run
 ```
 
-A API fica em `http://localhost:8081` (defina `PORT` para mudar).
-Health check: `curl http://localhost:8081/actuator/health`
+A API fica em `http://localhost:8080` (defina `PORT` para mudar).
+Health check: `curl http://localhost:8080/actuator/health`
 
 ### Build do jar
 
@@ -120,14 +122,18 @@ cd backend && mvn -B -DskipTests package
 
 | Variável                | Padrão                                         | Descrição                             |
 |-------------------------|------------------------------------------------|---------------------------------------|
-| `PORT`                  | `8080` (compose: `8081`)                       | Porta HTTP                            |
+| `PORT`                  | `8080`                                          | Porta HTTP                            |
 | `DB_URL`                | `jdbc:postgresql://localhost:5434/norteshopmoz`| URL PostgreSQL                        |
 | `DB_USER` / `DB_PASSWORD` | `postgres` / `postgres`                      | Credenciais da base                    |
 | `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6381`                       | Ligação Redis                          |
 | `JWT_SECRET`            | valor de dev (⚠️ trocar em produção, ≥32 chars)| Chave de assinatura HS256              |
-| `JWT_EXPIRATION`        | `604800` (7 dias)                              | Validade do token em segundos          |
+| `JWT_EXPIRATION`        | `3600` (1 hora)                                 | Validade do access token em segundos; a sessão longa é suportada pelo refresh token (`JWT_REFRESH_EXPIRATION`, 30 dias). Os tokens viajam apenas em cookies HttpOnly |
 | `CORS_ALLOWED_ORIGINS`  | `http://localhost:3000`                        | Origens permitidas (vírgula separa)    |
 | `PAYMENTS_MODE`         | `simulated`                                    | Gateway de pagamentos (`simulated`/`live`) |
+| `PAYMENTS_API_KEY`      | —                                              | Token da PaySuite (obrigatório com `live`) |
+| `PAYMENTS_BASE_URL`     | `https://paysuite.tech/api/v1`                 | Raiz da API (`paysuite.test/api/v1` = sandbox) |
+| `PAYMENTS_WEBHOOK_SECRET` | —                                            | Assina as notificações (`X-Signature`)  |
+| `PAYMENTS_WEBHOOK_URL` / `PAYMENTS_RETURN_URL` | —                       | URLs públicos enviados em cada pagamento |
 
 ---
 
@@ -155,7 +161,7 @@ Envelope de resposta (igual ao frontend `ApiResponse`):
 | `limit`     | int       | limita o nº de resultados                   |
 
 ```bash
-curl "http://localhost:8081/api/products?category=telemoveis&sort=price-asc&limit=3"
+curl "http://localhost:8080/api/products?category=telemoveis&sort=price-asc&limit=3"
 ```
 
 ```json
@@ -190,12 +196,18 @@ O `productCount` vem de uma única query `GROUP BY` e o resultado completo (com 
 { "email": "maria@exemplo.co.mz", "password": "segredo123" }
 ```
 
-Resposta de ambos: `{ "data": { "token": "<jwt>", "user": { "id", "email", "fullName", "phone" } } }`
-(409 se o email já estiver registado; 401 com password errada).
+Resposta de ambos: `{ "data": { "user": { "id", "email", "fullName", "phone", "emailVerified" } } }`.
+Os tokens JWT **não** vão no corpo: o access token viaja no cookie HttpOnly `nsm_at` e o
+refresh no `nsm_rt` (rotação a cada refresh; ver `security/JwtCookieService`). O browser
+não consegue ler os cookies; o cliente HTTP envia-os automaticamente com
+`credentials: 'include'`.
+(409 se o email já estiver registado; 401 com password errada.)
 
 **`GET /api/auth/me`** (autenticado) → perfil `{ "data": { "id", "email", "fullName", "phone" } }`.
 
-> Envie o token como `Authorization: Bearer <jwt>`. Sem token → `401 {"error":"Não autenticado…"}`.
+> O cookie HttpOnly é enviado automaticamente pelo browser. Em chamadas fora do
+> browser (curl/Postman), use `--cookie-jar`/`-b` ou o header `Authorization: Bearer <jwt>`
+> (aceite como alternativa). Sem sessão → `401 {"error":"Não autenticado…"}`.
 
 ### Pedidos
 
@@ -204,12 +216,24 @@ Se vier `Authorization: Bearer`, o pedido fica associado ao utilizador.
 
 **Métodos de pagamento aceites**: pagamento na entrega, transferência bancária,
 M-Pesa, e-Mola e cartão Visa/Mastercard (rótulos ou aliases em inglês). Os três
-últimos são **pagos online** — o servidor valida os dados (`paymentInfo`) e cobra
-no gateway (modo `simulated` por omissão gera uma referência sem cobrar;
-`PAYMENTS_MODE=live` para uma implementação real de `PaymentGateway`) — e o
-pedido já entra com estado **"Pagamento confirmado"** + `paymentReference`
-(ex.: `MP-4F3K9Q2X7Z` ou `CARD-••••1234`). Pagamento na entrega/transferência
-continuam a começar em "Pedido recebido" e sem referência.
+últimos são **pagos online** e passam pelo gateway:
+
+- `PAYMENTS_MODE=simulated` (omissão, dev/testes) — o servidor força uma
+  referência realista sem cobrar e o pedido entra em **"Pagamento confirmado"**
+  (ex.: `MP-4F3K9Q2X7Z` ou `CARD-••••1234`).
+- `PAYMENTS_MODE=live` — o adaptador da **PaySuite** cria o pagamento
+  (`POST {base-url}/payments`) e devolve `checkout_url`: o checkout redireciona o
+  cliente para a página do provedor e o pedido nasce em **"Aguarda pagamento"**
+  com `paymentReference` (o id do pagamento na PaySuite). Só quando chega o
+  webhook assinado (`payment.success`) é que passa a "Pagamento confirmado".
+  Como é a página da PaySuite que recolhe telefone/cartão, o checkout não os pede
+  (`GET /api/payments/methods` devolve `hostedCheckout: true`).
+
+**`POST /api/payments/webhook`** → 200 — **público**: recebe as notificações da
+PaySuite e valida-as com HMAC-SHA256 do corpo cru no cabeçalho `X-Signature`
+(`PAYMENTS_WEBHOOK_SECRET`). Sem segredo configurado responde 503 e nenhum
+pagamento é confirmado por essa via; uma notificação repetida é inofensiva
+(idempotente).
 
 **Ordem das operações** (importante em incidentes): validar o pedido e recalcular
 os totais (só leituras) → **cobrar no gateway** → transação curta de escrita
@@ -362,6 +386,25 @@ Gestão (todas **admin apenas** — role `ADMIN`, caso contrário 403/401):
   se o utilizador já comprou o produto (query sobre os pedidos do utilizador).
 - A média/`ratingCount` do produto é atualizada e o cache Redis de reviews/produto é invalidado.
 - Sem token → 401. O GET público continua a devolver todas as avaliações (seed + submetidas).
+
+#### Moderação (admin apenas)
+
+| Método | Rota | Descrição |
+|---|---|---|
+| `GET` | `/api/admin/reviews?page=0&size=20` | página de todas as avaliações (mais recentes primeiro), com `productId`/`productName`/`productSlug` |
+| `DELETE` | `/api/admin/reviews/{id}` | remove uma avaliação e recalcula a média do produto |
+
+```json
+{ "data": { "items": [ { "id": 1, "productId": "p-001", "productName": "Capa para iPhone",
+  "productSlug": "capa-para-iphone", "author": "Carlos M.", "rating": 4,
+  "date": "2026-09-30T10:00:00Z", "title": "Excelente qualidade!",
+  "comment": "…", "verified": true } ],
+  "page": 0, "size": 20, "totalItems": 88, "totalPages": 5 } }
+```
+
+- Role `ADMIN` obrigatório (caso contrário 403; sem token → 401). `size` tem teto de 100.
+- O `DELETE` devolve `{"data":{"deleted":true}}` e recalcula `rating`/`ratingCount`
+  do produto; avaliação inexistente → 404. Remove também do cache Redis (reviews/produto).
 
 ### Newsletter
 
@@ -538,10 +581,10 @@ cd backend && mvn test        # testes de contexto (Boot 4 starters test incluí
 
 # Validação do contrato REST contra uma API a correr:
 node backend/scripts/validate-api.mjs
-API_BASE=http://localhost:8081 node backend/scripts/validate-api.mjs
+API_BASE=http://localhost:8080 node backend/scripts/validate-api.mjs
 ```
 
-> O script valida **79 verificações** de ponta a ponta: catálogo (filtros,
+> O script valida **117 verificações** de ponta a ponta: catálogo (filtros,
 > pesquisa, ordenação, limit), categorias, reviews (GET + submissão), JWT
 > (registo/login/me), favoritos, carrinho, pedidos (totais recalculados, guest
 > checkout, isolamento por utilizador), **pagamentos online** (M-Pesa, e-Mola e

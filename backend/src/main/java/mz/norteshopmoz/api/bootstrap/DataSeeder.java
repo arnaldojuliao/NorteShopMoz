@@ -376,7 +376,9 @@ public class DataSeeder implements CommandLineRunner {
                         .date(Instant.now().minusSeconds(86400L * (r + 1) * (i % 9 + 1)))
                         .title(r == 0 ? "Excelente qualidade!" : "Recomendo")
                         .comment(comments[(idx + r) % comments.length])
-                        .verified(true)
+                        // Conteúdo de demonstração: sem compra real associada,
+                        // não pode exibir o selo "Compra verificada".
+                        .verified(false)
                         .build());
                 i++;
             }

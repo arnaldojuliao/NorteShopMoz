@@ -12,18 +12,21 @@
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-display: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 
-  /* ── NSM Brand palette — "Azul Norte" (deep royal blue) ─────── */
-  --color-primary-50: #eef4ff;
-  --color-primary-100: #dce7ff;
-  --color-primary-200: #c0d3ff;
-  --color-primary-300: #94b4ff;
-  --color-primary-400: #618bff;
-  --color-primary-500: #3b66f8;
-  --color-primary-600: #1f46e6;
-  --color-primary-700: #1b36c8;
-  --color-primary-800: #1c30a1;
-  --color-primary-900: #1c2e7f;
-  --color-primary-950: #151e4d;
+  /* ── NSM Brand palette — "Azul Norte" (azul vivo) ────────────
+     Escala mais saturada/elétrica que a anterior: dá mais "punch" aos
+     links, ícones e realces sem perder a legibilidade (os shades 50–200
+     continuam claros para superfícies suaves). */
+  --color-primary-50: #eef5ff;
+  --color-primary-100: #d9e9ff;
+  --color-primary-200: #bcd7ff;
+  --color-primary-300: #8dbcff;
+  --color-primary-400: #5a9bff;
+  --color-primary-500: #2f7bff;
+  --color-primary-600: #155ceb;
+  --color-primary-700: #0f47c9;
+  --color-primary-800: #1139a0;
+  --color-primary-900: #12317e;
+  --color-primary-950: #0d1c4b;
 
   /* Deep navy for footer / dark surfaces */
   --color-navy-700: #1b2a55;
@@ -39,12 +42,35 @@
      escuros, que têm de continuar brancos. */
   --color-surface: #ffffff;
 
+  /* Fundo da página — um passo abaixo da superfície: os cartões (`bg-surface`)
+     ganham contraste e as sombras passam a ter onde projetar-se. Sem este
+     token, cartão branco sobre página branca apagava toda a elevação. */
+  --color-page: #eef2f7;
+
+  /* Fundo do cabeçalho — vermelho vivo da marca (rose-600). Token separado
+     para se poder reajustar o tom do header sem tocar na paleta da marca. */
+  --color-header: #e11d48;
+  /* Tom mais profundo do cabeçalho — usado no gradiente para dar volume. */
+  --color-header-strong: #be123c;
+
+  /* ── Acentos vibrantes ────────────────────────────────────────
+     Servem badges, destaques e estados, para o site ficar mais "chamativo"
+     sem mexer na marca. `accent`/`teal`/`pink` são *superfícies* (tom médio,
+     constante nos dois temas, para levar texto branco); os `-strong` são
+     para *texto* sobre fundo claro e clareiam no tema escuro. */
+  --color-accent: #f97316;
+  --color-accent-strong: #c2410c;
+  --color-teal: #14b8a6;
+  --color-teal-strong: #0f766e;
+  --color-pink: #ec4899;
+  --color-pink-strong: #be185d;
+
   /* Azul da marca como *superfície* (botões primários, badges, chips): mantém
      o tom da marca nos dois temas — o texto branco por cima continua legível.
      O azul como *texto* usa os shades `primary-*`, que clareiam no tema escuro. */
-  --color-brand: #1f46e6;
-  --color-brand-strong: #1b36c8;
-  --color-brand-deep: #1c30a1;
+  --color-brand: #155ceb;
+  --color-brand-strong: #0f47c9;
+  --color-brand-deep: #1139a0;
 
   /* Texto de estado como *superfície* (badges "NOVO", toast de erro): o mesmo
      shade em modo texto tem de clarear no escuro, daí o token separado.
@@ -79,10 +105,6 @@
   --animate-cart-pop: cart-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
   --animate-slide-down: slide-down 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
   --animate-soft-pulse: soft-pulse 2.4s ease-in-out infinite;
-  --animate-badge-spin: badge-spin 14s linear infinite;
-  --animate-float: float 5s ease-in-out infinite;
-  --animate-float-slow: float 7s ease-in-out infinite;
-  --animate-marquee: marquee 40s linear infinite;
 
   @keyframes fade-up {
     from {
@@ -139,28 +161,6 @@
         0 0 0 10px rgb(31 70 230 / 0);
     }
   }
-  @keyframes badge-spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-  @keyframes float {
-    0%,
-    100% {
-      transform: translateY(0);
-    }
-    50% {
-      transform: translateY(-12px);
-    }
-  }
-  @keyframes marquee {
-    from {
-      transform: translateX(0);
-    }
-    to {
-      transform: translateX(-50%);
-    }
-  }
 }
 
 @layer base {
@@ -170,7 +170,7 @@
   }
 
   body {
-    @apply bg-surface text-slate-800 antialiased;
+    @apply bg-page text-slate-800 antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
@@ -265,20 +265,22 @@
     text-wrap: balance;
   }
 
-  /* Subtle card elevation — soft, elegant shadows */
+  /* Card elevation — duas camadas: contacto nítido junto à borda + difusão
+     larga. Antes ficava em 5–10% de opacidade e era imperceptível, sobretudo
+     com cartão branco sobre página branca. */
   .shadow-card {
     box-shadow:
-      0 1px 2px rgb(15 23 42 / 0.05),
-      0 10px 24px -10px rgb(15 23 42 / 0.1);
+      0 1px 2px rgb(15 23 42 / 0.07),
+      0 8px 24px -10px rgb(15 23 42 / 0.16);
   }
   .shadow-card-hover {
     box-shadow:
-      0 2px 4px rgb(15 23 42 / 0.06),
-      0 16px 36px -12px rgb(31 70 230 / 0.16);
+      0 2px 4px rgb(15 23 42 / 0.08),
+      0 16px 40px -12px rgb(31 70 230 / 0.24);
   }
 
   .container-nsm {
-    @apply mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8;
+    @apply mx-auto w-full max-w-[1440px] px-3 sm:px-6 lg:px-8;
   }
 
   /* Estado inicial do componente <Reveal>: escondido até entrar no viewport.
@@ -326,6 +328,15 @@ html.dark {
 
   /* Superfícies neutras (`bg-surface`, antes `bg-white`) */
   --color-surface: #111a2e;
+
+  /* Página um passo abaixo dos cartões — no escuro a direção inverte-se
+     (página mais escura que a superfície), que é como a elevação se lê. */
+  --color-page: #0a101f;
+
+  /* Cabeçalho: vermelho vivo em ambos os temas — o texto branco por cima
+     mantém-se legível e a identidade da marca não se perde no escuro. */
+  --color-header: #e11d48;
+  --color-header-strong: #9f1239;
 
   /* Neutros: os tons claros viram superfícies e os escuros, texto. O slate-300
      fica como bordo/track — como texto nunca teria contraste suficiente. */
@@ -385,13 +396,25 @@ html.dark {
   --color-violet-700: #c4b5fd;
   --color-blue-50: #0e2433;
   --color-blue-700: #93c5fd;
+
+  /* `green-*` nunca esteve remapeado — um cartão `bg-green-50 text-green-700`
+     ficava verde-claro no tema escuro. Repõe-se o tom para o suporte. */
+  --color-green-50: #0b2a21;
+  --color-green-100: #10382c;
+  --color-green-700: #6ee7b7;
+
+  /* Acentos como *texto*: clareiam no escuro para manter o contraste sobre a
+     superfície escura. As superfícies (`accent`/`teal`/`pink`) ficam fixas. */
+  --color-accent-strong: #fdba74;
+  --color-teal-strong: #5eead4;
+  --color-pink-strong: #f9a8d4;
 }
 
 /* ── Painéis "inversos" ────────────────────────────────────────
-   Blocos que já nascem escuros ou coloridos no tema claro (footer navy, hero
-   vermelho, painel da newsletter, lado de marca do login, cabeçalho de perfil,
-   overlay das categorias). O seu conteúdo está escrito para fundo escuro, por
-   isso repõe a paleta do tema claro.
+   Blocos que já nascem escuros ou coloridos no tema claro (footer navy, lado
+   de marca do login, cabeçalho de perfil, overlay das categorias). O seu
+   conteúdo está escrito para fundo escuro, por isso repõe a paleta do tema
+   claro.
 
    Aplica-se nos **dois** temas (não só em `html.dark`): no tema claro os valores
    são os mesmos, exceto o `slate-400` — que foi escurecido para 4,6:1 sobre
@@ -437,6 +460,10 @@ html.dark {
   --color-sky-200: #bae6fd;
   --color-sky-600: #0284c7;
   --color-sky-700: #0369a1;
+  /* Acentos como texto em painéis já escuros (tema claro): tom claro. */
+  --color-accent-strong: #fdba74;
+  --color-teal-strong: #5eead4;
+  --color-pink-strong: #f9a8d4;
 }
 
 /* Transição suave ao alternar o tema (removida automaticamente ~350ms) */
@@ -453,20 +480,20 @@ html.theme-switching *::after {
 }
 
 html.dark body {
-  background-color: #0a101f;
   color: #cbd5e1;
 }
 
-/* Elevação em modo escuro — sombras suaves para dar profundidade aos cartões */
+/* Elevação em modo escuro — sombras mais densas que no claro: sobre fundo
+   escuro a luz não "empurra", o escurecimento é o que dá profundidade. */
 html.dark .shadow-card {
   box-shadow:
-    0 1px 2px rgb(0 0 0 / 0.3),
-    0 10px 28px -10px rgb(0 0 0 / 0.5);
+    0 1px 2px rgb(0 0 0 / 0.4),
+    0 8px 24px -10px rgb(0 0 0 / 0.55);
 }
 html.dark .shadow-card-hover {
   box-shadow:
-    0 2px 6px rgb(0 0 0 / 0.3),
-    0 18px 44px -14px rgb(0 0 0 / 0.6);
+    0 2px 6px rgb(0 0 0 / 0.45),
+    0 18px 44px -14px rgb(0 0 0 / 0.65);
 }
 
 /* ── Preloader de entrada (DeliveryLoader) ────────────────────────

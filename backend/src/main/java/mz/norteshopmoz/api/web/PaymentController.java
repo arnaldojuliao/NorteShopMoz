@@ -27,10 +27,18 @@ public class PaymentController {
         this.paymentService = paymentService;
     }
 
+    /**
+     * Métodos aceites + se o gateway usa página de pagamento própria.
+     *
+     * <p>{@code hostedCheckout=true} (PaySuite) significa que o cliente é
+     * redirecionado para o provedor pagar: o checkout não deve pedir
+     * telefone/cartão, que são recolhidos lá.</p>
+     */
     @GetMapping("/methods")
     public ResponseEntity<?> methods() {
         return ResponseEntity.ok(ApiResponse.data(Map.of(
                 "methods", paymentService.currentlyAvailableLabels(),
-                "onlinePaymentsAvailable", paymentService.onlinePaymentsAvailable())));
+                "onlinePaymentsAvailable", paymentService.onlinePaymentsAvailable(),
+                "hostedCheckout", paymentService.hostedCheckout())));
     }
 }

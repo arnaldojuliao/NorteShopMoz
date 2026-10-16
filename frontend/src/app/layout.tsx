@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Header } from "@/components/layout/Header";
+import { ConditionalHeader } from "@/components/layout/ConditionalHeader";
 import { Footer } from "@/components/layout/Footer";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { InstallPrompt } from "@/components/layout/InstallPrompt";
@@ -143,7 +143,7 @@ export default function RootLayout({
           >
             Saltar para o conteúdo
           </a>
-          <Header />
+          <ConditionalHeader />
           {/* Modo degradado: a API caiu — avisa em vez de servir dados locais em silêncio. */}
           <ApiDegradedBanner />
           <main id="conteudo" className="flex-1">

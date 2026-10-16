@@ -11,7 +11,6 @@ export const metadata: Metadata = {
 export default function EntregasPage() {
   return (
     <InfoPage
-      crumb="Entregas"
       title="Entregas em todo Moçambique"
       subtitle="Levamos as suas compras até si, onde quer que esteja."
       updatedAt="Agosto de 2026"

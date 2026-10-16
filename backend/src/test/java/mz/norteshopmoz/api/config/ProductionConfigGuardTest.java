@@ -34,12 +34,13 @@ class ProductionConfigGuardTest {
     /** Gateway de mentira: só interessa que o bean EXISTA. */
     private static final PaymentGateway GATEWAY = new PaymentGateway() {
         @Override
-        public String charge(String methodId, String phone, String cardLast4, BigDecimal amount, String currency) {
-            return "REF-TESTE";
+        public PaymentCharge charge(String reference, String methodId, String phone, String cardLast4,
+                                    BigDecimal amount, String currency, String description) {
+            return PaymentCharge.confirmed("REF-TESTE");
         }
 
         @Override
-        public void refund(String reference) {
+        public void refund(String reference, BigDecimal amount) {
             // nada a fazer num teste
         }
     };
@@ -63,7 +64,18 @@ class ProductionConfigGuardTest {
 
     private static ProductionConfigGuard guard(Environment environment, String paymentsMode,
             PaymentGateway gateway, boolean cookieSecure, String baseUrl) {
-        return new ProductionConfigGuard(environment, paymentsMode, provider(gateway), cookieSecure, baseUrl,
+        return new ProductionConfigGuard(environment, paymentsMode, "segredo-webhook",
+                "https://loja.mz/api/payments/webhook", provider(gateway),
+                cookieSecure, baseUrl,
+                List.of("https://loja.mz"), "172.28.0.10", "re_chave", "cloud", 730,
+                "noreply@loja.mz", "google-cli", "fb-id", "fb-secret");
+    }
+
+    /** Guarda sem URL de webhook configurado (usa a configuração de conta da PaySuite). */
+    private static ProductionConfigGuard guardSemWebhookUrl(Environment environment,
+            String paymentsMode) {
+        return new ProductionConfigGuard(environment, paymentsMode, "segredo-webhook", "",
+                provider(GATEWAY), true, "https://loja.mz",
                 List.of("https://loja.mz"), "172.28.0.10", "re_chave", "cloud", 730,
                 "noreply@loja.mz", "google-cli", "fb-id", "fb-secret");
     }
@@ -126,5 +138,19 @@ class ProductionConfigGuardTest {
         guard(new MockEnvironment(), "live", null, true, "http://localhost:3000").run(null);
 
         assertThat(output).doesNotContain("PAYMENTS_MODE");
+    }
+
+    @Test
+    void emProducaoSemWebhookUrlAvisaQueUsaAConfiguracaoDaConta(CapturedOutput output) {
+        guardSemWebhookUrl(prod(), "live").run(null);
+
+        assertThat(output).contains("PAYMENTS_WEBHOOK_URL vazio");
+    }
+
+    @Test
+    void emProducaoComWebhookUrlNaoAvisa(CapturedOutput output) {
+        guard(prod(), "live", GATEWAY, true, "https://loja.mz").run(null);
+
+        assertThat(output).doesNotContain("PAYMENTS_WEBHOOK_URL");
     }
 }

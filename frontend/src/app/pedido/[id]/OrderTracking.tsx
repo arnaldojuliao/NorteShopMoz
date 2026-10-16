@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { MapPin, PackageSearch, RefreshCw, XCircle } from "lucide-react";
+import { MapPin, PackageSearch, RefreshCw, Truck, XCircle } from "lucide-react";
 import { cancelOrder, fetchOrderTracking } from "@/lib/orders";
 import { ApiError } from "@/lib/api";
 import type { Order } from "@/lib/types";
@@ -101,6 +101,15 @@ export function OrderTracking({ id, email }: { id: string; email?: string }) {
 
       <div className="mt-6 rounded-2xl border border-slate-100 bg-surface p-5">
         <StatusTimeline current={order.status} />
+        {order.trackingCode && (
+          <p className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4 text-sm text-slate-600">
+            <Truck className="size-4 text-primary-600" aria-hidden />
+            <span className="font-semibold text-slate-800">Código de rastreamento:</span>
+            <span className="rounded-lg bg-slate-100 px-2.5 py-1 font-mono text-sm font-bold text-slate-800">
+              {order.trackingCode}
+            </span>
+          </p>
+        )}
       </div>
 
       <div className="mt-6 rounded-2xl border border-slate-100 bg-surface p-5">

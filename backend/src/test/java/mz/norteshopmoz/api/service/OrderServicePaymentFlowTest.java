@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import mz.norteshopmoz.api.config.ShippingConfig;
+import mz.norteshopmoz.api.domain.Order;
+import mz.norteshopmoz.api.domain.OrderStatus;
 import mz.norteshopmoz.api.domain.Product;
 import mz.norteshopmoz.api.exception.ApiException;
 import mz.norteshopmoz.api.repository.OrderRepository;
@@ -17,6 +19,7 @@ import org.springframework.transaction.support.AbstractPlatformTransactionManage
 import org.springframework.transaction.support.DefaultTransactionStatus;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -58,10 +61,12 @@ class OrderServicePaymentFlowTest {
     private final PaymentService payments = mock(PaymentService.class);
     private final CouponService coupons = mock(CouponService.class);
     private final OrderThrottleService throttle = mock(OrderThrottleService.class);
+    private final StockService stockService = mock(StockService.class);
+    private final WhatsAppNotificationService whatsApp = mock(WhatsAppNotificationService.class);
 
     private final OrderService service = new OrderService(
             orders, products, emails, shipping, idempotency, payments, coupons, throttle,
-            immediateTransactions());
+            stockService, whatsApp, immediateTransactions());
 
     private static final PaymentService.PaymentMethodInfo MPESA =
             new PaymentService.PaymentMethodInfo("mpesa", "M-Pesa", List.of("MPESA"), true, true, false);
@@ -100,7 +105,8 @@ class OrderServicePaymentFlowTest {
         when(products.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithStock(1)));
         when(products.decrementStockAndSold(eq(PRODUCT_ID), anyInt())).thenReturn(1);
         when(payments.resolve(anyString())).thenReturn(Optional.of(MPESA));
-        when(payments.authorize(any(), any(), any())).thenReturn("MP-TESTE12345");
+        when(payments.authorize(any(), any(), any(), any()))
+                .thenReturn(PaymentGateway.PaymentCharge.confirmed("MP-TESTE12345"));
         when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
@@ -111,7 +117,7 @@ class OrderServicePaymentFlowTest {
         // A cobrança (chamada externa) acontece ANTES de a transação de escrita
         // começar — nunca com o lock do cupão e uma ligação do pool presos.
         InOrder inOrder = inOrder(payments, products, orders);
-        inOrder.verify(payments).authorize(any(), any(), any());
+        inOrder.verify(payments).authorize(any(), any(), any(), any());
         inOrder.verify(products).decrementStockAndSold(PRODUCT_ID, 1);
         inOrder.verify(orders).save(any());
     }
@@ -124,7 +130,7 @@ class OrderServicePaymentFlowTest {
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("Produto esgotado");
 
-        verify(payments, never()).authorize(any(), any(), any());
+        verify(payments, never()).authorize(any(), any(), any(), any());
         verify(products, never()).decrementStockAndSold(anyString(), anyInt());
         verify(orders, never()).save(any());
     }
@@ -139,7 +145,7 @@ class OrderServicePaymentFlowTest {
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("Stock insuficiente");
 
-        verify(payments).refund("MP-TESTE12345");
+        verify(payments).refund(eq("MP-TESTE12345"), any(), any());
         verify(orders, never()).save(any());
     }
 
@@ -151,27 +157,43 @@ class OrderServicePaymentFlowTest {
                 .isInstanceOf(IllegalStateException.class);
 
         // A transação reverteu (stock e cupão voltam atrás) e a cobrança foi
-        // devolvida ao cliente.
-        verify(payments).refund("MP-TESTE12345");
+        // devolvida ao cliente (mesmo estorno, agora com o valor cobrado).
+        verify(payments).refund(eq("MP-TESTE12345"), any(), any());
     }
 
     @Test
     void naoEstornaQuandoOPedidoEConfirmado() {
         service.createOrder(request(), null, null);
 
-        verify(payments, never()).refund(any());
+        verify(payments, never()).refund(any(), any());
+    }
+
+    @Test
+    void checkoutHospedado_deixaOPedidoAPagarComOCheckoutUrl() {
+        // PaySuite: o pagamento é criado mas só é confirmado por webhook. O pedido
+        // tem de nascer em "Aguarda pagamento" — marcá-lo como pago aqui dava
+        // mercadoria entregue antes de o dinheiro entrar.
+        when(payments.authorize(any(), any(), any(), any()))
+                .thenReturn(PaymentGateway.PaymentCharge.redirect(
+                        "01H8X9", "https://paysuite.tech/checkout/01H8X9"));
+
+        Order order = service.createOrder(request(), null, null);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.AGUARDA_PAGAMENTO);
+        assertThat(order.getCheckoutUrl()).isEqualTo("https://paysuite.tech/checkout/01H8X9");
+        assertThat(order.getPaymentReference()).isEqualTo("01H8X9");
     }
 
     @Test
     void metodoOfflineNaoEstornaNada() {
         // Pagamento na entrega: authorize devolve null → nada a compensar.
-        when(payments.authorize(any(), any(), any())).thenReturn(null);
+        when(payments.authorize(any(), any(), any(), any())).thenReturn(null);
         when(orders.save(any())).thenThrow(new IllegalStateException("falha ao gravar"));
 
         assertThatThrownBy(() -> service.createOrder(request(), null, null))
                 .isInstanceOf(IllegalStateException.class);
 
-        verify(payments, never()).refund(any());
+        verify(payments, never()).refund(any(), any());
     }
 
     private static OrderRequest request() {

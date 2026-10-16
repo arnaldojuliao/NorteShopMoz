@@ -37,7 +37,7 @@ kubectl rollout restart deployment/norteshop-api -n production
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate api
 
 # 4. Verificar saúde
-curl -f https://api.norteshop.com/actuator/health
+curl -f https://norteshop.com/actuator/health
 ```
 
 ### 2. Database Password (Requer coordenação)
@@ -57,7 +57,7 @@ aws secretsmanager update-secret --secret-id norteshop/db-password --secret-stri
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate api
 
 # 4. Verificar
-curl -f https://api.norteshop.com/actuator/health
+curl -f https://norteshop.com/actuator/health
 ```
 
 ### 3. Redis Password

@@ -60,9 +60,24 @@ public class SecurityConfig {
                         // ── Área de administração (rotas /api/admin) ─────────────────────
                         // Cupões — gestão apenas para admin (tem de vir antes do denyAll).
                         .requestMatchers("/api/admin/coupons", "/api/admin/coupons/**").hasRole("ADMIN")
+                        // Moderação de avaliações — apenas admin (antes do denyAll).
+                        .requestMatchers("/api/admin/reviews", "/api/admin/reviews/**").hasRole("ADMIN")
+                        // Gestão de utilizadores (listar/promover/bloquear) — apenas admin.
+                        .requestMatchers("/api/admin/users", "/api/admin/users/**").hasRole("ADMIN")
+                        // CRUD de categorias — apenas admin.
+                        .requestMatchers("/api/admin/categories", "/api/admin/categories/**").hasRole("ADMIN")
+                        // Reconciliação de pagamentos — apenas admin.
+                        .requestMatchers("/api/admin/payment-incidents", "/api/admin/payment-incidents/**")
+                        .hasRole("ADMIN")
+                        // Devoluções (decisão da operação) — apenas admin.
+                        .requestMatchers("/api/admin/returns", "/api/admin/returns/**").hasRole("ADMIN")
+                        // Inventário (ajuste de stock, alertas, movimentos) — apenas admin.
+                        .requestMatchers("/api/admin/stock", "/api/admin/stock/**").hasRole("ADMIN")
                         .requestMatchers("/api/admin/**").denyAll()
-                        // Lista de todos os pedidos, estatísticas e transição de estado — apenas admin.
-                        .requestMatchers("/api/orders/admin/all", "/api/orders/admin/stats").hasRole("ADMIN")
+                        // Lista de todos os pedidos, estatísticas, export CSV e
+                        // transição de estado — apenas admin.
+                        .requestMatchers("/api/orders/admin/all", "/api/orders/admin/stats",
+                                "/api/orders/admin/export").hasRole("ADMIN")
                         .requestMatchers("/api/orders/*/status").hasRole("ADMIN")
                         // Subscritores da newsletter — apenas admin.
                         .requestMatchers("/api/newsletter/subscribers").hasRole("ADMIN")
@@ -96,6 +111,11 @@ public class SecurityConfig {
                         // Métodos de pagamento disponíveis — público (o checkout
                         // desativa no UI os métodos que o servidor não consegue cobrar).
                         .requestMatchers(HttpMethod.GET, "/api/payments/methods").permitAll()
+                        // Notificação do gateway de pagamento: pública (o provedor não
+                        // tem sessão) mas assinada — a autenticação é o HMAC do corpo,
+                        // validado em PaymentWebhookService. Sem segredo configurado
+                        // responde 503, nunca aceita uma notificação não assinada.
+                        .requestMatchers(HttpMethod.POST, "/api/payments/webhook").permitAll()
                         // Validação de cupão no checkout — pública (guest checkout).
                         .requestMatchers(HttpMethod.POST, "/api/orders/validate-coupon").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/orders").permitAll()

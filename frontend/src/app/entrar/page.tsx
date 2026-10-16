@@ -18,5 +18,9 @@ export default function EntrarRedirect() {
     router.replace("/");
   }, [openLogin, router]);
 
-  return null;
+  return (
+    <div className="container-nsm py-12">
+      <h1 className="sr-only">Entrar na sua conta</h1>
+    </div>
+  );
 }

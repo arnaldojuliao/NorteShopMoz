@@ -62,7 +62,6 @@ export default function ContactosPage() {
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(contactJsonLd) }}
       />
       <InfoPage
-      crumb="Contactos"
       title="Fale connosco"
       subtitle="Estamos aqui para ajudar. Escolha o canal que preferir."
       sections={[
@@ -78,7 +77,8 @@ export default function ContactosPage() {
                   {i.href ? (
                     <a
                       href={i.href}
-                      className="mt-0.5 inline-block text-sm text-primary-700 hover:underline"
+                      // `py-1`: o alvo tinha 20px de altura (mínimo WCAG 2.2: 24).
+                      className="mt-0.5 inline-block py-1 text-sm text-primary-700 hover:underline"
                     >
                       {i.value}
                     </a>

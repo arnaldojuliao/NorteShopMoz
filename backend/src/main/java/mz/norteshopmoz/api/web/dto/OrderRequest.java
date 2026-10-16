@@ -64,5 +64,7 @@ public record OrderRequest(
 
     /** Corpo do PATCH /api/orders/{id}/status (rótulo ou nome do enum). */
     public record StatusRequest(
-            @NotBlank(message = "Estado é obrigatório") String status) {}
+            @NotBlank(message = "Estado é obrigatório") String status,
+            /** Código de tracking do envio (opcional). "-" limpa. */
+            @Size(max = 80, message = "Código de tracking demasiado longo") String trackingCode) {}
 }

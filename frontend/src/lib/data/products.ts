@@ -16,32 +16,34 @@ import type { Product } from "@/lib/types";
 const u = (id: string, w = 900) =>
   `https://images.unsplash.com/${id}?auto=format&fit=crop&w=${w}&q=70`;
 
-/** Fotos de apoio por categoria, reaproveitadas entre os produtos da mesma. */
+/**
+ * Fotos de apoio por categoria — TODAS verificadas visualmente (vê o conteúdo
+ * real de cada foto, não só o ID): o pool da categoria só contém fotos que
+ * representam produtos dessa categoria, para a rotação nunca pôr uma mochila
+ * num "Chapéu" ou um sofá numa "Panela de pressão".
+ */
 const IMAGES: Record<string, string[]> = {
   telemoveis: [
-    "photo-1511707171634-5f897ff02aa9",
-    "photo-1598327105666-5b89351aff97",
-    "photo-1556656793-08538906a9f8",
-    "photo-1609091839311-d5365f9ff1c5",
-    "photo-1609592806590-c4fb17ea506e",
-    "photo-1546868871-7041f2a55e12",
-    "photo-1523275335684-37898b6baf30",
+    "photo-1511707171634-5f897ff02aa9", // iPhone sobre secretária
+    "photo-1598327105666-5b89351aff97", // smartphone (ecrã bloqueado)
+    "photo-1556656793-08538906a9f8", // flat lay de telemóveis e carregador
+    "photo-1609091839311-d5365f9ff1c5", // telemóvel na mão
+    "photo-1583863788434-e58a36330cf0", // carregador com cabo
+    "photo-1601784551446-20c9e07cdbdb", // iPhone (produto)
+    "photo-1512941937669-90a1b58e7e9c", // ecrã de smartphone
   ],
   eletronicos: [
-    "photo-1593359677879-a4bb92f829d1",
-    "photo-1593784991095-a205069470b6",
-    "photo-1608043152269-423dbba4e7e1",
-    "photo-1589003077984-894e133dabab",
-    "photo-1505740420928-5e560c06d30e",
-    "photo-1546435770-a3e426bf472b",
-    "photo-1526170375885-4d8ecf77b99f",
-    "photo-1512790182412-b19e6d62bc39",
-    "photo-1473968512647-3e447244af8f",
-    "photo-1527977966376-1c8408f9f108",
-    "photo-1599669454699-248893623440",
-    "photo-1593305841991-05c297ba4575",
-    "photo-1522869635100-9f4c5e86aa37",
-    "photo-1601944177325-f8867652837f",
+    "photo-1608043152269-423dbba4e7e1", // coluna Bluetooth JBL
+    "photo-1589003077984-894e133dabab", // coluna portátil
+    "photo-1546435770-a3e426bf472b", // auscultadores brancos
+    "photo-1599669454699-248893623440", // auscultadores pretos
+    "photo-1593359677879-a4bb92f829d1", // TV com streaming
+    "photo-1593784991095-a205069470b6", // TV Samsung
+    "photo-1601944177325-f8867652837f", // móvel com TV
+    "photo-1546868871-7041f2a55e12", // smartwatch preto
+    "photo-1553545204-4f7d339aa06a", // smartwatch (detalhe)
+    "photo-1575311373937-040b8e1fd5b6", // banda de fitness
+    "photo-1593305841991-05c297ba4575", // setup de jogo
   ],
   informatica: [
     "photo-1496181133206-80ce9b88a853",
@@ -56,52 +58,129 @@ const IMAGES: Record<string, string[]> = {
     "photo-1585790050230-5dd28404ccb9",
   ],
   casa: [
-    "photo-1555041469-a586c61ea9bc",
-    "photo-1550226891-ef816aed4a98",
-    "photo-1567538096630-e0c55bd6374c",
-    "photo-1598300042247-d088f8ab3a91",
-    "photo-1507473885765-e6ed057f782c",
-    "photo-1513506003901-1e6a229e2d15",
-    "photo-1584568694244-14fbdf83bd30",
-    "photo-1574269909862-7e1d70bb8078",
-    "photo-1517668808822-9ebb02f2a0e6",
-    "photo-1495474472287-4d71bcdd2085",
-    "photo-1556911220-bff31c812dba",
-    "photo-1584990347449-a2a4d47e055b",
-    "photo-1586023492125-27b2c045efd7",
-    "photo-1567016432779-094069958ea5",
+    "photo-1555041469-a586c61ea9bc", // sofá cinzento
+    "photo-1586023492125-27b2c045efd7", // poltrona e sala
+    "photo-1550226891-ef816aed4a98", // poltrona com mesa de cabeceira
+    "photo-1567538096630-e0c55bd6374c", // poltrona branca
+    "photo-1598300042247-d088f8ab3a91", // cadeira
+    "photo-1567016432779-094069958ea5", // sofá laranja
+    "photo-1507473885765-e6ed057f782c", // candeeiro de mesa
+    "photo-1513506003901-1e6a229e2d15", // candeeiro suspenso
+    "photo-1574269909862-7e1d70bb8078", // forno elétrico
+    "photo-1556911220-bff31c812dba", // cozinha
+    "photo-1590794056226-79ef3a8147e1", // panela de ferro no fogão
   ],
-  moda: [
-    "photo-1542291026-7eec264c27ff",
-    "photo-1560769629-975ec94e6a86",
-    "photo-1521572163474-6864f9cf17ab",
-    "photo-1583743814966-8936f5b7be1a",
-    "photo-1595777457583-95e059d581b8",
-    "photo-1539008835657-9e8e9680c956",
-    "photo-1542272604-787c3835535d",
-    "photo-1551537482-f2075a1d41f2",
-    "photo-1600185365926-3a2ce3cdb9eb",
+  mulheres: [
+    "photo-1595777457583-95e059d581b8", // vestido
+    "photo-1551537482-f2075a1d41f2", // t-shirt feminina
+    "photo-1539008835657-9e8e9680c956", // jaqueta feminina
+  ],
+  homens: [
+    "photo-1521572163474-6864f9cf17ab", // t-shirt branca
+    "photo-1583743814966-8936f5b7be1a", // t-shirts dobradas
+    "photo-1542272604-787c3835535d", // ganga
+  ],
+  calcados: [
+    "photo-1542291026-7eec264c27ff", // ténis vermelho
+    "photo-1560769629-975ec94e6a86", // ténis
+    "photo-1600185365926-3a2ce3cdb9eb", // sapatilhas
+  ],
+  joias: [
+    "photo-1599643478518-a784e5dc4c8f", // colar
+    "photo-1535632066927-ab7c9ab60908", // brincos
+    "photo-1605100804763-247f67b3557e", // anel
+    "photo-1573408301185-9146fe634ad0", // pulseira
+  ],
+  desporto: [
+    "photo-1517649763962-0c623066013b", // ciclismo
+    "photo-1571019613454-1cb2f99b2d8b", // treino
+    "photo-1461896836934-ffe607ba8211", // fitness
+  ],
+  criancas: [
+    "photo-1503454537195-1dcabb73ffb9", // brinquedos
+    "photo-1519238263530-99bdd11df2ea", // criança
+    "photo-1522771930-78848d9293e8", // calçado de criança
+  ],
+  moveis: [
+    "photo-1555041469-a586c61ea9bc", // sofá
+    "photo-1598300042247-d088f8ab3a91", // cadeira
+    "photo-1567016432779-094069958ea5", // poltrona
+  ],
+  cozinha: [
+    "photo-1556911220-bff31c812dba", // cozinha
+    "photo-1590794056226-79ef3a8147e1", // panela no fogão
+    "photo-1574269909862-7e1d70bb8078", // forno elétrico
   ],
   beleza: [
-    "photo-1541643600914-78b084683601",
-    "photo-1594035910387-fea47794261f",
-    "photo-1596462502278-27bfdc403348",
-    "photo-1596704017254-9b121068fb31",
-    "photo-1556228720-195a672e8a03",
-    "photo-1570172619644-dfd03ed5d881",
-    "photo-1522338242992-e1a54906a8da",
-    "photo-1595476108010-b4d1f102b1b1",
+    "photo-1541643600914-78b084683601", // perfume
+    "photo-1594035910387-fea47794261f", // perfume
+    "photo-1556228720-195a672e8a03", // cosmético
+    "photo-1522338242992-e1a54906a8da", // maquilhagem (flat lay)
+    "photo-1583209814683-c023dd293cc6", // cosméticos (flat lay)
   ],
   acessorios: [
-    "photo-1524592094714-0f0654e20314",
-    "photo-1523275335684-37898b6baf30",
-    "photo-1572635196237-14b3f281503f",
-    "photo-1511499767150-a48a237f0083",
-    "photo-1553062407-98eeb64c6a62",
-    "photo-1581605405669-fcdf81165afa",
-    "photo-1575311373937-040b8e1fd5b6",
-    "photo-1546868871-7041f2a55e12",
+    "photo-1524592094714-0f0654e20314", // relógio na mão
+    "photo-1523275335684-37898b6baf30", // relógios
+    "photo-1572635196237-14b3f281503f", // óculos de sol
+    "photo-1511499767150-a48a237f0083", // óculos de sol
+    "photo-1627123424574-724758594e93", // carteira de couro
+    "photo-1553062407-98eeb64c6a62", // mochila
+    "photo-1584917865442-de89df76afd3", // bolsa vermelha
+    "photo-1591561954557-26941169b49e", // bolsa floral
+    "photo-1605100804763-247f67b3557e", // anel
+    "photo-1535632066927-ab7c9ab60908", // brincos
+    "photo-1573408301185-9146fe634ad0", // pulseira
+    "photo-1599643478518-a784e5dc4c8f", // colar
+    "photo-1588850561407-ed78c282e89b", // boné
+    "photo-1529958030586-3aae4ca485ff", // chapéus
+    "photo-1519692933481-e162a57d6721", // guarda-chuva na chuva
   ],
+};
+
+/**
+ * Imagens escolhidas a dedo para os produtos mais vistos (homepage, ofertas do
+ * dia e primeiras grelhas): a rotação por categoria já é correta, mas estes
+ * merecem a foto que melhor representa o produto exato.
+ */
+const PRODUCT_IMAGES: Record<string, string[]> = {
+  "p-001": ["photo-1601784551446-20c9e07cdbdb", "photo-1511707171634-5f897ff02aa9"], // Capa iPhone
+  "p-002": ["photo-1598327105666-5b89351aff97", "photo-1511707171634-5f897ff02aa9"], // Capa Samsung
+  "p-003": ["photo-1609091839311-d5365f9ff1c5", "photo-1556656793-08538906a9f8"], // Capa Tecno
+  "p-004": ["photo-1609091839311-d5365f9ff1c5", "photo-1556656793-08538906a9f8"], // Capa Infinix
+  "p-005": ["photo-1512941937669-90a1b58e7e9c", "photo-1598327105666-5b89351aff97"], // Película
+  "p-006": ["photo-1511707171634-5f897ff02aa9", "photo-1512941937669-90a1b58e7e9c"], // Hidrogel
+  "p-007": ["photo-1583863788434-e58a36330cf0", "photo-1556656793-08538906a9f8"], // Carregador
+  "p-008": ["photo-1556656793-08538906a9f8", "photo-1583863788434-e58a36330cf0"], // Cabo USB-C
+  "p-009": ["photo-1583863788434-e58a36330cf0", "photo-1556656793-08538906a9f8"], // Lightning
+  "p-010": ["photo-1556656793-08538906a9f8", "photo-1583863788434-e58a36330cf0"], // USB-C→C
+  "p-011": ["photo-1583863788434-e58a36330cf0", "photo-1556656793-08538906a9f8"], // Power bank 10k
+  "p-012": ["photo-1583863788434-e58a36330cf0", "photo-1556656793-08538906a9f8"], // Power bank 20k
+  "p-013": ["photo-1511707171634-5f897ff02aa9", "photo-1609091839311-d5365f9ff1c5"], // Suporte
+  "p-014": ["photo-1556656793-08538906a9f8", "photo-1609091839311-d5365f9ff1c5"], // OTG
+  "p-015": ["photo-1609091839311-d5365f9ff1c5", "photo-1511707171634-5f897ff02aa9"], // Suporte carro
+  "p-016": ["photo-1546435770-a3e426bf472b", "photo-1599669454699-248893623440"], // TWS
+  "p-017": ["photo-1599669454699-248893623440", "photo-1546435770-a3e426bf472b"], // Com fio
+  "p-018": ["photo-1608043152269-423dbba4e7e1", "photo-1589003077984-894e133dabab"], // Coluna
+  "p-019": ["photo-1546868871-7041f2a55e12", "photo-1553545204-4f7d339aa06a"], // Smartwatch
+  "p-020": ["photo-1575311373937-040b8e1fd5b6", "photo-1546868871-7041f2a55e12"], // Smart band
+  "p-054": ["photo-1556911220-bff31c812dba", "photo-1590794056226-79ef3a8147e1"], // Frigideira
+  "p-055": ["photo-1590794056226-79ef3a8147e1", "photo-1556911220-bff31c812dba"], // Panela pressão
+  "p-056": ["photo-1574269909862-7e1d70bb8078", "photo-1556911220-bff31c812dba"], // Liquidificador
+  "p-086": ["photo-1524592094714-0f0654e20314", "photo-1523275335684-37898b6baf30"], // Relógio
+  "p-087": ["photo-1572635196237-14b3f281503f", "photo-1511499767150-a48a237f0083"], // Óculos
+  "p-088": ["photo-1553062407-98eeb64c6a62", "photo-1584917865442-de89df76afd3"], // Mochila
+  "p-089": ["photo-1584917865442-de89df76afd3", "photo-1591561954557-26941169b49e"], // Bolsa
+  "p-090": ["photo-1627123424574-724758594e93", "photo-1553062407-98eeb64c6a62"], // Carteira
+  "p-091": ["photo-1599643478518-a784e5dc4c8f", "photo-1535632066927-ab7c9ab60908"], // Colar
+  "p-092": ["photo-1573408301185-9146fe634ad0", "photo-1605100804763-247f67b3557e"], // Pulseira
+  "p-093": ["photo-1535632066927-ab7c9ab60908", "photo-1605100804763-247f67b3557e"], // Brincos
+  "p-094": ["photo-1605100804763-247f67b3557e", "photo-1535632066927-ab7c9ab60908"], // Anel
+  "p-095": ["photo-1588850561407-ed78c282e89b", "photo-1529958030586-3aae4ca485ff"], // Boné
+  "p-096": ["photo-1529958030586-3aae4ca485ff", "photo-1588850561407-ed78c282e89b"], // Chapéu
+  "p-097": ["photo-1519692933481-e162a57d6721", "photo-1524592094714-0f0654e20314"], // Guarda-chuva
+  "p-098": ["photo-1583209814683-c023dd293cc6", "photo-1599643478518-a784e5dc4c8f"], // Necessaire
+  "p-099": ["photo-1556656793-08538906a9f8", "photo-1583863788434-e58a36330cf0"], // Chaveiro (flat lay)
+  "p-100": ["photo-1627123424574-724758594e93", "photo-1553062407-98eeb64c6a62"], // Porta-cartões
 };
 
 /** Escolhe 3 fotos da categoria, rodando pelo número do produto para variar. */
@@ -114,6 +193,35 @@ function pickImages(category: string, id: string): string[] {
   return Array.from({ length: count }, (_, i) => u(pool[(start + i) % pool.length]));
 }
 
+/**
+ * PRNG determinística por produto (mulberry32 sobre o hash FNV-1a do id).
+ * Serve para variar avaliações, vendas, stock e prazos entre produtos SEM
+ * inventar números aleatórios a cada render (o servidor e o cliente têm de
+ * calcular exatamente os mesmos valores — hidratação estável).
+ */
+function seededRandom(id: string): () => number {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return () => {
+    h = Math.imul(h ^ (h >>> 15), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  };
+}
+
+/** Prazos de entrega plausíveis (dias mínimo, máximo). */
+const DELIVERY_RANGES: [number, number][] = [
+  [2, 4],
+  [2, 5],
+  [3, 5],
+  [3, 7],
+  [4, 8],
+];
+
 interface Seed {
   id: string;
   slug: string;
@@ -124,6 +232,9 @@ interface Seed {
   specs: { label: string; value: string }[];
   tags: string[];
   brand?: string;
+  /** IDs de fotos Unsplash à medida do produto (ex.: "photo-…"); sem elas usa
+      PRODUCT_IMAGES/pool da categoria. */
+  images?: string[];
   rating?: number;
   ratingCount?: number;
   sold?: number;
@@ -141,6 +252,17 @@ function product(s: Seed): Product {
   const badges: Product["badges"] = ["OFERTA"];
   if (s.isNew) badges.push("NOVO");
   if (s.bestseller) badges.push("MAIS VENDIDO");
+  if (s.featured) badges.push("DESTAQUE");
+  // Variação determinística por produto: sem ela, TODOS os produtos tinham a
+  // mesma avaliação (120), o mesmo n.º de vendas (180) e o mesmo prazo (3–7
+  // dias) — um padrão clonado que denuncía dados de demonstração.
+  const rnd = seededRandom(s.id);
+  // Ordem fixa de consumo da sequência: estável em servidor e cliente.
+  const rRating = rnd();
+  const rCount = rnd();
+  const rSold = rnd();
+  const rStock = rnd();
+  const rDelivery = rnd();
   return {
     id: s.id,
     slug: s.slug,
@@ -149,11 +271,12 @@ function product(s: Seed): Product {
     category: s.category,
     price: s.price,
     oldPrice: Math.round(s.price * 1.15),
-    rating: s.rating ?? 4.5,
-    ratingCount: s.ratingCount ?? 120,
-    sold: s.sold ?? 180,
-    stock: s.stock ?? 40,
-    images: pickImages(s.category, s.id),
+    rating: s.rating ?? Math.round((3.9 + rRating * 1.0) * 10) / 10, // 3.9–4.9
+    ratingCount: s.ratingCount ?? 8 + Math.floor(rCount * 1392), // 8–1399
+    sold: s.sold ?? 12 + Math.floor(rSold * 1900), // 12–1911
+    stock: s.stock ?? 12 + Math.floor(rStock * 80),
+    // Foto à medida do produto (verificada visualmente) ou rotação da categoria.
+    images: (s.images ?? PRODUCT_IMAGES[s.id])?.map((id) => u(id)) ?? pickImages(s.category, s.id),
     shortDescription: s.shortDescription,
     description: [
       s.shortDescription,
@@ -166,7 +289,7 @@ function product(s: Seed): Product {
     isNew: s.isNew,
     dealOfDay: s.dealOfDay,
     variants: s.variants,
-    deliveryDays: s.deliveryDays ?? [3, 7],
+    deliveryDays: s.deliveryDays ?? DELIVERY_RANGES[Math.floor(rDelivery * DELIVERY_RANGES.length)],
     freeShipping: s.freeShipping,
     tags: s.tags,
   };
@@ -631,7 +754,7 @@ export const products: Product[] = [
   /* ── Moda ───────────────────────────────────────────────────── */
   product({
     id: "p-061", slug: "t-shirt-basica", name: "T-shirt básica",
-    category: "moda", brand: "NorteWear", price: 900,
+    category: "homens", brand: "NorteWear", price: 900,
     shortDescription: "T-shirt de algodão confortável, perfeita para o dia a dia.",
     specs: [{ label: "Material", value: "100% algodão" }, { label: "Corte", value: "Regular" }],
     tags: ["tshirt", "camiseta", "algodao"],
@@ -643,7 +766,7 @@ export const products: Product[] = [
   }),
   product({
     id: "p-062", slug: "camisa-casual", name: "Camisa casual",
-    category: "moda", brand: "NorteWear", price: 1500,
+    category: "homens", brand: "NorteWear", price: 1500,
     shortDescription: "Camisa casual de manga curta, leve e fácil de combinar.",
     specs: [{ label: "Material", value: "Algodão misto" }, { label: "Manga", value: "Curta" }],
     tags: ["camisa", "casual", "moda"],
@@ -651,7 +774,7 @@ export const products: Product[] = [
   }),
   product({
     id: "p-063", slug: "calcas-de-ganga", name: "Calças de ganga",
-    category: "moda", brand: "NorteWear", price: 2500,
+    category: "homens", brand: "NorteWear", price: 2500,
     shortDescription: "Calças de ganga de corte clássico, resistentes e confortáveis.",
     specs: [{ label: "Material", value: "Ganga" }, { label: "Corte", value: "Slim" }],
     tags: ["calcas", "ganga", "jeans"],
@@ -659,21 +782,21 @@ export const products: Product[] = [
   }),
   product({
     id: "p-064", slug: "vestido-casual", name: "Vestido casual",
-    category: "moda", brand: "NorteWear", price: 2500,
+    category: "mulheres", brand: "NorteWear", price: 2500,
     shortDescription: "Vestido leve e fluido, ideal para o clima quente.",
     specs: [{ label: "Material", value: "Viscose" }, { label: "Comprimento", value: "Midi" }],
     tags: ["vestido", "casual", "feminino"],
   }),
   product({
     id: "p-065", slug: "blusa-feminina", name: "Blusa feminina",
-    category: "moda", brand: "NorteWear", price: 1600,
+    category: "mulheres", brand: "NorteWear", price: 1600,
     shortDescription: "Blusa elegante e versátil, para o trabalho ou o fim de semana.",
     specs: [{ label: "Material", value: "Poliéster" }, { label: "Corte", value: "Solto" }],
     tags: ["blusa", "feminino", "moda"],
   }),
   product({
     id: "p-066", slug: "jaqueta", name: "Jaqueta",
-    category: "moda", brand: "NorteWear", price: 3500,
+    category: "homens", brand: "NorteWear", price: 3500,
     shortDescription: "Jaqueta com forro interior e fecho de correr em metal.",
     specs: [{ label: "Material", value: "Poliéster reforçado" }, { label: "Forro", value: "Interior" }],
     tags: ["jaqueta", "casaco", "moda"],
@@ -681,14 +804,14 @@ export const products: Product[] = [
   }),
   product({
     id: "p-067", slug: "sweatshirt-com-capuz", name: "Sweatshirt com capuz",
-    category: "moda", brand: "NorteWear", price: 2200,
+    category: "homens", brand: "NorteWear", price: 2200,
     shortDescription: "Sweatshirt com capuz e bolso canguru, quente e macio.",
     specs: [{ label: "Material", value: "Algodão misto" }, { label: "Capuz", value: "Ajustável" }],
     tags: ["sweatshirt", "capuz", "moda"],
   }),
   product({
     id: "p-068", slug: "sapatilhas-desportivas", name: "Sapatilhas desportivas",
-    category: "moda", brand: "PassoLeve", price: 3500,
+    category: "calcados", brand: "PassoLeve", price: 3500,
     shortDescription: "Sapatilhas leves com sola amortecida para o treino e o dia a dia.",
     specs: [{ label: "Material", value: "Malha respirável" }, { label: "Sola", value: "EVA amortecida" }],
     tags: ["sapatilhas", "tenis", "desporto"],
@@ -700,7 +823,7 @@ export const products: Product[] = [
   }),
   product({
     id: "p-069", slug: "sandalias", name: "Sandálias",
-    category: "moda", brand: "PassoLeve", price: 1800,
+    category: "calcados", brand: "PassoLeve", price: 1800,
     shortDescription: "Sandálias confortáveis com tira ajustável no calcanhar.",
     specs: [{ label: "Material", value: "Sintético" }, { label: "Sola", value: "Antiderrapante" }],
     tags: ["sandalias", "calcado", "verao"],
@@ -708,7 +831,7 @@ export const products: Product[] = [
   }),
   product({
     id: "p-070", slug: "sapatos-sociais", name: "Sapatos sociais",
-    category: "moda", brand: "PassoLeve", price: 3000,
+    category: "calcados", brand: "PassoLeve", price: 3000,
     shortDescription: "Sapatos sociais clássicos em pele sintética, ideais para o trabalho.",
     specs: [{ label: "Material", value: "Pele sintética" }, { label: "Estilo", value: "Clássico" }],
     tags: ["sapatos", "social", "calcado"],
@@ -716,7 +839,7 @@ export const products: Product[] = [
   }),
   product({
     id: "p-071", slug: "chinelos", name: "Chinelos",
-    category: "moda", brand: "PassoLeve", price: 800,
+    category: "calcados", brand: "PassoLeve", price: 800,
     shortDescription: "Chinelos leves e macios, perfeitos para casa ou a praia.",
     specs: [{ label: "Material", value: "EVA" }, { label: "Sola", value: "Antiderrapante" }],
     tags: ["chinelos", "praia", "calcado"],
@@ -724,28 +847,28 @@ export const products: Product[] = [
   }),
   product({
     id: "p-072", slug: "cinto-de-couro", name: "Cinto de couro",
-    category: "moda", brand: "NorteWear", price: 1000,
+    category: "acessorios", brand: "NorteWear", price: 1000,
     shortDescription: "Cinto de couro com fivela em metal, para todos os dias.",
     specs: [{ label: "Material", value: "Couro" }, { label: "Fivela", value: "Metal" }],
     tags: ["cinto", "couro", "acessorio"],
   }),
   product({
     id: "p-073", slug: "fato-de-treino", name: "Fato de treino",
-    category: "moda", brand: "PassoLeve", price: 3500,
+    category: "desporto", brand: "PassoLeve", price: 3500,
     shortDescription: "Conjunto de treino de duas peças, leve e respirável.",
     specs: [{ label: "Inclui", value: "Casaco + calças" }, { label: "Material", value: "Poliéster" }],
     tags: ["fato de treino", "desporto", "conjunto"],
   }),
   product({
     id: "p-074", slug: "pijama", name: "Pijama",
-    category: "moda", brand: "NorteWear", price: 1800,
+    category: "mulheres", brand: "NorteWear", price: 1800,
     shortDescription: "Pijama de algodão macio para noites confortáveis.",
     specs: [{ label: "Inclui", value: "Camisa + calças" }, { label: "Material", value: "Algodão" }],
     tags: ["pijama", "noite", "conforto"],
   }),
   product({
     id: "p-075", slug: "meias-pack-de-5", name: "Meias (pack de 5)",
-    category: "moda", brand: "NorteWear", price: 400,
+    category: "acessorios", brand: "NorteWear", price: 400,
     shortDescription: "Pack de 5 pares de meias de algodão para o dia a dia.",
     specs: [{ label: "Pack", value: "5 pares" }, { label: "Material", value: "Algodão" }],
     tags: ["meias", "pack", "algodao"],
@@ -930,11 +1053,79 @@ export const products: Product[] = [
     tags: ["chaveiro", "acessorio", "chaves"],
   }),
   product({
-    id: "p-100", slug: "porta-cartoes", name: "Porta-cartões",
-    category: "acessorios", brand: "ViajaBem", price: 1000,
-    shortDescription: "Porta-cartões slim que protege contra leitura sem contacto.",
-    specs: [{ label: "Capacidade", value: "6 cartões" }, { label: "Bloqueio RFID", value: "Sim" }],
-    tags: ["porta cartoes", "carteira", "acessorio"],
+    id: "p-075", slug: "meias-pack-de-5", name: "Meias (pack de 5)",
+    category: "acessorios", brand: "NorteWear", price: 400,
+    shortDescription: "Pack de 5 pares de meias de algodão para o dia a dia.",
+    specs: [{ label: "Pack", value: "5 pares" }, { label: "Material", value: "Algodão" }],
+    tags: ["meias", "pack", "algodao"],
+  }),
+
+  /* ── Joias ──────────────────────────────────────────────────── */
+  product({
+    id: "p-101", slug: "colar-dourado-classico", name: "Colar dourado clássico",
+    category: "joias", brand: "NSM Select", price: 1200,
+    shortDescription: "Colar dourado de aço inoxidável, ideal para o dia a dia ou presentes.",
+    specs: [{ label: "Material", value: "Aço inoxidável" }, { label: "Comprimento", value: "45 cm" }],
+    tags: ["colar", "joia", "dourado"],
+    variants: [{ type: "Cor", options: [{ name: "Dourado" }, { name: "Prateado" }] }],
+  }),
+  product({
+    id: "p-102", slug: "anel-solitario", name: "Anel solitário",
+    category: "joias", brand: "NSM Select", price: 1800,
+    shortDescription: "Anel solitário com acabamento polido — elegante e resistente.",
+    specs: [{ label: "Material", value: "Aço inoxidável" }, { label: "Tamanho", value: "Ajustável" }],
+    tags: ["anel", "joia", "solitario"],
+    variants: [{ type: "Cor", options: [{ name: "Dourado" }, { name: "Prateado" }] }],
+  }),
+
+  /* ── Crianças ───────────────────────────────────────────────── */
+  product({
+    id: "p-103", slug: "conjunto-brinquedos-educativo", name: "Conjunto de brinquedos educativo",
+    category: "criancas", brand: "NSM Select", price: 950,
+    shortDescription: "Brinquedos educativos que estimulam a criatividade dos mais pequenos.",
+    specs: [{ label: "Idade", value: "3+ anos" }, { label: "Peças", value: "60" }],
+    tags: ["brinquedos", "crianca", "educativo"],
+    variants: [{ type: "Tamanho", options: [{ name: "Único" }] }],
+  }),
+  product({
+    id: "p-104", slug: "tenis-crianca", name: "Ténis de criança",
+    category: "criancas", brand: "NSM Select", price: 850,
+    shortDescription: "Ténis leves e resistentes, com fecho fácil para os mais pequenos.",
+    specs: [{ label: "Material", value: "Têxtil" }, { label: "Fecho", value: "Velcro" }],
+    tags: ["tenis", "crianca", "calcado"],
+    variants: [{ type: "Tamanho", options: [{ name: "Único" }] }],
+  }),
+
+  /* ── Móveis ─────────────────────────────────────────────────── */
+  product({
+    id: "p-105", slug: "sofa-2-lugares", name: "Sofá de 2 lugares",
+    category: "moveis", brand: "NSM Select", price: 18500,
+    shortDescription: "Sofá compacto de 2 lugares, tecido resistente e estrutura em madeira.",
+    specs: [{ label: "Lugares", value: "2" }, { label: "Estrutura", value: "Madeira" }],
+    tags: ["sofa", "movel", "sala"],
+  }),
+  product({
+    id: "p-106", slug: "cadeira-escritorio", name: "Cadeira de escritório",
+    category: "moveis", brand: "NSM Select", price: 4200,
+    shortDescription: "Cadeira ergonómica com apoio lombar e altura ajustável.",
+    specs: [{ label: "Apoios", value: "Braços e lombar" }, { label: "Rodas", value: "Silenciosas" }],
+    tags: ["cadeira", "escritorio", "movel"],
+  }),
+
+  /* ── Cozinha ────────────────────────────────────────────────── */
+  product({
+    id: "p-107", slug: "panela-pressao-5l", name: "Panela de pressão 5 L",
+    category: "cozinha", brand: "NSM Select", price: 2400,
+    shortDescription: "Panela de pressão de 5 litros, compatível com todo o tipo de fogões.",
+    specs: [{ label: "Capacidade", value: "5 L" }, { label: "Material", value: "Aço inox" }],
+    tags: ["panela", "pressao", "cozinha"],
+  }),
+  product({
+    id: "p-108", slug: "jogo-panelas-3-pecas", name: "Jogo de panelas (3 peças)",
+    category: "cozinha", brand: "NSM Select", price: 3100,
+    shortDescription: "Jogo de 3 panelas antiaderentes com tampas de vidro.",
+    specs: [{ label: "Peças", value: "3" }, { label: "Antiaderente", value: "Sim" }],
+    tags: ["panelas", "cozinha", "antiaderente"],
   }),
 ];
 

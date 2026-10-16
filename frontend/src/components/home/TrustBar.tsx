@@ -1,60 +1,92 @@
-const benefits = [
-  { emoji: "🚚", title: "Frete grátis", desc: "Em pedidos selecionados" },
-  { emoji: "⚡", title: "Entrega rápida", desc: "Com reembolsos fáceis" },
-  { emoji: "↩️", title: "Devoluções gratuitas", desc: "Até 90 dias" },
-  { emoji: "💰", title: "Melhores preços", desc: "As melhores ofertas estão aqui" },
-];
+"use client";
 
-function BenefitItem({ b }: { b: (typeof benefits)[number] }) {
-  return (
-    <div className="flex shrink-0 items-center gap-3">
-      <span
-        className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-xl"
-        aria-hidden
-      >
-        {b.emoji}
-      </span>
-      <div className="min-w-0">
-        <p className="truncate text-[13px] font-bold text-slate-800 lg:text-sm">
-          {b.title}
-        </p>
-        <p className="truncate text-xs text-slate-500">{b.desc}</p>
-      </div>
-    </div>
-  );
-}
+import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import Link from "next/link";
+import { ChevronRight, CreditCard, Lock, ShieldCheck, Truck } from "lucide-react";
+
+const benefits = [
+  { icon: Truck, label: "Entregas seguras" },
+  { icon: Lock, label: "Privacidade" },
+  { icon: CreditCard, label: "Pagamento seguro" },
+] as const;
 
 export function TrustBar() {
-  // Cada metade tem 2 cópias dos benefícios para a faixa ser sempre mais
-  // larga que o ecrã (o loop desliza exatamente -50% = uma metade).
-  const half = (ariaHidden: boolean) => (
-    <div aria-hidden={ariaHidden} className="flex shrink-0 items-center">
-      {[0, 1].map((copy) => (
-        <div key={copy} className="flex items-center gap-3 pr-3 lg:gap-6 lg:pr-6">
-          {benefits.map((b) => (
-            <BenefitItem key={b.title} b={b} />
-          ))}
-        </div>
-      ))}
-    </div>
-  );
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const intervalRef = useRef<number | null>(null);
+  const prefersReducedMotion = useRef(false);
+
+  useEffect(() => {
+    prefersReducedMotion.current = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+
+    if (prefersReducedMotion.current) return;
+
+    intervalRef.current = window.setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % benefits.length);
+    }, 3500);
+
+    return () => {
+      if (intervalRef.current) {
+        window.clearInterval(intervalRef.current);
+      }
+    };
+  }, []);
+
+  const currentBenefit = benefits[currentIndex];
+  const IconComponent = currentBenefit.icon;
 
   return (
-    <section
-      aria-label="Benefícios da loja"
-      className="overflow-hidden border-y border-slate-100 bg-surface"
+    <Link
+      href="/pagamentos"
+      aria-label="Por que comprar aqui? Ver os métodos de pagamento"
+      className="container-nsm block mt-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40 sm:mt-4"
     >
-      {/* Mobile/tablet: scroll automático e infinito (marquee) */}
-      <div className="flex w-max animate-marquee py-5 hover:[animation-play-state:paused] [mask-image:linear-gradient(to_right,transparent,black_48px,black_calc(100%-48px),transparent)] lg:hidden">
-        {half(false)}
-        {half(true)}
+      {/* Faixa de confiança em azul da marca (antes laranja/accent): o mesmo
+          padrão de tinta suave (10% fundo, 30% borda) com o azul da loja. */}
+      <div className="flex items-center gap-4 rounded-lg border border-brand/30 bg-brand/10 px-2 py-2.5 lg:justify-between">
+        <p className="flex shrink-0 items-center gap-2 font-display text-xs font-extrabold text-primary-700">
+          <ShieldCheck className="size-4 text-primary-700" aria-hidden />
+          Por que comprar aqui?
+        </p>
+
+        <div className="hidden lg:flex lg:items-center lg:gap-8">
+          {benefits.map((b) => {
+            const Icon = b.icon;
+            return (
+              <span
+                key={b.label}
+                className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-slate-600"
+              >
+                <Icon className="size-4 text-primary-700" aria-hidden />
+                {b.label}
+              </span>
+            );
+          })}
+        </div>
+
+        <div className="flex flex-1 lg:hidden justify-center">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentBenefit.label}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              className="flex items-center gap-1.5 text-xs font-medium text-slate-600"
+            >
+              <IconComponent className="size-4 text-primary-700" aria-hidden />
+              {currentBenefit.label}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+
+        <ChevronRight
+          className="ml-auto size-4 shrink-0 text-primary-700 lg:ml-0"
+          aria-hidden
+        />
       </div>
-      {/* Computador: faixa estática, sem scroll automático */}
-      <div className="hidden items-center justify-center gap-8 py-5 lg:flex xl:gap-12">
-        {benefits.map((b) => (
-          <BenefitItem key={b.title} b={b} />
-        ))}
-      </div>
-    </section>
+    </Link>
   );
 }

@@ -56,15 +56,24 @@ public class UserAccount {
 
     /**
      * Código numérico de 6 dígitos para confirmar o email (alternativa ao link,
-     * colado em /configuracoes). Vale o mesmo prazo que o token —
-     * {@link #verificationTokenExpiry}.
+     * colado em /configuracoes). Vale apenas {@code CODE_TTL} (15 min) a contar de
+     * {@link #verificationCodeSentAt} — expirado, é preciso pedir outro. O link de
+     * verificação continua a valer 24 h.
      */
     @Column(length = 6)
     private String verificationCode;
 
     /**
+     * Momento em que o código atual foi gerado — base da validade do código
+     * (15 min). O link de verificação continua a valer 24 h ({@link
+     * #verificationTokenExpiry}); cada um confirma o email por si só.
+     */
+    @Column
+    private Instant verificationCodeSentAt;
+
+    /**
      * Tentativas falhadas com o código. Ao atingir o limite, o código é
-     * invalidado (6 dígitos são só 1M de combinações — sem isto, a janela de
+     * invalidado (6 dígitos são 1 milhão de combinações — sem isto, a janela de
      * validade permitia tentativa exaustiva).
      */
     @Column(nullable = false, columnDefinition = "int default 0")
@@ -119,6 +128,19 @@ public class UserAccount {
     @Column(nullable = false, columnDefinition = "boolean default true")
     @Builder.Default
     private boolean notifWhatsappOrder = true;
+
+    /**
+     * Conta bloqueada pela operação (gestão no painel admin): o login (normal e
+     * social) é recusado e as sessões ativas são revogadas no momento do bloqueio.
+     * Default no SQL para a coluna ser adicionável a tabelas já existentes.
+     */
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    @Builder.Default
+    private boolean banned = false;
+
+    /** Motivo do bloqueio (visível à operação; opcional). */
+    @Column(length = 300)
+    private String bannedReason;
 
     @PrePersist
     public void prePersist() {

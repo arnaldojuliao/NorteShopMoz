@@ -91,9 +91,9 @@ public class EmailService {
      * Email de boas-vindas com o link de confirmação e o código de 6 dígitos.
      * Assíncrono — o registo não espera pelo envio.
      *
-     * <p>O email apresenta as duas opções em paralelo: o botão/link e o código de 6
-     * dígitos a inserir na página de configurações da conta. Qualquer uma confirma o
-     * email por si só.
+     * <p>O email apresenta as duas opções em paralelo: o botão/link (24 h) e o
+     * código de 6 dígitos (15 min) a inserir na página de configurações da conta.
+     * Qualquer uma confirma o email por si só.
      */
     @Async
     public void sendVerification(UserAccount user, String verifyUrl, String code) {
@@ -114,12 +114,13 @@ public class EmailService {
 
                 <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#334155">
                   <strong>2. Inserir o código de 6 dígitos</strong> na página de confirmação de email do
-                  site (ou em <strong>Configurações → Email não verificado</strong>):
+                  site (ou em <strong>Configurações → Email não verificado</strong>) — vale
+                  <strong> 15 minutos</strong>; expirou, peça outro:
                 </p>
                 %s
                 <p style="margin:14px 0 0;font-size:12px;color:#64748b">
-                  O link e o código são válidos por 24 horas e cada um confirma o email por si só.
-                  Não partilhe este código com ninguém.
+                  O link é válido por 24 horas; o código vale 15 minutos e cada um confirma o email
+                  por si só. Não partilhe este código com ninguém.
                 </p>
                 <p style="margin:18px 0 0;font-size:12px;color:#64748b">
                   Se o botão não funcionar, copie e cole este link no navegador:<br>

@@ -42,6 +42,18 @@ test.describe('Admin Dashboard', () => {
     await expect(adminPage.getByText('Produtos mais vendidos')).toBeVisible({ timeout: 15000 });
     await expect(adminPage.getByText('Vendas por dia')).toBeVisible({ timeout: 15000 });
   });
+
+  test('should list reviews for moderation', async ({ adminPage }) => {
+    await adminPage.getByRole('button', { name: 'Avaliações' }).first().click();
+
+    await expect(adminPage.getByRole('heading', { name: 'Avaliações' })).toBeVisible({
+      timeout: 15000,
+    });
+    // O seed cria 2 avaliações por produto → a lista admin nunca vem vazia.
+    await expect(adminPage.locator('button:has-text("Remover")').first()).toBeVisible({
+      timeout: 15000,
+    });
+  });
 });
 
 test.describe('Admin - Navigation', () => {

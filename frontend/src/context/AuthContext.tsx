@@ -95,14 +95,21 @@ function writeLastActive() {
  * poucos segundos de a abrir, além de apagar o perfil local que preenche o
  * checkout de convidado.
  *
- * Sinais de sessão: a marca `nsm:user` (escrita no login/refresh, removida no
- * logout) ou o cookie `nsm_csrf` (não-HttpOnly de propósito, para o double
- * submit).
+ * Sinal de sessão: a marca `nsm:user`, escrita no login/refresh e removida no
+ * logout.
+ *
+ * O cookie `nsm_csrf` **não** serve de sinal: sendo um double-submit, o backend
+ * emite-o sempre que alguém pede um token — incluindo a um visitante anónimo
+ * (o carrinho de convidado faz PUT e pede token). Com ele como sinal, bastava
+ * uma visita ao checkout para o convidado passar a ter «sessão», e o
+ * carregamento seguinte terminava em 401 em `/me` e `/refresh` → sessão dada
+ * como expirada → `router.replace("/")` a partir de qualquer página, para
+ * sempre (o cookie nunca é limpo). O convidado era assim expulso do carrinho e
+ * do checkout e perdia o perfil local que os pré-preenche.
  */
 function hadSession(): boolean {
   if (typeof window === "undefined") return false;
-  if (hasStoredUser()) return true;
-  return /(?:^|;\s*)nsm_csrf=/.test(document.cookie);
+  return hasStoredUser();
 }
 
 function getSessionTimeout(): number {

@@ -1,21 +1,55 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Product } from "@/lib/types";
 import { ProductCard } from "@/components/product/ProductCard";
 import { cn } from "@/lib/utils";
 
-const INITIAL_COUNT = 8;
-const LOAD_MORE_COUNT = 8;
+const INITIAL_COUNT = 100;
+const LOAD_MORE_COUNT = 100;
 
 /**
- * Grelha de produtos com carregamento progressivo: mostra `INITIAL_COUNT`
- * cartões e revela mais `LOAD_MORE_COUNT` sempre que o fundo da grelha chega ao
- * ecrã, até ao último produto da lista recebida.
+ * Proporções de imagem que alternam no mosaico — são elas que fazem as
+ * alturas dos cartões variar (as imagens usam `object-cover`, logo nunca
+ * deformam). O padrão repete-se a cada 4 produtos.
+ */
+const ASPECTS = ["aspect-[5/4]", "aspect-square", "aspect-[4/5]", "aspect-square"];
+
+/**
+ * Modo de grelha por largura de ecrã: no DESKTOP (≥768px, breakpoint `md`)
+ * volta a grelha uniforme antiga; abaixo, o mosaico com `cols` colunas.
+ */
+function useLayoutMode() {
+  const [mode, setMode] = useState({ cols: 2, wide: false });
+  useEffect(() => {
+    const compute = () => {
+      const w = window.innerWidth;
+      setMode({ cols: 2, wide: w >= 768 });
+    };
+    compute();
+    window.addEventListener("resize", compute);
+    return () => window.removeEventListener("resize", compute);
+  }, []);
+  return mode;
+}
+
+/**
+ * Grelha de produtos com dois modos:
  *
- * A lista completa já vem do servidor (é o mesmo catálogo que as páginas de
- * listagem pedem), por isso revelar um lote não faz nenhum pedido — é só
- * avançar um índice.
+ * - **Telemóvel (<768px)**: mosaico assimétrico (masonry real) —
+ *
+ * - Os produtos distribuem-se em N colunas INDEPENDENTES (round-robin), cada
+ *   uma um `flex flex-col` — a distribuição vertical é por coluna, sem
+ *   posicionamento absoluto: impossível haver sobreposições, e os cartões
+ *   simplesmente empilham conforme a sua altura real.
+ * - As proporções de imagem alternam (ASPECTS), por isso as alturas variam e
+ *   as colunas ficam desfasadas — o efeito de mosaico do desenho de
+ *   referência. No telemóvel a 2.ª coluna começa mais abaixo (max-sm:mt-6).
+ * - 2 colunas no telemóvel, 3 no tablet, 4-5 no computador (useColumnCount).
+ * - Carregamento progressivo: mostra `INITIAL_COUNT` cartões e revela mais
+ *   `LOAD_MORE_COUNT` sempre que o fundo chega ao ecrã (IntersectionObserver),
+ *   até ao último produto. A distribuição é por índice, por isso acrescentar
+ *   um lote não move os cartões anteriores de coluna.
  */
 export function ProductGrid({
   products,
@@ -26,6 +60,7 @@ export function ProductGrid({
 }) {
   const [count, setCount] = useState(() => Math.min(INITIAL_COUNT, products.length));
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  const { cols, wide } = useLayoutMode();
 
   // Lista nova (outra categoria, outros filtros, favoritos alterados) → volta ao
   // primeiro lote, em vez de manter o índice antigo sobre dados diferentes.
@@ -39,10 +74,7 @@ export function ProductGrid({
   const hasMore = count < products.length;
 
   // Updater funcional: dois disparos seguidos (deslize rápido, observador
-  // recriado) avançam o índice a partir do valor atual. Antes lia-se
-  // `visibleProducts.length` do closure — dois lotes calculados sobre o mesmo
-  // índice antigo acrescentavam os MESMOS produtos, o que enchia a grelha de
-  // cartões repetidos e declarava a lista completa antes de mostrar tudo.
+  // recriado) avançam o índice a partir do valor atual.
   const loadMore = useCallback(() => {
     setCount((c) => Math.min(c + LOAD_MORE_COUNT, products.length));
   }, [products.length]);
@@ -61,10 +93,20 @@ export function ProductGrid({
     observer.observe(el);
     return () => observer.disconnect();
     // `count`: recria o observador após cada lote, para continuar a carregar
-    // enquanto o fundo da grelha se mantiver dentro da margem.
+    // enquanto o fundo se mantiver dentro da margem.
   }, [hasMore, loadMore, count]);
 
   const visible = products.slice(0, count);
+
+  // Distribuição round-robin: a ordem de leitura continua a ser
+  // aproximadamente linha a linha e as colunas ficam equilibradas.
+  const columns: { product: Product; aspect: string; index: number }[][] = Array.from(
+    { length: cols },
+    () => [],
+  );
+  visible.forEach((product, i) => {
+    columns[i % cols].push({ product, aspect: ASPECTS[i % ASPECTS.length], index: i });
+  });
 
   return (
     <section>
@@ -73,31 +115,46 @@ export function ProductGrid({
           categoria). Fica fora do ecrã para não competir com o título da
           secção nas páginas que já têm um (a home). */}
       <h2 className="sr-only">Produtos</h2>
-      <div
-        className={cn(
-          "grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5",
-          className,
-        )}
-      >
-        {visible.map((p, i) => (
-          <ProductCard key={p.id} product={p} eager={i < 4} />
-        ))}
-
-        {/* Sentinela do carregamento progressivo */}
-        <div ref={loadMoreRef} className="col-span-full flex justify-center py-4">
-          {hasMore ? (
-            <p className="text-sm font-medium text-slate-500">
-              Continue a deslizar para ver mais produtos
-            </p>
-          ) : (
-            visible.length > 0 && (
-              <p className="text-center text-sm text-slate-400">
-                Viu todos os {products.length} produtos
-              </p>
-            )
+      {wide ? (
+        /* Desktop (≥md): grelha uniforme antiga — 3/4/5 colunas. */
+        <div
+          className={cn(
+            "grid gap-2.5 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5",
+            className,
           )}
+        >
+          {visible.map((p, i) => (
+            <ProductCard key={p.id} product={p} eager={i < 4} />
+          ))}
         </div>
-      </div>
+      ) : (
+        /* Telemóvel: mosaico — colunas independentes, alturas variadas. */
+        <div className={cn("flex gap-2", className)}>
+          {columns.map((column, ci) => (
+            <div
+              key={ci}
+              className={cn(
+                "flex min-w-0 flex-1 flex-col gap-2",
+                // Mosaico: a 2.ª coluna arranca mais abaixo.
+                ci % 2 === 1 && "mt-6",
+              )}
+            >
+              {column.map(({ product, aspect, index }) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  eager={index < 4}
+                  imageAspect={aspect}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Sentinela do carregamento progressivo (invisível; o lote seguinte é
+          pré-carregado automaticamente ao aproximar-se do fim). */}
+      {hasMore && <div ref={loadMoreRef} className="h-1" />}
     </section>
   );
 }

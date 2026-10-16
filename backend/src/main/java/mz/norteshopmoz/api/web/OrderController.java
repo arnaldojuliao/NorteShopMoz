@@ -2,10 +2,12 @@ package mz.norteshopmoz.api.web;
 
 import jakarta.validation.Valid;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import mz.norteshopmoz.api.domain.Coupon;
 import mz.norteshopmoz.api.domain.Order;
+import mz.norteshopmoz.api.domain.OrderStatus;
 import mz.norteshopmoz.api.exception.ApiException;
 import mz.norteshopmoz.api.security.UserPrincipal;
 import mz.norteshopmoz.api.service.CouponService;
@@ -97,34 +99,135 @@ public class OrderController {
      * Estatísticas gerais de vendas (admin) — GET /api/orders/admin/stats.
      * Toda a agregação é feita no SQL (ver OrderService.salesStats) e o acesso é
      * restrito a ADMIN por um matcher específico no SecurityConfig.
+     *
+     * <p>Com {@code ?from=2026-10-01&to=2026-11-01} (ISO, UTC) devolve apenas o
+     * período — janela [from, to), o limite superior é exclusivo. Sem datas,
+     * devolve a visão total (como sempre).</p>
      */
     @GetMapping("/admin/stats")
-    public ResponseEntity<?> stats(@AuthenticationPrincipal UserPrincipal principal) {
+    public ResponseEntity<?> stats(
+            @RequestParam(name = "from", required = false) String from,
+            @RequestParam(name = "to", required = false) String to,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        requireAdmin(principal, "Apenas administradores podem ver as estatísticas");
+        if (from == null && to == null) {
+            return ResponseEntity.ok(ApiResponse.data(orderService.salesStats()));
+        }
+        Instant[] window = parsePeriod(from, to);
+        return ResponseEntity.ok(ApiResponse.data(orderService.salesStats(window[0], window[1])));
+    }
+
+    /**
+     * Exportação CSV de pedidos (admin) — GET /api/orders/admin/export.
+     * Mesmos filtros de período que as estatísticas; estado opcional.
+     * Content-Type text/csv com BOM UTF-8 (o Excel reconhece os acentos).
+     */
+    @GetMapping("/admin/export")
+    public ResponseEntity<byte[]> exportCsv(
+            @RequestParam(name = "from", required = false) String from,
+            @RequestParam(name = "to", required = false) String to,
+            @RequestParam(name = "status", required = false) String status,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        requireAdmin(principal, "Apenas administradores podem exportar pedidos");
+        Instant[] window = parsePeriod(from, to);
+        OrderStatus orderStatus = null;
+        if (status != null && !status.isBlank()) {
+            orderStatus = OrderStatus.fromLabel(status)
+                    .orElseThrow(() -> ApiException.badRequest("Estado inválido: " + status));
+        }
+        List<Object[]> rows = orderService.exportRows(window[0], window[1], orderStatus);
+
+        StringBuilder csv = new StringBuilder();
+        csv.append('\ufeff'); // BOM UTF-8
+        csv.append("id;data;estado;subtotal;desconto;envio;total;metodo_pagamento;"
+                + "referencia_pagamento;tracking;cupao;cliente;telefone;email;provincia;cidade\r\n");
+        java.time.format.DateTimeFormatter dateFmt =
+                java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+                        .withZone(java.time.ZoneId.of("UTC"));
+        for (Object[] row : rows) {
+            csv.append(csvCell(row[0])).append(';');
+            csv.append(row[1] == null ? "" : dateFmt.format((java.time.Instant) row[1])).append(';');
+            csv.append(csvCell(row[2])).append(';'); // estado (rótulo, via @JsonValue do enum)
+            csv.append(csvCell(row[3])).append(';');
+            csv.append(csvCell(row[4])).append(';');
+            csv.append(csvCell(row[5])).append(';');
+            csv.append(csvCell(row[6])).append(';');
+            csv.append(csvCell(row[7])).append(';');
+            csv.append(csvCell(row[8])).append(';');
+            csv.append(csvCell(row[9])).append(';');
+            csv.append(csvCell(row[10])).append(';');
+            csv.append(csvCell(row[11])).append(';');
+            csv.append(csvCell(row[12])).append(';');
+            csv.append(csvCell(row[13])).append(';');
+            csv.append(csvCell(row[14])).append(';');
+            csv.append(csvCell(row[15])).append("\r\n");
+        }
+        String filename = "pedidos_" + from + "_" + (orderStatus == null ? "todos" : orderStatus.name())
+                + ".csv";
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=\"" + filename + "\"")
+                .header("Content-Type", "text/csv; charset=UTF-8")
+                .body(csv.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    /** Escape CSV (ponto e vírgula é o separador que o Excel PT espera). */
+    private static String csvCell(Object value) {
+        if (value == null) {
+            return "";
+        }
+        String s = String.valueOf(value).replace("\"", "\"\"");
+        return s.contains(";") || s.contains("\"") || s.contains("\n") ? "\"" + s + "\"" : s;
+    }
+
+    /** Converte ?from&to (datas ISO ou ISO-instant) em janela [from, to). */
+    private static Instant[] parsePeriod(String from, String to) {
+        if (from == null || from.isBlank() || to == null || to.isBlank()) {
+            throw ApiException.badRequest("Indique 'from' e 'to' (ex.: from=2026-10-01&to=2026-11-01)");
+        }
+        try {
+            Instant start = parseInstant(from, false);
+            Instant end = parseInstant(to, true);
+            if (!start.isBefore(end)) {
+                throw ApiException.badRequest("Período inválido: 'from' tem de ser anterior a 'to'");
+            }
+            return new Instant[] { start, end };
+        } catch (java.time.format.DateTimeParseException e) {
+            throw ApiException.badRequest("Datas inválidas — use o formato ISO (2026-10-01)");
+        }
+    }
+
+    /** Data ISO (2026-10-01) → instante (início/exclusivo do dia, UTC). */
+    private static Instant parseInstant(String value, boolean endOfDayExclusive) {
+        if (value.contains("T") || value.contains("Z")) {
+            return Instant.parse(value);
+        }
+        java.time.LocalDate date = java.time.LocalDate.parse(value);
+        return endOfDayExclusive ? date.plusDays(1).atStartOfDay().toInstant(java.time.ZoneOffset.UTC)
+                : date.atStartOfDay().toInstant(java.time.ZoneOffset.UTC);
+    }
+
+    private static void requireAdmin(UserPrincipal principal, String forbiddenMessage) {
         if (principal == null) {
             throw ApiException.unauthorized("Não autenticado");
         }
         if (!"ADMIN".equalsIgnoreCase(principal.role())) {
-            throw ApiException.forbidden("Apenas administradores podem ver as estatísticas");
+            throw ApiException.forbidden(forbiddenMessage);
         }
-        return ResponseEntity.ok(ApiResponse.data(orderService.salesStats()));
     }
 
     /**
      * Transiciona o estado do pedido (admin) — PATCH /api/orders/{id}/status.
      * Apenas utilizadores com role ADMIN; transições apenas para a frente.
+     * Aceita opcionalmente o código de tracking do envio.
      */
     @PatchMapping("/{id}/status")
     public ResponseEntity<?> updateStatus(
             @PathVariable String id,
             @Valid @RequestBody OrderRequest.StatusRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
-        if (principal == null) {
-            throw ApiException.unauthorized("Não autenticado");
-        }
-        if (!"ADMIN".equalsIgnoreCase(principal.role())) {
-            throw ApiException.forbidden("Apenas administradores podem atualizar o estado de pedidos");
-        }
-        return ResponseEntity.ok(ApiResponse.data(orderService.updateStatus(id, request.status())));
+        requireAdmin(principal, "Apenas administradores podem atualizar o estado de pedidos");
+        return ResponseEntity.ok(ApiResponse.data(
+                orderService.updateStatus(id, request.status(), request.trackingCode())));
     }
 
     @GetMapping("/{id}")

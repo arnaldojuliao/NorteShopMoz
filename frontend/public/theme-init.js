@@ -18,7 +18,7 @@
         theme = raw;
       }
     }
-    if (theme !== "light" && theme !== "dark" && theme !== "system") theme = "system";
+    if (theme !== "light" && theme !== "dark" && theme !== "system") theme = "light";
     var dark =
       theme === "dark" ||
       (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);

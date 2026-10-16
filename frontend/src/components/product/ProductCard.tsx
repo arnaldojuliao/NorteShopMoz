@@ -1,19 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { ShoppingCart, Truck } from "lucide-react";
+import { Package, ShoppingCart, Truck } from "lucide-react";
 import type { Product } from "@/lib/types";
-import { formatCompact, discountPct } from "@/lib/format";
+import { formatCompact } from "@/lib/format";
 import { useCurrency } from "@/context/CurrencyContext";
 import { Badge, badgeTone } from "@/components/ui/Badge";
-import { Rating } from "@/components/ui/Rating";
 import { ProductImage } from "@/components/product/ProductImage";
 import { WishlistButton } from "@/components/product/WishlistButton";
 import { useCart } from "@/context/CartContext";
 import { useToast } from "@/context/ToastContext";
-import { categoryEmoji } from "@/lib/data/categories";
+import { newCategoryEmoji as categoryEmoji } from "@/lib/new-categories";
 import { cn } from "@/lib/utils";
-import { useRequireAuth } from "@/components/auth/RequireAuth";
+
+/** Abaixo destas unidades o cartão avisa que o stock está a acabar. */
+const LOW_STOCK = 10;
 
 export function ProductCard({
   product,
@@ -22,6 +23,10 @@ export function ProductCard({
   hidePrice,
   hideCart,
   hideShipping,
+  showOfferBadge,
+  hideStock,
+  dealLayout,
+  imageAspect,
 }: {
   product: Product;
   className?: string;
@@ -32,35 +37,77 @@ export function ProductCard({
   hideCart?: boolean;
   /** Oculta a linha de envio (dias de entrega e vendidos). */
   hideShipping?: boolean;
+  /** Mostra também o selo OFERTA nas listagens normais (vem com `dealLayout`). */
+  showOfferBadge?: boolean;
+  /** Oculta o indicador de stock mesmo quando é relevante. */
+  hideStock?: boolean;
+  /**
+   * Cartão promocional compacto (ofertas relâmpago): mantém o aspeto compacto
+   * em TODOS os tamanhos de ecrã e implica `showOfferBadge`, `hideStock` e
+   * `hideShipping`. Sem percentuais — o cartão mostra o número de vendas.
+   *
+   * Fora das secções promocionais, o cartão usa este MESMO aspeto compacto
+   * apenas no telemóvel (<640px) — imagem a sangrar, uma linha de nome, preço +
+   * antigo + número de vendas e botão de compra no canto da imagem — e volta
+   * ao cartão completo (marca, duas linhas, envio, botão em hover) a partir de
+   * `sm`, sem duplicar o DOM: as diferenças são classes responsivas.
+   */
+  dealLayout?: boolean;
+  /**
+   * Proporção da imagem (classe Tailwind de aspect-*) — o mosaico varia a
+   * altura dos cartões alternando proporções; por omissão mantém o quadrado.
+   */
+  imageAspect?: string;
 }) {
   const { addItem } = useCart();
   const { notify } = useToast();
-  const { checkAuth } = useRequireAuth();
   const { format } = useCurrency();
-  const pct = product.oldPrice ? discountPct(product.oldPrice, product.price) : 0;
   const out = product.stock <= 0;
 
+  // `dealLayout` ativa todas as opções das secções promocionais de uma vez.
+  const offerBadge = showOfferBadge || dealLayout;
+  const noStock = hideStock || dealLayout;
+  const noShipping = hideShipping || dealLayout;
+  // Sem `showOfferBadge` o selo OFERTA fica de fora nas listagens normais (está
+  // em todo o catálogo) — no telemóvel, onde todos os cartões seguem o aspeto
+  // promocional, ele aparece de qualquer modo (ver `mobileOfferBadge`).
+  // «Em destaque»: produtos marcados como featured ganham a etiqueta azul,
+  // mesmo quando o catálogo (API) não a traz no array de badges.
+  const sourceBadges =
+    product.featured && !product.badges.includes("DESTAQUE")
+      ? (["DESTAQUE", ...product.badges] as Product["badges"])
+      : product.badges;
+  const badges = sourceBadges
+    .filter((b) => offerBadge || b !== "OFERTA")
+    .slice(0, offerBadge ? 2 : 1);
+  const mobileOfferBadge = !offerBadge && product.badges.includes("OFERTA");
+
+  // Quantidade rápida sem conta: o carrinho de convidado é suportado (ver BuyBox).
   const handleAddToCart = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
-    const handled = checkAuth(() => {
-      if (out) return;
-      addItem(product);
-      notify("Adicionado ao carrinho 🛒");
-    });
-    if (!handled) {
-      // O modal de login foi aberto pelo checkAuth
-    }
+    if (out) return;
+    addItem(product);
+    notify("Adicionado ao carrinho 🛒");
   };
 
   return (
     <article
       className={cn(
-        "group relative flex flex-col overflow-hidden rounded-2xl border border-slate-100 bg-surface p-2 transition-all duration-300 hover:-translate-y-1 hover:border-slate-200 hover:shadow-card-hover",
+        "group relative flex flex-col overflow-hidden rounded-2xl border border-slate-200/70 bg-surface transition-all duration-300 hover:-translate-y-1 hover:border-slate-300 hover:shadow-card-hover",
+        dealLayout ? "p-0" : "p-0 sm:p-2",
         className,
       )}
     >
-      {/* Imagem em moldura própria */}
-      <div className="relative aspect-square overflow-hidden rounded-xl bg-gradient-to-br from-slate-50 to-slate-100">
+      {/* Imagem: a sangrar no telemóvel (maior), com moldura no desktop. A
+          proporção vem do mosaico (imageAspect) — é ela que varia a altura
+          dos cartões; por omissão, quadrada. */}
+      <div
+        className={cn(
+          "relative overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100",
+          imageAspect ?? "aspect-square",
+          !dealLayout && "sm:rounded-xl",
+        )}
+      >
         <ProductImage
           src={product.images[0]}
           alt={product.name}
@@ -82,17 +129,19 @@ export function ProductCard({
         {/* Degradê sutil no hover para dar profundidade */}
         <div className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-t from-navy-950/30 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
 
-        {/* Badges */}
+        {/* Badges. O selo de percentual foi retirado a pedido — o cartão mostra o
+            número de vendas, no bloco do preço. */}
         <div className="pointer-events-none absolute left-2 top-2 z-[2] flex flex-col items-start gap-1">
-          {pct > 0 && <Badge tone="red">-{pct}%</Badge>}
-          {product.badges
-            .filter((b) => b !== "OFERTA")
-            .slice(0, 1)
-            .map((b) => (
-              <Badge key={b} tone={badgeTone[b]}>
-                {b}
-              </Badge>
-            ))}
+          {mobileOfferBadge && (
+            <span className="sm:hidden">
+              <Badge tone="red">OFERTA</Badge>
+            </span>
+          )}
+          {badges.map((b) => (
+            <Badge key={b} tone={badgeTone[b]}>
+              {b}
+            </Badge>
+          ))}
         </div>
 
         {/* Favoritos */}
@@ -100,72 +149,131 @@ export function ProductCard({
           <WishlistButton product={product} size="sm" />
         </div>
 
-        {/* Ações rápidas: aparecem no hover (ratos), no foco (teclado) e ficam
-            sempre visíveis em ecrãs tácteis ≥640px — aí o `sm:hidden` de baixo
-            já não existe e sem isto não havia forma de comprar. */}
+        {/* Botão de compra: ajustado ao canto da imagem (sem ocupar altura no
+            bloco de informação). No cartão completo é só para telemóvel; a partir
+            de `sm` toma conta o botão fixo abaixo. No dealLayout (ofertas) fica
+            visível em TODOS os ecrãs — é a secção de maior intenção de compra. */}
         {!hideCart && (
-        <div className="absolute inset-x-2 bottom-2 z-[3] hidden translate-y-2 items-center gap-1.5 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100 sm:flex sm:no-hover:translate-y-0 sm:no-hover:opacity-100">
-          <button
-            onClick={handleAddToCart}
-            disabled={out}
-            className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg bg-navy-900/90 text-xs font-semibold text-white shadow-sm backdrop-blur transition hover:bg-brand-strong disabled:opacity-50"
-          >
-            <ShoppingCart className="size-3.5" />
-            {out ? "Esgotado" : "Adicionar"}
-          </button>
-        </div>
-        )}
-      </div>
-
-      {/* Informação compacta */}
-      <div className="flex flex-1 flex-col gap-1 p-2 pt-2.5">
-        <div className="flex items-center justify-between gap-2">
-          <span className="truncate text-xs font-semibold uppercase tracking-wider text-slate-400">
-            {product.brand ?? "NSM Select"}
-          </span>
-          {product.freeShipping && (
-            <span className="shrink-0 text-xs font-bold text-emerald-700">ENVIO GRÁTIS</span>
-          )}
-        </div>
-
-        {/* `-my-1 py-1`: com o título numa só linha o link tinha 18px de altura. */}
-        <Link href={`/produto/${product.slug}`} className="group/title -my-1 py-1">
-          <h3 className="line-clamp-2 text-[13px] font-semibold leading-snug text-slate-800 transition group-hover/title:text-primary-700">
-            {product.name}
-          </h3>
-        </Link>
-
-        <Rating value={product.rating} count={product.ratingCount} size="xs" />
-
-        {!hidePrice && (
-          <div className="mt-auto flex items-baseline gap-1.5 pt-0.5">
-            <span className="font-display text-base font-bold text-slate-900 tabular-nums">
-              {format(product.price)}
-            </span>
-            {product.oldPrice && (
-              <span className="text-xs text-slate-400 line-through">
-                {format(product.oldPrice)}
-              </span>
-            )}
-          </div>
-        )}
-
-        {!hideShipping && (
-        <div className="flex items-center justify-between gap-2">
-          <span className="flex items-center gap-1 text-xs text-slate-500">
-            <Truck className="size-3 text-primary-500" aria-hidden />
-            {product.deliveryDays[0]}–{product.deliveryDays[1]} dias ·{" "}
-            {formatCompact(product.sold)} vendidos
-          </span>
           <button
             onClick={handleAddToCart}
             disabled={out}
             aria-label={`Adicionar ${product.name} ao carrinho`}
-            className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-700 transition-all hover:bg-brand hover:text-white active:scale-95 disabled:opacity-40 sm:hidden"
+            className={cn(
+              "absolute bottom-2 right-2 z-[3] flex size-9 items-center justify-center rounded-full bg-surface/95 text-primary-700 shadow-card transition-all hover:bg-brand hover:text-white active:scale-95 disabled:opacity-50",
+              !dealLayout && "sm:hidden",
+              dealLayout && "lg:hidden",
+            )}
           >
-            <ShoppingCart className="size-3.5" />
+            <ShoppingCart className="size-4" />
           </button>
-        </div>
+        )}
+
+        {/* Botão de compra no canto (desktop ≥sm; ≥lg nos deals): escondido e
+            revelado ao passar o rato — sobe suave + fundo da marca. Fica também
+            acessível por teclado (group-focus-within). No ecrãs touch o botão
+            redondo permanente acima é que cobre. */}
+        {!hideCart && (
+          <button
+            onClick={handleAddToCart}
+            disabled={out}
+            title={out ? "Esgotado" : "Adicionar ao carrinho"}
+            aria-label={`Adicionar ${product.name} ao carrinho`}
+            className={cn(
+              "absolute bottom-2 right-2 z-[3] hidden size-9 items-center justify-center rounded-full bg-surface/95 text-primary-700 opacity-0 shadow-card transition-all duration-200 translate-y-1 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-brand hover:text-white active:scale-95 disabled:opacity-50",
+              !dealLayout && "sm:flex",
+              dealLayout && "lg:flex",
+            )}
+          >
+            <ShoppingCart className="size-4" />
+          </button>
+        )}
+      </div>
+
+      {/* Informação compacta */}
+      <div
+        className={cn(
+          "flex flex-1 flex-col gap-1 p-2",
+          dealLayout ? "pt-1.5" : "pt-1.5 sm:pt-2.5",
+        )}
+      >
+        {/* Linha de marca (e envio grátis) — só no cartão completo, para o
+            telemóvel ficar só com o essencial. `slate-500` e não `slate-400`:
+            no tema escuro o 400 fica abaixo do AA em texto tão pequeno. */}
+        {!dealLayout && (
+          <div className="hidden items-center justify-between gap-2 sm:flex">
+            <span className="truncate text-xs font-semibold uppercase tracking-wider text-slate-500">
+              {product.brand ?? "NSM Select"}
+            </span>
+            {product.freeShipping && (
+              <span className="shrink-0 text-xs font-bold text-emerald-700">ENVIO GRÁTIS</span>
+            )}
+          </div>
+        )}
+
+        {/* `-my-1 py-1`: com o título numa só linha o link tinha 18px de altura. */}
+        <Link href={`/produto/${product.slug}`} className="group/title -my-1 py-1">
+          <h3
+            className={cn(
+              "text-xs font-semibold leading-snug text-slate-800 transition group-hover/title:text-primary-700",
+              dealLayout ? "line-clamp-1" : "line-clamp-1 sm:line-clamp-2",
+            )}
+          >
+            {product.name}
+          </h3>
+        </Link>
+
+        {/* Indicador de stock: só no cartão completo e quando é relevante
+            (esgotado ou poucas unidades) — nunca nas secções promocionais. */}
+        {!noStock && (
+          <div className="hidden items-center gap-1 text-xs font-semibold sm:flex">
+            {out ? (
+              <span className="flex items-center gap-1 text-slate-400">
+                <Package className="size-3 shrink-0" aria-hidden />
+                Esgotado
+              </span>
+            ) : product.stock <= LOW_STOCK ? (
+              <span className="flex items-center gap-1 text-amber-700">
+                <Package className="size-3 shrink-0" aria-hidden />
+                Últimas {product.stock} unidades
+              </span>
+            ) : null}
+          </div>
+        )}
+
+        {!hidePrice && (
+          <div className="mt-auto pt-0.5">
+            <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0">
+              <span className="font-display text-base font-bold text-slate-900 tabular-nums">
+                {format(product.price)}
+              </span>
+              {product.oldPrice && (
+                <span className="text-[13px] font-medium text-slate-500 line-through">
+                  {format(product.oldPrice)}
+                </span>
+              )}
+            </div>
+            {/* N.º de vendas — substitui o percentual. No cartão completo o
+                desktop já o tem na linha de envio, por isso só aparece no
+                telemóvel e nas secções promocionais. */}
+            <span
+              className={cn(
+                "mt-0.5 block text-xs font-medium text-slate-500",
+                !dealLayout && "sm:hidden",
+              )}
+            >
+              {formatCompact(product.sold)} vendidos
+            </span>
+          </div>
+        )}
+
+        {/* Linha de envio (dias + vendidos): só no cartão completo — no telemóvel
+            a altura é toda para a imagem e o preço. */}
+        {!noShipping && (
+          <div className="hidden items-center gap-1 text-xs text-slate-500 sm:flex">
+            <Truck className="size-3 shrink-0 text-primary-500" aria-hidden />
+            {product.deliveryDays[0]}–{product.deliveryDays[1]} dias ·{" "}
+            {formatCompact(product.sold)} vendidos
+          </div>
         )}
       </div>
     </article>

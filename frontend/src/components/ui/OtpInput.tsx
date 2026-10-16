@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils";
 export interface OtpInputProps {
   value: string;
   onChange: (value: string) => void;
-  /** Número de caixas/dígitos (padrão: 6). */
+  /** Número de caixas/dígitos (padrão: 5). */
   length?: number;
   label?: string;
   error?: string;

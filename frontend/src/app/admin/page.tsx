@@ -7,6 +7,7 @@ import {
   ArrowRight,
   BadgePlus,
   BarChart3,
+  Boxes,
   CalendarDays,
   CheckCircle2,
   ChevronLeft,
@@ -14,11 +15,11 @@ import {
   ClipboardList,
   Eye,
   FolderOpen,
+  FolderTree,
   ImagePlus,
   Loader2,
   Lock,
   LogOut,
-  Mail,
   Package,
   PackagePlus,
   Pencil,
@@ -29,15 +30,21 @@ import {
   Star,
   Tag,
   Trash2,
+  Undo2,
   Users,
   X,
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { SalesStatsPanel } from "@/components/admin/SalesStatsPanel";
+import { AdminUsersPanel } from "@/components/admin/AdminUsersPanel";
+import { AdminCategoriesPanel } from "@/components/admin/AdminCategoriesPanel";
+import { AdminIncidentsPanel } from "@/components/admin/AdminIncidentsPanel";
+import { AdminReturnsPanel } from "@/components/admin/AdminReturnsPanel";
+import { AdminStockPanel } from "@/components/admin/AdminStockPanel";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { API_BASE, apiGet, ApiError } from "@/lib/api";
+import { API_BASE, ApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useLoginModal } from "@/context/LoginModalContext";
 import { formatDate, groupByISOWeek, type WeekGroup } from "@/lib/format";
@@ -49,9 +56,16 @@ import {
   cancelOrder,
   fetchSalesStats,
   listAdminOrders,
+  updateOrderTracking,
   type AdminOrdersPage,
   type SalesStats,
 } from "@/lib/orders";
+import {
+  deleteReview,
+  listAdminReviews,
+  type AdminReview,
+  type AdminReviewsPage,
+} from "@/lib/reviews";
 import {
   createProduct,
   deleteProduct,
@@ -60,15 +74,21 @@ import {
   type CreateProductPayload,
 } from "@/lib/products";
 import { createCoupon, deleteCoupon, listCoupons } from "@/lib/coupons";
+import { fetchSalesStatsPeriod, adminOrdersExportUrl } from "@/lib/admin";
 import type { Coupon, Order, OrderStatus, Product } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { STATUS_TONE } from "@/lib/orderStatus";
 
 /**
- * Timeline dos 6 estados — ordem usada para avançar pedidos. "Cancelado" fica
+ * Timeline dos estados — ordem usada para avançar pedidos. "Cancelado" fica
  * FORA desta lista: é um estado terminal, não um passo da sequência (senão um
  * pedido entregue poderia ser "avançado" para cancelado).
  */
 const ORDER_STATUSES: OrderStatus[] = [
+  // Primeiro passo dos pagamentos com checkout hospedado (PaySuite): o pedido
+  // existe mas ainda não foi pago. Fica na timeline para o admin o poder
+  // confirmar à mão quando o webhook do provedor não chega.
+  "Aguarda pagamento",
   "Pedido recebido",
   "Pagamento confirmado",
   "Em preparação",
@@ -92,22 +112,13 @@ const EMPTY_ORDERS_PAGE: AdminOrdersPage = {
 };
 
 
-const STATUS_STYLES: Record<OrderStatus, string> = {
-  "Pedido recebido": "bg-sky-50 text-sky-700",
-  "Pagamento confirmado": "bg-indigo-50 text-indigo-700",
-  "Em preparação": "bg-amber-50 text-amber-700",
-  Enviado: "bg-violet-50 text-violet-700",
-  "Em trânsito": "bg-blue-50 text-blue-700",
-  Entregue: "bg-emerald-50 text-emerald-700",
-  Cancelado: "bg-red-50 text-red-700",
-};
-
 function StatusPill({ status }: { status: OrderStatus }) {
   return (
     <span
       className={cn(
         "inline-flex shrink-0 rounded-full px-2.5 py-1 text-xs font-bold",
-        STATUS_STYLES[status],
+        // Fonte única dos tons de estado (evita a cópia que vivia aqui).
+        STATUS_TONE[status],
       )}
     >
       {status}
@@ -132,7 +143,7 @@ function OrderSkeleton() {
   );
 }
 
-/** Skeleton de linha (produtos do catálogo / subscritores da newsletter). */
+/** Skeleton de linha (produtos do catálogo, cupões e avaliações). */
 function ProductSkeleton() {
   return (
     <div className="flex items-center gap-4 rounded-2xl border border-slate-100 bg-surface p-4">
@@ -163,10 +174,12 @@ export default function AdminPage() {
   const { user, initializing, logout: authLogout } = useAuth();
   const { openLogin } = useLoginModal();
 
-  // Secção ativa do painel: pedidos, publicar produto, gerir catálogo, newsletter,
-  // cupões ou estatísticas.
+  // Secção ativa do painel: pedidos, publicar produto, gerir catálogo, cupões,
+  // avaliações, estatísticas — mais as operações (utilizadores, categorias,
+  // incidências, devoluções, inventário).
   const [section, setSection] = useState<
-    "pedidos" | "produtos" | "gerir" | "newsletter" | "cupoes" | "estatisticas"
+    "pedidos" | "produtos" | "gerir" | "cupoes" | "avaliacoes" | "estatisticas"
+    | "utilizadores" | "categorias" | "incidencias" | "devolucoes" | "stock"
   >("pedidos");
 
   // Estatísticas de vendas (agregadas no servidor). Carregam-se à entrada da
@@ -187,6 +200,9 @@ export default function AdminPage() {
   const [ordersPage, setOrdersPage] = useState(0);
   const [advancingId, setAdvancingId] = useState<string | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  // Rascunho do código de tracking por pedido (input do cartão) e id em gravação.
+  const [trackingDraft, setTrackingDraft] = useState<Record<string, string>>({});
+  const [savingTrackingId, setSavingTrackingId] = useState<string | null>(null);
   // Pasta semanal aberta na vista "Todos" (null = mostra as pastas).
   const [openWeek, setOpenWeek] = useState<string | null>(null);
   // Chave da pasta com avanço em massa em curso (botão desabilitado).
@@ -485,7 +501,12 @@ export default function AdminPage() {
    * e volta à página inicial. Não limpa `orders` diretamente: o useAsyncData
    * re-executa quando o user fica null e esvazia a lista.
    */
+  // «Sair em curso»: entre o user ficar null (authLogout) e a navegação para a
+  // home concluir, o painel NÃO pode pintar o bloco «Área de administração /
+  // Entrar» — era o vestígio que aparecia ao clicar em Sair.
+  const [loggingOut, setLoggingOut] = useState(false);
   const logout = () => {
+    setLoggingOut(true);
     authLogout();
     setStatusFilter("");
     router.push("/");
@@ -495,12 +516,20 @@ export default function AdminPage() {
    * Carrega as estatísticas de vendas (todos os totais são agregados no SQL do
    * backend — o cliente recebe só os números). Sem cache e sem dados locais: um
    * painel de gestão não pode mostrar números inventados.
+   *
+   * `period` opcional: janela [from, to) em ISO (YYYY-MM-DD) — recorta as
+   * estatísticas e o CSV ao período escolhido no painel.
    */
-  const loadStats = async () => {
+  const loadStats = async (period?: { from: string; to: string }) => {
+    const p = period ?? statsPeriod;
     setStatsLoading(true);
     setStatsError(null);
     try {
-      setStats(await fetchSalesStats());
+      setStats(
+        p.from && p.to
+          ? ((await fetchSalesStatsPeriod(p.from, p.to)) as SalesStats)
+          : await fetchSalesStats(),
+      );
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 401) {
@@ -519,6 +548,14 @@ export default function AdminPage() {
       setStatsLoading(false);
     }
   };
+
+  // Período das estatísticas (janela [from, to)). Vazio = visão total.
+  const [statsPeriod, setStatsPeriod] = useState(() => {
+    const today = new Date();
+    const firstOfMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+    const iso = (d: Date) => d.toISOString().slice(0, 10);
+    return { from: iso(firstOfMonth), to: iso(today) };
+  });
 
   // Carrega uma vez, à entrada da secção "Estatísticas". O botão "Tentar
   // novamente" do painel recarrega explicitamente (loadStats).
@@ -697,16 +734,46 @@ export default function AdminPage() {
     }
   };
 
-  // Subscritores da newsletter (GET /api/newsletter/subscribers — apenas admin).
-  const { data: subscribers, loading: subscribersLoading } = useAsyncData(
+  // Moderação de avaliações (GET /api/admin/reviews — apenas admin).
+  const {
+    data: reviewsPage,
+    loading: reviewsLoading,
+    setData: setReviewsPage,
+  } = useAsyncData<AdminReviewsPage | null>(
     () =>
       user
-        ? apiGet<
-            { data: { id: number; email: string; name?: string; subscribedAt: string; active: boolean }[] }
-          >("/api/newsletter/subscribers", 0, true).then((j) => j.data ?? [])
-        : Promise.resolve([]),
+        ? listAdminReviews(0).catch((err) => {
+            if (err instanceof ApiError && err.status === 401) logout();
+            throw err;
+          })
+        : Promise.resolve(null),
     [user],
   );
+  const [reviewBusyId, setReviewBusyId] = useState<number | null>(null);
+
+  const removeReview = async (review: AdminReview) => {
+    if (reviewBusyId !== null) return;
+    if (!window.confirm(`Remover a avaliação de ${review.author}?`)) return;
+    setReviewBusyId(review.id);
+    try {
+      await deleteReview(review.id);
+      // Atualiza localmente com o total recalculado (sem depender de um reload).
+      setReviewsPage((prev) =>
+        prev
+          ? {
+              ...prev,
+              items: prev.items.filter((r) => r.id !== review.id),
+              totalItems: Math.max(0, prev.totalItems - 1),
+            }
+          : prev,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao remover a avaliação.";
+      window.alert(`Não foi possível remover a avaliação:\n${msg}`);
+    } finally {
+      setReviewBusyId(null);
+    }
+  };
 
   /** Duração mínima da rotação do ícone — para a animação ser notada mesmo em recargas rápidas. */
   const MIN_SPIN_MS = 600;
@@ -1061,6 +1128,52 @@ export default function AdminPage() {
           )}
         </ul>
 
+        {/* Código de tracking do envio — definido tipicamente ao marcar "Enviado".
+            Grava sem mudar o estado (PATCH com o estado atual). */}
+        {o.status !== "Cancelado" && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 text-sm">
+            <label className="text-xs font-semibold text-slate-500" htmlFor={`tracking-${o.id}`}>
+              Tracking:
+            </label>
+            <input
+              id={`tracking-${o.id}`}
+              value={trackingDraft[o.id] ?? o.trackingCode ?? ""}
+              onChange={(e) => setTrackingDraft((d) => ({ ...d, [o.id]: e.target.value }))}
+              placeholder={o.trackingCode || "nº da transportadora"}
+              maxLength={80}
+              className="w-48 rounded-lg border border-slate-200 bg-surface px-2.5 py-1.5 text-sm text-slate-900 shadow-sm focus:border-primary-400 focus:outline-none"
+            />
+            {(trackingDraft[o.id] ?? "") !== (o.trackingCode ?? "") && (
+              <Button
+                variant="outline"
+                size="sm"
+                loading={savingTrackingId === o.id}
+                onClick={() => {
+                  const code = (trackingDraft[o.id] ?? "").trim();
+                  if (!code) return;
+                  setSavingTrackingId(o.id);
+                  updateOrderTracking(o.id, o.status, code)
+                    .then((updated) => {
+                      setOrders((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+                      setTrackingDraft((d) => {
+                        const next = { ...d };
+                        delete next[o.id];
+                        return next;
+                      });
+                    })
+                    .catch((err) => {
+                      const msg = err instanceof Error ? err.message : "Falha ao gravar o tracking";
+                      window.alert(`Não foi possível gravar o tracking do pedido ${o.id}:\n${msg}`);
+                    })
+                    .finally(() => setSavingTrackingId(null));
+                }}
+              >
+                Gravar tracking
+              </Button>
+            )}
+          </div>
+        )}
+
         {canAdvance ? (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
             <span className="text-xs text-slate-400">
@@ -1121,6 +1234,15 @@ export default function AdminPage() {
   }
 
   if (!user) {
+    // Sair em curso: a navegação para a home está a caminho — mostra apenas o
+    // carregamento, nunca o convite «Entrar» (vestígio de sessão acabada).
+    if (loggingOut) {
+      return (
+        <div className="flex min-h-[60vh] items-center justify-center">
+          <Loader2 className="size-8 animate-spin text-primary-600" aria-hidden />
+        </div>
+      );
+    }
     return (
       <div className="container-nsm flex justify-center py-16">
         <div className="w-full max-w-md">
@@ -1176,8 +1298,13 @@ export default function AdminPage() {
     estatisticas: "Estatísticas de vendas",
     produtos: editing ? "Editar produto" : "Publicar produto",
     gerir: "Gerir catálogo",
-    newsletter: "Newsletter",
     cupoes: "Cupões",
+    avaliacoes: "Avaliações",
+    utilizadores: "Utilizadores",
+    categorias: "Categorias",
+    incidencias: "Incidências de pagamento",
+    devolucoes: "Devoluções",
+    stock: "Inventário",
   } as const;
   const SECTION_SUBTITLES = {
     pedidos: `${(orders ?? []).length} pedido${(orders ?? []).length === 1 ? "" : "s"}`,
@@ -1188,8 +1315,13 @@ export default function AdminPage() {
       ? `A editar “${form.name || "produto"}”`
       : "Publique um novo produto no catálogo",
     gerir: `${(products ?? []).length} produto${(products ?? []).length === 1 ? "" : "s"} no catálogo`,
-    newsletter: `${(subscribers ?? []).length} subscritor${(subscribers ?? []).length === 1 ? "" : "es"}`,
     cupoes: `${(coupons ?? []).length} cupão${(coupons ?? []).length === 1 ? "" : "ões"}`,
+    avaliacoes: `${reviewsPage?.totalItems ?? 0} avaliaç${(reviewsPage?.totalItems ?? 0) === 1 ? "ão" : "ões"}`,
+    utilizadores: "Contas de clientes e administradores",
+    categorias: "Organização do catálogo",
+    incidencias: "Pagamentos que exigem decisão",
+    devolucoes: "Pedidos de devolução dos clientes",
+    stock: "Níveis de stock e movimentos",
   } as const;
 
   return (
@@ -1246,8 +1378,13 @@ export default function AdminPage() {
           { id: "estatisticas", label: "Estatísticas", icon: BarChart3 },
           { id: "produtos", label: editing ? "Editar produto" : "Publicar produto", icon: PackagePlus },
           { id: "gerir", label: "Gerir catálogo", icon: Package },
+          { id: "categorias", label: "Categorias", icon: FolderTree },
+          { id: "stock", label: "Inventário", icon: Boxes },
+          { id: "devolucoes", label: "Devoluções", icon: Undo2 },
+          { id: "incidencias", label: "Incidências", icon: XCircle },
+          { id: "utilizadores", label: "Utilizadores", icon: Users },
           { id: "cupoes", label: "Cupões", icon: Tag },
-          { id: "newsletter", label: "Newsletter", icon: Users },
+          { id: "avaliacoes", label: "Avaliações", icon: Star },
         ] as const).map((tab) => (
           <button
             key={tab.id}
@@ -1271,8 +1408,29 @@ export default function AdminPage() {
           loading={statsLoading}
           error={statsError}
           onRetry={() => void loadStats()}
+          period={statsPeriod}
+          onPeriodChange={(p) => {
+            setStatsPeriod(p);
+            void loadStats(p);
+          }}
+          exportHref={adminOrdersExportUrl(statsPeriod.from, statsPeriod.to)}
         />
       )}
+
+      {/* ─── Secção: Utilizadores ─────────────────────────────── */}
+      {section === "utilizadores" && <AdminUsersPanel selfId={user.id} />}
+
+      {/* ─── Secção: Categorias ───────────────────────────────── */}
+      {section === "categorias" && <AdminCategoriesPanel />}
+
+      {/* ─── Secção: Incidências de pagamento ─────────────────── */}
+      {section === "incidencias" && <AdminIncidentsPanel />}
+
+      {/* ─── Secção: Devoluções ───────────────────────────────── */}
+      {section === "devolucoes" && <AdminReturnsPanel />}
+
+      {/* ─── Secção: Inventário ───────────────────────────────── */}
+      {section === "stock" && <AdminStockPanel />}
 
       {/* ─── Secção: Publicar/Editar produto ──────────────────── */}
       {section === "produtos" && (
@@ -1761,7 +1919,6 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* ─── Secção: Newsletter ───────────────────────────────── */}
       {/* ─── Secção: Cupões ───────────────────────────────────── */}
       {section === "cupoes" && (
         <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
@@ -1883,49 +2040,74 @@ export default function AdminPage() {
         </div>
       )}
 
-      {section === "newsletter" && (
-        <div className="mt-6 space-y-4">
-          {subscribersLoading && (
+      {/* ─── Secção: Moderação de avaliações ─────────────────── */}
+      {section === "avaliacoes" && (
+        <div className="mt-6 space-y-3">
+          {reviewsLoading && (
             <>
               <ProductSkeleton />
               <ProductSkeleton />
             </>
           )}
 
-          {!subscribersLoading && (subscribers ?? []).length === 0 && (
+          {!reviewsLoading && (reviewsPage?.items ?? []).length === 0 && (
             <EmptyState
-              icon={Mail}
-              title="Nenhum subscritor ainda"
-              description="Quando alguém subscrever a newsletter no rodapé da loja, aparecerá aqui."
+              icon={Star}
+              title="Nenhuma avaliação ainda"
+              description="As avaliações submetidas pelos clientes nos produtos aparecem aqui para moderação."
             />
           )}
 
-          {!subscribersLoading &&
-            (subscribers ?? []).map((s) => (
+          {!reviewsLoading &&
+            (reviewsPage?.items ?? []).map((r) => (
               <div
-                key={s.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-surface p-4"
+                key={r.id}
+                className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-slate-100 bg-surface p-4"
               >
-                <div className="flex min-w-0 items-center gap-3">
-                  <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-700">
-                    <Mail className="size-4.5" aria-hidden />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-900">{s.email}</p>
-                    {s.name && <p className="truncate text-xs text-slate-400">{s.name}</p>}
-                  </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <span
-                    className={cn(
-                      "rounded-full px-2.5 py-1 text-xs font-bold",
-                      s.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500",
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="flex items-center gap-0.5" aria-label={`${r.rating} de 5 estrelas`}>
+                      {Array.from({ length: 5 }, (_, i) => (
+                        <Star
+                          key={i}
+                          className={cn(
+                            "size-3.5",
+                            i < r.rating ? "fill-amber-400 text-amber-400" : "text-slate-300",
+                          )}
+                        />
+                      ))}
+                    </span>
+                    <p className="font-semibold text-slate-900">{r.author}</p>
+                    {r.verified && (
+                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
+                        Compra verificada
+                      </span>
                     )}
-                  >
-                    {s.active ? "Ativo" : "Inativo"}
-                  </span>
-                  <span className="text-xs text-slate-400">{formatDate(s.subscribedAt)}</span>
+                    <span className="text-xs text-slate-400">{formatDate(r.date)}</span>
+                  </div>
+                  {r.title && <p className="mt-1 text-sm font-semibold text-slate-800">{r.title}</p>}
+                  <p className="mt-1 text-sm text-slate-600">{r.comment}</p>
+                  <p className="mt-1.5 text-xs text-slate-400">
+                    {r.productSlug ? (
+                      <Link
+                        href={`/produto/${r.productSlug}`}
+                        className="font-medium text-primary-600 hover:underline"
+                      >
+                        {r.productName ?? r.productId}
+                      </Link>
+                    ) : (
+                      r.productName ?? r.productId
+                    )}
+                  </p>
                 </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void removeReview(r)}
+                  disabled={reviewBusyId !== null}
+                >
+                  <Trash2 className="size-3.5" /> Remover
+                </Button>
               </div>
             ))}
         </div>

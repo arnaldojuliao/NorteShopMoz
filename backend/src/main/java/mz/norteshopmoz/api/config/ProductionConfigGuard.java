@@ -29,6 +29,8 @@ public class ProductionConfigGuard implements ApplicationRunner {
 
     private final Environment environment;
     private final String paymentsMode;
+    private final String paymentsWebhookSecret;
+    private final String paymentsWebhookUrl;
     private final ObjectProvider<PaymentGateway> gatewayProvider;
     private final boolean cookieSecure;
     private final String baseUrl;
@@ -45,6 +47,8 @@ public class ProductionConfigGuard implements ApplicationRunner {
     public ProductionConfigGuard(
             Environment environment,
             @Value("${app.payments.mode:simulated}") String paymentsMode,
+            @Value("${app.payments.webhook-secret:}") String paymentsWebhookSecret,
+            @Value("${app.payments.webhook-url:}") String paymentsWebhookUrl,
             ObjectProvider<PaymentGateway> gatewayProvider,
             @Value("${app.cookie.secure:true}") boolean cookieSecure,
             @Value("${app.mail.base-url:}") String baseUrl,
@@ -59,6 +63,8 @@ public class ProductionConfigGuard implements ApplicationRunner {
             @Value("${app.social.facebook-app-secret:}") String facebookAppSecret) {
         this.environment = environment;
         this.paymentsMode = paymentsMode;
+        this.paymentsWebhookSecret = paymentsWebhookSecret;
+        this.paymentsWebhookUrl = paymentsWebhookUrl;
         this.gatewayProvider = gatewayProvider;
         this.cookieSecure = cookieSecure;
         this.baseUrl = baseUrl;
@@ -79,25 +85,43 @@ public class ProductionConfigGuard implements ApplicationRunner {
             return;
         }
 
-        // Pagamentos. O gateway simulado não é registado em prod (ver
-        // SimulatedPaymentGateway) e o gateway real ainda não existe: há dois
-        // erros de configuração possíveis e ambos deixam a loja sem cobrar
-        // online. Antes só o primeiro era avisado, porque a verificação olhava
-        // apenas para o MODO — com PAYMENTS_MODE=live e nenhum bean
-        // PaymentGateway registado, o operador ficava convencido de que os
-        // pagamentos online estavam ligados e não havia um único sinal no
-        // arranque (os métodos só apareciam ocultos no checkout e a resposta
-        // era 503 no fim).
+        // Pagamentos. Em `prod` o gateway simulado não é registado (ver
+        // SimulatedPaymentGateway) e o gateway real exige credenciais: sem
+        // PAYMENTS_MODE=live a loja não cobra online (os três métodos aceitos no
+        // checkout respondem 503 e ficam desativados no browser).
         if (!"live".equalsIgnoreCase(paymentsMode)) {
             log.warn("[PROD] PAYMENTS_MODE={} — pagamentos online (M-Pesa/e-Mola/cartão) estão DESATIVADOS "
-                    + "e respondem 503. Configure uma integração real e PAYMENTS_MODE=live "
-                    + "para os aceitar. Pagamento na entrega e transferência continuam a funcionar.",
+                    + "e respondem 503. Configure o gateway PaySuite (PAYMENTS_API_KEY) e "
+                    + "PAYMENTS_MODE=live para os aceitar. NOTA: o checkout só oferece estes três "
+                    + "métodos, portanto com este valor a loja NÃO consegue fechar nenhuma encomenda.",
                     paymentsMode);
         } else if (gatewayProvider.getIfAvailable() == null) {
-            log.warn("[PROD] PAYMENTS_MODE=live mas NÃO há nenhum PaymentGateway registado — a loja NÃO "
+            // Com mode=live o PaySuitePaymentGateway é sempre registado (e falha o
+            // arranque se faltar a api-key), pelo que chegar aqui indica um registo
+            // substituído em runtime — nunca um estado normal.
+            log.error("[PROD] PAYMENTS_MODE=live mas NÃO há nenhum PaymentGateway registado — a loja NÃO "
                     + "cobra online: M-Pesa/e-Mola/cartão ficam ocultos no checkout e respondem 503. "
-                    + "Implemente a integração (implementar PaymentGateway com as credenciais) ou volte a "
-                    + "PAYMENTS_MODE=simulated. Pagamento na entrega e transferência continuam a funcionar.");
+                    + "Verifique PAYMENTS_API_KEY (PaySuite) ou volte a PAYMENTS_MODE=simulated.");
+        }
+        // Webhook sem segredo: as notificações de pagamento nunca são aceites, pelo
+        // que um pagamento que o cliente autorize mas o gateway confirme só
+        // assíncronamente fica por confirmar. Não bloqueia o arranque (o pagamento
+        // pode ser confirmado no painel), mas tem de ficar no log.
+        if ("live".equalsIgnoreCase(paymentsMode) && (paymentsWebhookSecret == null
+                || paymentsWebhookSecret.isBlank())) {
+            log.warn("[PROD] PAYMENTS_WEBHOOK_SECRET vazio — as notificações do gateway "
+                    + "(POST /api/payments/webhook) respondem 503 e nenhuma confirmação assíncrona "
+                    + "é processada. Como a PaySuite confirma os pagamentos SÓ por webhook, todos "
+                    + "os pedidos ficariam em 'Aguarda pagamento'. Configure o segredo partilhado "
+                    + "(PaySuite > Webhooks).");
+        }
+        // Sem webhook-url/return-url usa-se a configuração de conta da PaySuite —
+        // funciona, mas é fácil ficar a apontar para outro ambiente (sandbox vs
+        // produção) sem se dar por isso.
+        if ("live".equalsIgnoreCase(paymentsMode)
+                && (paymentsWebhookUrl == null || paymentsWebhookUrl.isBlank())) {
+            log.warn("[PROD] PAYMENTS_WEBHOOK_URL vazio — as notificações seguem o URL configurado "
+                    + "na conta PaySuite. Confirme que aponta para {}/api/payments/webhook.", baseUrl);
         }
 
         // Coerência cookies ↔ esquema. Este caso é fail-fast (e não aviso) porque
