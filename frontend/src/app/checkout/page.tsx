@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import {
-  CheckCircle2,
   Loader2,
   Lock,
   MapPin,
@@ -25,11 +24,12 @@ import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { getStoredUser, saveLocalOrder, submitOrder, type OrderPayload } from "@/lib/orders";
 import { saveMyAddresses } from "@/lib/addresses";
 import { cn } from "@/lib/utils";
+import { formatDate } from "@/lib/format";
+import { site, whatsappHref } from "@/config/site";
 import type { AddressBookEntry, Coupon, Order, UserProfile } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { ProductImage } from "@/components/product/ProductImage";
-import { StatusTimeline } from "@/components/checkout/StatusTimeline";
 import { Modal } from "@/components/ui/Modal";
 
 /* Métodos de pagamento moçambicanos — definidos em `@/lib/payments` para a
@@ -278,47 +278,103 @@ export default function CheckoutPage() {
     );
   }
 
-  /* ── Sucesso ─────────────────────────────────────────────── */
+  /* ── Ecrã "Aguarde o link de pagamento" ──────────────────── */
   if (placedOrder) {
+    // Mensagem que o cliente envia ao fornecedor (WhatsApp) já preenchida:
+    // código da compra, data, artigos com quantidades e total a pagar.
+    const orderDate = formatDate(placedOrder.date);
+    const itemsList = placedOrder.items
+      .map((i) => `• ${i.qty}× ${i.name} — ${format(i.price * i.qty)}`)
+      .join("\n");
+    const supplierMessage =
+      `Olá! Acabei de fazer o pedido ${placedOrder.id} na ${site.name}.\n` +
+      `Data: ${orderDate}\n` +
+      `Artigos:\n${itemsList}\n` +
+      `Total a pagar: ${format(placedOrder.total)}\n` +
+      `Método: ${placedOrder.paymentMethod}\n` +
+      `Fico a aguardar o link de pagamento.`;
     return (
       <div className="container-nsm py-6 pb-28">
-        <div className="mx-auto max-w-3xl">
-          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-8 text-center">
-          <CheckCircle2 className="mx-auto size-14 text-emerald-700" />
-          <h1 className="mt-4 font-display text-2xl font-extrabold text-slate-900">
-            Pedido recebido com sucesso!
-          </h1>
-          <p className="mt-2 text-sm text-slate-600">
-            Obrigado pela sua compra, {placedOrder.address.fullName.split(" ")[0]}! O seu pedido{" "}
-            <strong className="text-slate-900">{placedOrder.id}</strong> foi registado.
-          </p>
-          <div className="mt-6 rounded-2xl bg-surface p-5 text-left">
-            <StatusTimeline current={placedOrder.status} />
+        <div className="mx-auto max-w-2xl">
+          <div className="rounded-2xl border border-primary-100 bg-primary-50/50 p-8 text-center">
+            <span className="mx-auto flex size-14 items-center justify-center rounded-full bg-primary-100">
+              <Loader2 className="size-8 animate-spin text-primary-700" aria-hidden />
+            </span>
+            <h1 className="mt-4 font-display text-2xl font-extrabold text-slate-900">
+              Aguarde o link de pagamento
+            </h1>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-slate-600">
+              O seu pedido <strong className="text-slate-900">{placedOrder.id}</strong> foi
+              registado. O link de pagamento chega na conversa com o fornecedor — fale connosco
+              para o receber e concluir a compra.
+            </p>
           </div>
-          <p className="mt-5 text-sm text-slate-500">
-            Total pago: <strong className="text-slate-900">{format(placedOrder.total)}</strong> ·{" "}
-            {selectedMethod.name}
-          </p>
-          {placedOrder.paymentReference && (
-            <p className="mt-2 text-sm text-slate-500">
-              Referência de pagamento:{" "}
-              <strong className="font-mono text-slate-900">{placedOrder.paymentReference}</strong>
+
+          {/* Resumo da compra: o que o cliente vai pagar */}
+          <div className="mt-5 rounded-2xl border border-slate-100 bg-surface p-5">
+            <h2 className="font-display text-base font-bold text-slate-900">Resumo da compra</h2>
+            <ul className="mt-3 divide-y divide-slate-100">
+              {placedOrder.items.map((i, itemIdx) => (
+                <li key={`${i.productId}|${i.variant ?? ""}|${itemIdx}`} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                  <span className="min-w-0 line-clamp-1 text-slate-700">
+                    <strong className="text-slate-900">{i.qty}×</strong> {i.name}
+                    {i.variant ? ` · ${i.variant}` : ""}
+                  </span>
+                  <span className="shrink-0 font-semibold tabular-nums text-slate-800">
+                    {format(i.price * i.qty)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-2 flex justify-between border-t border-slate-100 pt-3">
+              <span className="text-sm font-bold text-slate-900">Total a pagar</span>
+              <span className="font-display text-lg font-extrabold text-slate-900 tabular-nums">
+                {format(placedOrder.total)}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-slate-400">
+              {placedOrder.paymentMethod} · feito em {orderDate}
+            </p>
+          </div>
+
+          {/* Ações pedidas: conversar com o fornecedor (WhatsApp com os dados da
+              compra já escritos) e fechar. O link do provedor, quando existe
+              (PaySuite/simulado), fica disponível para pagar já. */}
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <Button
+              href={whatsappHref(supplierMessage)}
+              target="_blank"
+              rel="noopener noreferrer"
+              size="lg"
+            >
+              Conversar com o fornecedor
+            </Button>
+            <Button href="/" variant="outline" size="lg">
+              Fechar
+            </Button>
+          </div>
+          {placedOrder.checkoutUrl && (
+            <p className="mt-4 text-center text-sm">
+              <a
+                href={placedOrder.checkoutUrl}
+                className="font-semibold text-primary-600 underline underline-offset-2"
+              >
+                Já tem o link? Abrir página de pagamento
+              </a>
             </p>
           )}
-          <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <Button
+          <p className="mt-4 text-center text-xs text-slate-400">
+            Guardámos o seu pedido — pode acompanhá-lo em{" "}
+            <Link
               href={`/pedido/${placedOrder.id}${placedOrder.address.email ? `?email=${encodeURIComponent(placedOrder.address.email)}` : ""}`}
-              variant="secondary"
+              className="font-semibold text-primary-600 underline underline-offset-2"
             >
               Acompanhar pedido
-            </Button>
-            <Button href="/" variant="outline">
-              Continuar a comprar
-            </Button>
-          </div>
+            </Link>
+            .
+          </p>
         </div>
       </div>
-    </div>
     );
   }
 
@@ -371,15 +427,11 @@ export default function CheckoutPage() {
 
       saveLocalOrder(order, authUser?.id); // pedido real (totais recalculados no servidor)
       clear();
-      // Todos os métodos pagos online devolvem um link de pagamento (checkout
-      // hospedado — PaySuite ou página simulada). Redirecionar é o passo
-      // seguinte: o cliente "aguarda o link" e é encaminhado quando ele chega.
-      if (order.checkoutUrl) {
-        // `assign` (e não a atribuição a `location.href`): navegação para a
-        // página de pagamento, sem perder o histórico da loja.
-        window.location.assign(order.checkoutUrl);
-        return;
-      }
+      // O pedido (e o link de pagamento, quando o gateway devolve um) fica no
+      // ecrã "Aguarde o link de pagamento": sem redirecionamento automático —
+      // o cliente fala com o fornecedor (WhatsApp, mensagem já preenchida) e
+      // recebe o link na conversa. O botão "Abrir página de pagamento" no
+      // ecrã cobre o caso de querer pagar já.
       setPlacedOrder(order);
       notify("Pedido registado com sucesso ✅");
     } catch (err) {

@@ -106,6 +106,30 @@ function PedidosHeader() {
   );
 }
 
+/**
+ * Cabeçalho do detalhe do pedido (/pedido/[id]) — só no telemóvel, igual ao
+ * dos pedidos: seta de recuo (volta à secção anterior — «Meus pedidos») +
+ * título. No computador mantém o cabeçalho normal da loja.
+ */
+function PedidoDetalheHeader() {
+  const router = useRouter();
+  return (
+    <header className="sticky top-0 z-50 bg-gradient-to-r from-header to-header-strong text-white shadow-md shadow-header/20 md:hidden">
+      <div className="container-nsm flex h-14 items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => router.back()}
+          aria-label="Voltar"
+          className="flex size-10 shrink-0 items-center justify-center rounded-full text-white transition hover:bg-white/15 active:scale-95"
+        >
+          <ChevronLeft className="size-7" strokeWidth={3} aria-hidden />
+        </button>
+        <span className="truncate font-display text-lg font-extrabold">Detalhes do pedido</span>
+      </div>
+    </header>
+  );
+}
+
 export function ConditionalHeader() {
   const pathname = usePathname();
 
@@ -119,6 +143,17 @@ export function ConditionalHeader() {
 
   if (pathname === "/pedidos" || pathname.startsWith("/pedidos/")) {
     return <PedidosHeader />;
+  }
+
+  // Detalhe do pedido: no telemóvel usa o cabeçalho dos pedidos (seta para
+  // voltar à secção anterior); no computador mantém o cabeçalho da loja.
+  if (pathname.startsWith("/pedido/")) {
+    return (
+      <>
+        <PedidoDetalheHeader />
+        <Header className="hidden md:block" />
+      </>
+    );
   }
 
   const isSingleHeader = SINGLE_HEADER_ROUTES.some((route) =>

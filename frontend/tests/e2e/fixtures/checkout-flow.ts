@@ -85,9 +85,10 @@ export async function choosePaymentMethod(
 
 /**
  * Caminho completo (carrinho → entrega → pagamento → compra) e devolve o ID do
- * pedido. Com o método pago online, o «Comprar» encaminha para o link de
- * pagamento (página simulada em dev): o helper confirma lá e regressa à loja,
- * terminando na página de acompanhamento do pedido — que é onde o ID se lê.
+ * pedido. O «Comprar» leva ao ecrã «Aguarde o link de pagamento» (sem
+ * redirecionamento automático): o helper lê o ID do pedido no ecrã, abre a
+ * página de pagamento simulada pelo link aí disponível, confirma e regressa à
+ * loja (página de acompanhamento do pedido).
  */
 export async function placeOrder(
   page: Page,
@@ -99,16 +100,24 @@ export async function placeOrder(
   await choosePaymentMethod(page);
   await page.getByRole('button', { name: 'Comprar', exact: true }).click();
 
-  // Aguardar o link de pagamento e "pagar" na página simulada.
+  // Ecrã «Aguarde o link de pagamento» — o ID do pedido aparece no título/texto.
+  await expect(
+    page.getByRole('heading', { name: /Aguarde o link de pagamento/i }),
+  ).toBeVisible({ timeout: 30000 });
+  const summaryText = await page.locator('p', { hasText: /O seu pedido/ }).first().textContent();
+  const idMatch = (summaryText ?? '').match(/([A-Z0-9-]{6,})/);
+  expect(idMatch, `ID do pedido extraído de: ${summaryText}`).toBeTruthy();
+  const orderId = idMatch![1];
+
+  // Pagar pelo link disponível no ecrã (página simulada em dev) e regressar.
+  const payLink = page.getByRole('link', { name: /Abrir página de pagamento/i });
+  await expect(payLink).toBeVisible({ timeout: 20000 });
+  await payLink.click();
   await page.waitForURL(/\/pagamento-simulado/, { timeout: 30000 });
   const confirmBtn = page.getByRole('button', { name: /Confirmar pagamento/i });
   await expect(confirmBtn).toBeVisible({ timeout: 20000 });
   await confirmBtn.click();
-
-  // Regresso à loja: página de acompanhamento do pedido.
   await page.waitForURL(/\/pedido\//, { timeout: 30000 });
-  const url = page.url();
-  const match = url.match(/\/pedido\/([A-Z0-9-]+)/i);
-  expect(match, `ID do pedido extraído de: ${url}`).toBeTruthy();
-  return match![1];
+
+  return orderId;
 }

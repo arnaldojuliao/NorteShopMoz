@@ -1,0 +1,6 @@
+# Reaproveita a imagem existente (curl, user spring, ENTRYPOINT, HEALTHCHECK)
+# e injeta apenas o jar novo — usado quando o Docker Hub não responde.
+FROM norteshopmoz-api:latest
+USER root
+COPY --chown=spring:spring target/norteshopmoz-api-*.jar /app/app.jar
+USER spring
