@@ -11,8 +11,9 @@ import { placeOrder } from './fixtures/checkout-flow';
  *   ("Ver pedidos") ou nos filtros por estado — os testes navegam até lá.
  *
  * O checkout é feito pelo helper partilhado (`placeOrder`): o endereço passou a
- * ser preenchido no modal «Dados de entrega» e o método de pagamento é
- * confirmado na gaveta do método — o CTA final chama-se «Comprar».
+ * ser preenchido no modal «Dados de entrega» e o método de pagamento é só
+ * selecionado (o link de pagamento chega ao comprar)
+ * — o CTA final chama-se «Comprar».
  */
 
 test.describe('Cancelamento de pedidos', () => {

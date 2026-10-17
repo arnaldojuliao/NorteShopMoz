@@ -102,13 +102,15 @@ public class Order {
     private String trackingCode;
 
     /**
-     * URL da página de pagamento do provedor (PaySuite), quando o pedido exige
-     * que o cliente pague fora da loja.
+     * URL da página de pagamento do provedor (PaySuite ou página simulada), quando
+     * o pedido exige que o cliente pague fora da loja.
      *
      * <p>{@code @Transient} de propósito: é um dado de <em>trânsito</em>, válido
      * apenas na resposta que cria o pedido — não faz sentido guardar no histórico
      * um URL de checkout que expira, e os pedidos lidos da base de dados nunca o
-     * trazem (fica null).</p>
+     * trazem (fica null). Nota: o {@code save()} de entidade com id atribuído faz
+     * {@code merge()} e devolve uma instância sem este campo — quem devolve o
+     * pedido na resposta repõe-o (ver OrderService.createOrder).</p>
      */
     @Transient
     private String checkoutUrl;

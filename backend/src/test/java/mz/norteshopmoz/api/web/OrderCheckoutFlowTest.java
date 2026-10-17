@@ -112,7 +112,7 @@ class OrderCheckoutFlowTest {
     }
 
     @Test
-    void checkoutOnlineConfirmaOPagamentoEDecrementaOStock() throws Exception {
+    void checkoutOnlineCriaPagamentoPendenteComLinkEDecrementaOStock() throws Exception {
         Product product = product(10);
 
         mockMvc.perform(post("/api/orders")
@@ -120,12 +120,15 @@ class OrderCheckoutFlowTest {
                         .header("Idempotency-Key", "online-" + UUID.randomUUID())
                         .content(body(product, "m-pesa", 2, null)))
                 .andExpect(status().isCreated())
-                // Pagamento online confirmado no checkout (gateway simulado no
-                // perfil de testes) e com referência da cobrança.
-                .andExpect(jsonPath("$.data.status").value("Pagamento confirmado"))
-                .andExpect(jsonPath("$.data.paymentReference").value(startsWith("MP-")))
+                // Checkout hospedado (também no simulado): o pagamento é criado
+                // PENDENTE com link — o pedido só confirma quando a página de
+                // pagamento (demo ou PaySuite) reporta o sucesso.
+                .andExpect(jsonPath("$.data.status").value("Aguarda pagamento"))
+                .andExpect(jsonPath("$.data.paymentReference").value(startsWith("SIM-")))
+                .andExpect(jsonPath("$.data.checkoutUrl").value(containsString("/pagamento-simulado")))
                 .andExpect(jsonPath("$.data.paymentMethod").value("M-Pesa"));
 
+        // O stock reserva-se na criação do pedido (independente do pagamento).
         assertThat(stockOf(product.getId())).isEqualTo(8);
         assertThat(productRepository.findById(product.getId()).orElseThrow().getSold()).isEqualTo(2);
     }

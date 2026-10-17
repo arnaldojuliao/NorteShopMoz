@@ -98,7 +98,11 @@ class OrderServiceTest {
 
         assertThat(order.getId()).isNotBlank();
         assertThat(order.getUserId()).isNull();
-        assertThat(order.getStatus()).isIn(OrderStatus.PEDIDO_RECEBIDO, OrderStatus.PAGAMENTO_CONFIRMADO);
+        // m-pesa é pago online com checkout hospedado (também no gateway simulado):
+        // o pedido nasce "Aguarda pagamento" e só confirma quando a página de
+        // pagamento (demo/PaySuite) reporta o sucesso.
+        assertThat(order.getStatus()).isIn(OrderStatus.PEDIDO_RECEBIDO, OrderStatus.AGUARDA_PAGAMENTO,
+                OrderStatus.PAGAMENTO_CONFIRMADO);
     }
 
     @Test

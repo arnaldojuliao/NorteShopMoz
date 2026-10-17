@@ -116,6 +116,10 @@ public class SecurityConfig {
                         // validado em PaymentWebhookService. Sem segredo configurado
                         // responde 503, nunca aceita uma notificação não assinada.
                         .requestMatchers(HttpMethod.POST, "/api/payments/webhook").permitAll()
+                        // Resultado do pagamento na página SIMULADA (só existe fora de
+                        // prod — o bean é @Profile("!prod")). Público como o webhook:
+                        // é o "provedor de demonstração" a reportar o resultado.
+                        .requestMatchers(HttpMethod.POST, "/api/payments/simulated/**").permitAll()
                         // Validação de cupão no checkout — pública (guest checkout).
                         .requestMatchers(HttpMethod.POST, "/api/orders/validate-coupon").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/orders").permitAll()

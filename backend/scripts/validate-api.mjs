@@ -383,30 +383,57 @@ console.log("\n💳 Pagamentos online");
                address: "Av. 1", city: "Maputo", province: "Maputo Cidade" },
   };
 
+  // Checkout hospedado (também no simulado): o pagamento é criado PENDENTE com
+  // link — o pedido só confirma quando a página de pagamento reporta o sucesso.
   const mpesa = await api("/api/orders", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...base, paymentMethod: "M-Pesa", paymentInfo: { phone: "+258 84 123 4567" } }),
+    body: JSON.stringify({ ...base, paymentMethod: "M-Pesa" }),
   });
-  check("M-Pesa com telefone → 201 + pagamento confirmado + referência",
-        mpesa.status === 201 && mpesa.body?.data?.status === "Pagamento confirmado"
-          && /^MP-/.test(mpesa.body?.data?.paymentReference ?? ""),
-        `status=${mpesa.status} ref=${mpesa.body?.data?.paymentReference}`);
+  check("M-Pesa sem telefone → 201 + Aguarda pagamento + link (checkout hospedado)",
+        mpesa.status === 201 && mpesa.body?.data?.status === "Aguarda pagamento"
+          && /^SIM-/.test(mpesa.body?.data?.paymentReference ?? "")
+          && typeof mpesa.body?.data?.checkoutUrl === "string"
+          && mpesa.body.data.checkoutUrl.includes("/pagamento-simulado"),
+        `status=${mpesa.status} ref=${mpesa.body?.data?.paymentReference} url=${mpesa.body?.data?.checkoutUrl}`);
 
   const emola = await api("/api/orders", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...base, paymentMethod: "e-Mola", paymentInfo: { phone: "848765432" } }),
+    body: JSON.stringify({ ...base, paymentMethod: "e-Mola" }),
   });
-  check("e-Mola → 201 + referência EM-",
-        emola.status === 201 && /^EM-/.test(emola.body?.data?.paymentReference ?? ""),
+  check("e-Mola → 201 + referência SIM- + link",
+        emola.status === 201 && /^SIM-/.test(emola.body?.data?.paymentReference ?? "")
+          && typeof emola.body?.data?.checkoutUrl === "string",
         `status=${emola.status} ref=${emola.body?.data?.paymentReference}`);
 
   const card = await api("/api/orders", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...base, paymentMethod: "Cartão Visa / Mastercard", paymentInfo: { cardLast4: "1234" } }),
+    body: JSON.stringify({ ...base, paymentMethod: "Cartão Visa / Mastercard" }),
   });
-  check("cartão → 201 + referência com últimos 4 dígitos",
-        card.status === 201 && (card.body?.data?.paymentReference ?? "").endsWith("••••1234"),
+  check("cartão → 201 + referência SIM- + link",
+        card.status === 201 && /^SIM-/.test(card.body?.data?.paymentReference ?? "")
+          && typeof card.body?.data?.checkoutUrl === "string",
         `status=${card.status} ref=${card.body?.data?.paymentReference}`);
+
+  // Confirmação pela página simulada (o equivalente demo do webhook da PaySuite).
+  if (mpesa.body?.data?.paymentReference) {
+    const confirm = await api("/api/payments/simulated/confirm", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ref: mpesa.body.data.paymentReference }),
+    });
+    check("página simulada confirma pagamento → PAGAMENTO_CONFIRMADO",
+          confirm.status === 200 && confirm.body?.data?.orderId === mpesa.body?.data?.id
+            && confirm.body?.data?.status === "Pagamento confirmado",
+          `status=${confirm.status} body=${JSON.stringify(confirm.body?.data ?? {})}`);
+
+    // Idempotência: repetir a confirmação não avança mais (nem rebenta).
+    const confirmAgain = await api("/api/payments/simulated/confirm", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ref: mpesa.body.data.paymentReference }),
+    });
+    check("confirmação repetida é idempotente",
+          confirmAgain.status === 200 && confirmAgain.body?.data?.orderId === mpesa.body?.data?.id,
+          `status=${confirmAgain.status}`);
+  }
 
   // Os pedidos inválidos usam um contacto NOVO cada um: com o mesmo email, o
   // travão (3/hora) recusava-os com 429 antes de a validação do pagamento correr
@@ -414,18 +441,6 @@ console.log("\n💳 Pagamentos online");
   const withContact = (extra) => ({
     ...base, address: { ...base.address, email: contact("pago-inv") }, ...extra,
   });
-
-  const noPhone = await api("/api/orders", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(withContact({ paymentMethod: "M-Pesa" })),
-  });
-  check("M-Pesa sem telefone → 400 {error}", noPhone.status === 400 && noPhone.body?.error, `status=${noPhone.status}`);
-
-  const badPhone = await api("/api/orders", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(withContact({ paymentMethod: "e-Mola", paymentInfo: { phone: "12345" } })),
-  });
-  check("e-Mola com telefone inválido → 400", badPhone.status === 400, `status=${badPhone.status}`);
 
   const unknown = await api("/api/orders", {
     method: "POST", headers: { "Content-Type": "application/json" },

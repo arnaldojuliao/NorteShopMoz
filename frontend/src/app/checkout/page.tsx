@@ -35,9 +35,6 @@ import { Modal } from "@/components/ui/Modal";
 /* Métodos de pagamento moçambicanos — definidos em `@/lib/payments` para a
    homepage poder anunciar exatamente os mesmos métodos. */
 
-/** Só dígitos — para validar contagens de telefone/cartão fora do submit. */
-const digitsOf = (value: string) => value.replace(/\D/g, "");
-
 /** Fundo de cada quadrado — a cor da marca de cada método. */
 const methodBg: Record<string, string> = {
   mpesa: "bg-white",
@@ -53,19 +50,6 @@ const methodLogos: Record<string, { src: string; alt: string }> = {
   mkesh: { src: "/payments/mkesh.svg", alt: "mKesh" },
   card: { src: "/payments/visa.jpg", alt: "Visa / Mastercard" },
 };
-
-/** Agrupa os dígitos do cartão em blocos de 4 (máx. 19 dígitos). */
-function formatCardNumber(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 19);
-  return digits.replace(/(.{4})/g, "$1 ").trim();
-}
-
-/** Formata a validade como MM/AA (barra automática, máx. 4 dígitos). */
-function formatExpiry(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 4);
-  if (digits.length <= 2) return digits;
-  return `${digits.slice(0, 2)}/${digits.slice(2)}`;
-}
 
 export default function CheckoutPage() {
   const { format } = useCurrency();
@@ -106,14 +90,6 @@ export default function CheckoutPage() {
   const [placing, setPlacing] = useState(false);
   /** Rótulos de método disponíveis segundo o backend (vazio = todos). */
   const [methodAvailability, setMethodAvailability] = useState<Set<string>>(() => new Set());
-  /**
-   * O gateway usa página de pagamento própria (PaySuite)?
-   *
-   * Quando é `true`, o cliente é encaminhado para lá depois de criar o pedido e
-   * é o provedor que recolhe telefone/cartão — pedir esses dados aqui seria
-   * redundante (e um cartão a mais fora da página do banco).
-   */
-  const [hostedCheckout, setHostedCheckout] = useState(false);
   const [placedOrder, setPlacedOrder] = useState<Order | null>(null);
   const [couponCode, setCouponCode] = useState("");
   const [coupon, setCoupon] = useState<Coupon | null>(null);
@@ -129,17 +105,12 @@ export default function CheckoutPage() {
     city: "",
     notes: "",
   });
-  // Dados de pagamento online — M-Pesa/e-Mola (telemóvel) e cartão (simulado).
-  const [paymentPhone, setPaymentPhone] = useState("");
-  const [cardNumber, setCardNumber] = useState("");
-  const [cardExpiry, setCardExpiry] = useState("");
-  const [cardCvc, setCardCvc] = useState("");
-  // Modal dos dados de pagamento: os 3 métodos são botões com o logótipo
-  // oficial numa linha; ao clicar abre o modal (fixo) onde se inserem os
-  // dados — idêntico às gavetas de «Dados de entrega» nas definições.
-  const [payModalOpen, setPayModalOpen] = useState(false);
+  // Dados de pagamento online — NÃO são recolhidos aqui: todos os métodos
+  // pagos online usam link de pagamento (checkout hospedado — PaySuite em
+  // produção, página simulada em dev). O cliente só seleciona o método e,
+  // ao comprar, é encaminhado para o link; quem recolhe telefone/cartão é a
+  // página do provedor.
   const [addrModalOpen, setAddrModalOpen] = useState(false);
-  const [paymentConfirmed, setPaymentConfirmed] = useState<Record<string, boolean>>({});
 
 
   // Pré-preenche com os dados do perfil quando o utilizador está logado
@@ -249,7 +220,6 @@ export default function CheckoutPage() {
         if (cancelled || !res.data?.methods) return;
         const available = new Set(res.data.methods);
         setMethodAvailability(() => available);
-        setHostedCheckout(res.data.hostedCheckout === true);
         // Se o método selecionado ficou indisponível, volta ao primeiro da lista
         // (M-Pesa). Não há um método «de recurso» sem validação: os pagamentos
         // online são a única via aceite no checkout.
@@ -264,25 +234,12 @@ export default function CheckoutPage() {
   }, []);
 
   /**
-   * Escolhe o método de pagamento.
-   *
-   * Os três métodos aceites são pagos online e precisam de dados (número da
-   * carteira móvel ou cartão): escolher o método ABRE a gaveta onde esses dados
-   * são pedidos. Sem isto o cliente escolhia M-Pesa e não tinha onde escrever o
-   * número — o «Comprar» recusava o pedido com «Indique um número de telemóvel
-   * válido» e não havia forma de lá chegar (o modal nunca era aberto).
+   * Escolhe o método de pagamento — só isso. O link de pagamento é gerado ao
+   * comprar; os dados do método (telefone/cartão) são pedidos na página do
+   * provedor, não aqui.
    */
   const pickMethod = (id: string) => {
-    const next = paymentMethods.find((m) => m.id === id);
     setMethod(id);
-    // Pré-preenche a carteira móvel com o telefone de entrega (editável).
-    const wallet = id === "mpesa" || id === "emola" || id === "mkesh";
-    if (wallet && !paymentPhone.trim() && form.phone.trim()) {
-      setPaymentPhone(form.phone);
-    }
-    // Com checkout hospedado não há dados a recolher aqui: os campos do método
-    // são preenchidos na página do provedor.
-    if (!hostedCheckout && (next?.needsPhone || next?.needsCard)) setPayModalOpen(true);
   };
 
   const provinceInfo = provinces.find((p) => p.name === province);
@@ -378,45 +335,9 @@ export default function CheckoutPage() {
       return;
     }
 
-    // Valida os dados de pagamento online antes de enviar (o servidor revalida).
-    // Com gateway de checkout hospedado (PaySuite) não há dados a validar: quem os
-    // recolhe é a página do provedor, e exigir aqui um número que ninguém usa
-    // bloquearia a compra sem motivo.
-    const digits = (s: string) => s.replace(/\D/g, "");
-    if (!hostedCheckout && selectedMethod.needsPhone) {
-      const p = digits(paymentPhone);
-      const ok = (p.length === 9 && p.startsWith("8")) || (p.length === 12 && p.startsWith("258"));
-      if (!ok) {
-        // Abre a gaveta dos dados do método: é ali que o número se escreve. Sem
-        // isto o aviso aparecia e o cliente não tinha onde corrigir o número.
-        setPayModalOpen(true);
-        notify(
-          `Indique um número de telemóvel válido para ${selectedMethod.name} (ex.: +258 84 000 0000).`,
-        );
-        return;
-      }
-    }
-    if (!hostedCheckout && selectedMethod.needsCard) {
-      const num = digits(cardNumber);
-      if (num.length < 13 || num.length > 19) {
-        setPayModalOpen(true);
-        notify("Número do cartão inválido.");
-        return;
-      }
-      const [mm, yy] = cardExpiry.replace(/\s/g, "").split("/").map((s) => parseInt(s, 10));
-      const now = new Date();
-      const currentYY = now.getFullYear() % 100;
-      const currentMM = now.getMonth() + 1;
-      if (!mm || !yy || mm < 1 || mm > 12 || yy < currentYY || (yy === currentYY && mm < currentMM)) {
-        notify("Validade do cartão inválida ou expirada (use MM/AA).");
-        return;
-      }
-      const cvc = digits(cardCvc);
-      if (cvc.length < 3 || cvc.length > 4) {
-        notify("CVC do cartão inválido.");
-        return;
-      }
-    }
+    // Sem validação de telefone/cartão: quem os recolhe é a página do link de
+    // pagamento (PaySuite em produção, página simulada em dev) — o servidor
+    // também não os exige com checkout hospedado.
 
     setPlacing(true);
     try {
@@ -435,15 +356,8 @@ export default function CheckoutPage() {
         discount,
         total,
         paymentMethod: selectedMethod.name,
-        // Só o essencial chega ao servidor: telemóvel (carteiras) ou últimos 4
-        // dígitos do cartão — o número completo nunca sai do navegador.
-        paymentInfo: hostedCheckout
-          ? undefined
-          : selectedMethod.needsPhone
-            ? { phone: paymentPhone }
-            : selectedMethod.needsCard
-              ? { cardLast4: digits(cardNumber).slice(-4) }
-              : undefined,
+        // Sem paymentInfo: os dados do método são recolhidos na página do
+        // provedor (checkout hospedado) — nada de cartão no nosso servidor.
         address: { ...form, province },
         couponCode: coupon?.code || undefined,
       };
@@ -457,12 +371,12 @@ export default function CheckoutPage() {
 
       saveLocalOrder(order, authUser?.id); // pedido real (totais recalculados no servidor)
       clear();
-      // Gateway com checkout hospedado (PaySuite): o pedido existe mas o pagamento
-      // só acontece na página do provedor. Redirecionar é o passo seguinte — sem
-      // isto o cliente ficava na loja com um pedido por pagar e sem forma de pagar.
+      // Todos os métodos pagos online devolvem um link de pagamento (checkout
+      // hospedado — PaySuite ou página simulada). Redirecionar é o passo
+      // seguinte: o cliente "aguarda o link" e é encaminhado quando ele chega.
       if (order.checkoutUrl) {
-        // `assign` (e não a atribuição a `location.href`): navegação externa para
-        // a página do provedor, sem sair do histórico da loja.
+        // `assign` (e não a atribuição a `location.href`): navegação para a
+        // página de pagamento, sem perder o histórico da loja.
         window.location.assign(order.checkoutUrl);
         return;
       }
@@ -569,23 +483,6 @@ export default function CheckoutPage() {
     notify("Endereço guardado ✅");
   };
 
-  /** Dados do método ativo estão completos? (modal só confirma com tudo preenchido) */
-  const paymentDetailsValid = hostedCheckout
-    ? true
-    : selectedMethod?.needsPhone
-      ? digitsOf(paymentPhone).length >= 9
-      : selectedMethod?.needsCard
-        ? digitsOf(cardNumber).length === 16 && cardExpiry.length >= 5 && digitsOf(cardCvc).length >= 3
-        : true;
-
-  /** Confirma os dados do método no modal e volta à seleção. */
-  const confirmPaymentDetails = () => {
-    if (!paymentDetailsValid) return;
-    setPaymentConfirmed((prev) => ({ ...prev, [method]: true }));
-    setPayModalOpen(false);
-    notify(`${selectedMethod?.name ?? "Pagamento"} confirmado ✅`);
-  };
-
   return (
     <div className="container-nsm py-6 pb-28">
       <form onSubmit={submit} className="mt-6 px-4 grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px]">
@@ -686,8 +583,8 @@ export default function CheckoutPage() {
             <h2 className="flex items-center gap-2 font-display text-lg font-bold text-slate-900">
               <Lock className="size-5 text-primary-600" /> Método de pagamento
             </h2>
-            {/* Logótipos oficiais numa única linha — sem descrições. Clicar
-                abre o modal fixo com os dados do método. */}
+            {/* Logótipos oficiais numa única linha — o cliente só SELECIONA o
+                método; o link de pagamento é gerado ao comprar. */}
             {/* 4 métodos (M-Pesa, e-Mola, mKesh, cartão) — 2 colunas no telemóvel,
                 4 em linha no desktop. */}
             <div className="mt-4 grid grid-cols-2 gap-3 place-items-center sm:grid-cols-4">
@@ -699,7 +596,6 @@ export default function CheckoutPage() {
                 // do backend ainda não chegou (Set vazio), assume-se disponível.
                 const backendUnavailable = methodAvailability.size > 0 && !methodAvailability.has(m.name);
                 const isAvailable = m.available && !backendUnavailable;
-                const confirmed = paymentConfirmed[m.id];
                 return (
                   <button
                     key={m.id}
@@ -722,11 +618,6 @@ export default function CheckoutPage() {
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={logo.src} alt={logo.alt} className="max-h-20 w-auto rounded-lg object-contain" />
-                    {confirmed && (
-                      <span className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-success text-white shadow-sm">
-                        <CheckCircle2 className="size-3.5" aria-hidden />
-                      </span>
-                    )}
                   </button>
                 );
               })}
@@ -734,7 +625,8 @@ export default function CheckoutPage() {
 
             <p className="mt-4 flex items-center gap-1.5 text-xs text-slate-400">
               <Lock className="size-3.5" />
-              Pagamento seguro · os dados são encriptados e nunca partilhados.
+              Pagamento seguro · ao comprar recebe um link para concluir com o
+              método escolhido (a página do provedor é que pede o número/cartão).
             </p>
           </section>
 
@@ -817,7 +709,11 @@ export default function CheckoutPage() {
             disabled={items.length === 0}
             className="hidden md:flex"
           >
-            {placing ? "A processar…" : "Comprar"}
+            {placing && selectedMethod?.paidOnline
+              ? "A aguardar o link de pagamento…"
+              : placing
+                ? "A processar…"
+                : "Comprar"}
           </Button>
 
           {!logged && (
@@ -843,89 +739,6 @@ export default function CheckoutPage() {
 
         {/* Barra fixa removida a pedido */}
       </form>
-
-      {/* Modal fixo dos dados do método de pagamento — idêntico às gavetas de
-          «Dados de entrega» nas definições (fundo bloqueado, fecho por Esc). */}
-      <Modal
-        open={payModalOpen}
-        onClose={() => setPayModalOpen(false)}
-        title={selectedMethod?.name}
-        size="sm"
-      >
-        <div className="space-y-4">
-          {hostedCheckout && (
-            <p className="rounded-xl border border-dashed border-primary-200 bg-primary-50/50 p-4 text-sm leading-relaxed text-slate-600">
-              Vai ser encaminhado para a página segura da PaySuite para concluir o
-              pagamento com {selectedMethod?.name}. Depois de pagar, regressa
-              automaticamente à loja.
-            </p>
-          )}
-          {!hostedCheckout && selectedMethod?.needsPhone && (
-            <Input
-              label={`Número ${selectedMethod.name}`}
-              type="tel"
-              required
-              inputMode="tel"
-              autoComplete="tel"
-              value={paymentPhone}
-              onChange={(e) => setPaymentPhone(e.target.value)}
-              placeholder="+258 84 000 0000"
-              hint="O pagamento é pedido ao número indicado."
-              autoFocus
-            />
-          )}
-          {!hostedCheckout && selectedMethod?.needsCard && (
-            <>
-              <Input
-                label="Número do cartão"
-                required
-                inputMode="numeric"
-                autoComplete="cc-number"
-                value={cardNumber}
-                onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
-                placeholder="1234 5678 9012 3456"
-              />
-              <div className="grid grid-cols-2 gap-3">
-                <Input
-                  label="Validade (MM/AA)"
-                  required
-                  inputMode="numeric"
-                  autoComplete="cc-exp"
-                  value={cardExpiry}
-                  onChange={(e) => setCardExpiry(formatExpiry(e.target.value))}
-                  placeholder="MM/AA"
-                />
-                <Input
-                  label="CVC"
-                  required
-                  inputMode="numeric"
-                  autoComplete="cc-csc"
-                  type="password"
-                  value={cardCvc}
-                  onChange={(e) => setCardCvc(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                  placeholder="123"
-                />
-              </div>
-            </>
-          )}
-          {!hostedCheckout && (
-            <p className="flex items-center gap-1.5 text-xs text-slate-400">
-              <Lock className="size-3.5" />
-              Ambiente de demonstração: o pagamento é simulado, nenhum dado real é enviado.
-            </p>
-          )}
-          <Button
-            type="button"
-            onClick={confirmPaymentDetails}
-            disabled={!paymentDetailsValid}
-            fullWidth
-            size="lg"
-          >
-            <CheckCircle2 className="size-5" aria-hidden />
-            Confirmar pagamento
-          </Button>
-        </div>
-      </Modal>
 
       {/* Modal do gestor de endereços — idêntico às definições: lista,
           adição com GPS e sincronização com o livro (nsm:addresses). */}

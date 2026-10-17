@@ -7,9 +7,11 @@ import type { PaymentMethod } from "@/lib/types";
  * mostra os métodos: assim a faixa de pagamento nunca anuncia um serviço que
  * o checkout não implementa, nem deixa de fora um que existe.
  *
- * Os pagos online (M-Pesa, e-Mola, cartão) são cobrados no gateway do backend
- * — em modo simulado (dev) a cobrança é validada e gera uma referência; com
- * credenciais reais basta trocar PAYMENTS_MODE para live.
+ * Todos os pagos online (M-Pesa, e-Mola, mKesh, cartão) usam LINK de
+ * pagamento (checkout hospedado): o checkout só pede a SELEÇÃO do método —
+ * ao comprar, o cliente é encaminhado para a página do provedor (PaySuite
+ * em produção; página simulada /pagamento-simulado em dev), que é quem
+ * recolhe telefone/cartão e confirma por webhook.
  */
 export const paymentMethods: PaymentMethod[] = [
   {

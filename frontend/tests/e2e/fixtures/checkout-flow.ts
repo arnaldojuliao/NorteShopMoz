@@ -4,14 +4,15 @@ import { expect, type Page } from '@playwright/test';
  * Fluxos de checkout partilhados pelos specs E2E.
  *
  * O checkout deixou de ter campos de entrega inline: a morada vem do livro de
- * endereços e é editada no modal «Dados de entrega». O pagamento (M-Pesa,
- * e-Mola, cartão — os três métodos aceites) é confirmado na gaveta do método.
- * Estes helpers concentram esse caminho para os specs não o repetirem.
+ * endereços e é editada no modal «Dados de entrega». O pagamento é de SELEÇÃO
+ * apenas: o cliente escolhe o método e, ao comprar, é encaminhado para o link
+ * de pagamento (página simulada em dev, PaySuite em produção). Estes helpers
+ * concentram esse caminho para os specs não o repetirem.
  */
 
 export const TEST_PRODUCT_URL = '/produto/capa-para-iphone';
 export const TEST_PRODUCT_NAME = 'Capa para iPhone';
-/** Número usado no método de pagamento (formato aceite pelo servidor). */
+/** Número usado nos dados de entrega (formato aceite pelo servidor). */
 export const TEST_PAYMENT_PHONE = '+258 84 123 4567';
 
 /** Adiciona o produto de teste ao carrinho (badge do cabeçalho ≥ 1 item). */
@@ -67,27 +68,27 @@ export async function fillDeliveryAddress(
 }
 
 /**
- * Escolhe um método de pagamento e confirma os dados na gaveta respetiva.
- * Sem este passo o «Comprar» é recusado (os três métodos exigem número/cartão).
+ * Escolhe um método de pagamento — só a seleção: os métodos pagos online usam
+ * link de pagamento (checkout hospedado) e não pedem dados no checkout.
  */
 export async function choosePaymentMethod(
   page: Page,
-  method: 'M-Pesa' | 'e-Mola' = 'M-Pesa',
+  method: 'M-Pesa' | 'e-Mola' | 'mKesh' = 'M-Pesa',
 ): Promise<void> {
   await page.getByRole('button', { name: method, exact: true }).click();
-
-  const dialog = page.getByRole('dialog', { name: method });
-  await expect(dialog).toBeVisible({ timeout: 15000 });
-
-  await dialog.getByLabel(`Número ${method}`).fill(TEST_PAYMENT_PHONE);
-  const confirm = dialog.getByRole('button', { name: /Confirmar pagamento/i });
-  await expect(confirm).toBeEnabled({ timeout: 15000 });
-  await confirm.click();
-
-  await expect(dialog).toBeHidden({ timeout: 15000 });
+  await expect(page.getByRole('button', { name: method, exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+    { timeout: 15000 },
+  );
 }
 
-/** Caminho completo (carrinho → entrega → pagamento → compra) e devolve o ID do pedido. */
+/**
+ * Caminho completo (carrinho → entrega → pagamento → compra) e devolve o ID do
+ * pedido. Com o método pago online, o «Comprar» encaminha para o link de
+ * pagamento (página simulada em dev): o helper confirma lá e regressa à loja,
+ * terminando na página de acompanhamento do pedido — que é onde o ID se lê.
+ */
 export async function placeOrder(
   page: Page,
   addressOptions: Parameters<typeof fillDeliveryAddress>[1] = {},
@@ -98,12 +99,16 @@ export async function placeOrder(
   await choosePaymentMethod(page);
   await page.getByRole('button', { name: 'Comprar', exact: true }).click();
 
-  await expect(
-    page.getByRole('heading', { name: /Pedido recebido com sucesso/i }),
-  ).toBeVisible({ timeout: 30000 });
+  // Aguardar o link de pagamento e "pagar" na página simulada.
+  await page.waitForURL(/\/pagamento-simulado/, { timeout: 30000 });
+  const confirmBtn = page.getByRole('button', { name: /Confirmar pagamento/i });
+  await expect(confirmBtn).toBeVisible({ timeout: 20000 });
+  await confirmBtn.click();
 
-  const confirmText = await page.locator('p', { hasText: /O seu pedido/ }).first().textContent();
-  const match = (confirmText ?? '').match(/([A-Z0-9-]{6,})/);
-  expect(match, `ID do pedido extraído de: ${confirmText}`).toBeTruthy();
+  // Regresso à loja: página de acompanhamento do pedido.
+  await page.waitForURL(/\/pedido\//, { timeout: 30000 });
+  const url = page.url();
+  const match = url.match(/\/pedido\/([A-Z0-9-]+)/i);
+  expect(match, `ID do pedido extraído de: ${url}`).toBeTruthy();
   return match![1];
 }

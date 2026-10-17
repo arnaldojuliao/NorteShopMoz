@@ -325,6 +325,12 @@ public class OrderService {
                         .build();
 
                 Order saved = orderRepository.save(order);
+                // O save() de uma entidade com id já atribuído faz merge() — devolve
+                // OUTRA instância gerida pelo Hibernate, reconstruída só com o estado
+                // MAPEADO: os campos @Transient (checkoutUrl) voltam null nela. O
+                // checkout precisa do link na resposta, por isso repõe-se aqui na
+                // instância que é devolvida (e que os emails levam).
+                saved.setCheckoutUrl(checkoutUrl);
                 // Email de confirmação SÓ DEPOIS DO COMMIT: era enviado dentro da
                 // transação, antes do commit — se o commit falhasse a seguir, o
                 // cliente recebia "compra confirmada" de um pedido que não existe.
