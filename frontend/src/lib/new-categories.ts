@@ -125,7 +125,7 @@ export const newCategories: Category[] = [
     slug: "cozinha",
     name: "Cozinha",
     emoji: "🍳",
-    image: "https://images.unsplash.com/photo-1584990347449-a63e2b662294?auto=format&fit=crop&w=800&q=70",
+    image: "https://images.unsplash.com/photo-1556911220-bff31c812dba?auto=format&fit=crop&w=800&q=70",
     description: "Utensílios, panelas e eletroportáteis.",
   },
   {
