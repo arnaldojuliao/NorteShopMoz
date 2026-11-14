@@ -15,9 +15,11 @@ import mz.norteshopmoz.api.domain.NewsletterSubscriber;
 import mz.norteshopmoz.api.domain.Order;
 import mz.norteshopmoz.api.domain.OrderAddress;
 import mz.norteshopmoz.api.domain.OrderItem;
+import mz.norteshopmoz.api.domain.OrderStatus;
 import mz.norteshopmoz.api.domain.UserAccount;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.scheduling.annotation.Async;
@@ -42,12 +44,15 @@ public class EmailService {
     private final String apiKey;
     private final String from;
     private final String baseUrl;
+    private final String adminEmail;
     private final ShippingConfig shippingConfig;
 
-    public EmailService(AppProperties props, ShippingConfig shippingConfig) {
+    public EmailService(AppProperties props, ShippingConfig shippingConfig,
+            @Value("${app.admin.email:admin@norteshopmoz.com}") String adminEmail) {
         this.apiKey = props.mail().resendApiKey();
         this.from = props.mail().from();
         this.baseUrl = props.mail().baseUrl().replaceAll("/+$", "");
+        this.adminEmail = adminEmail == null ? "" : adminEmail.trim();
         this.shippingConfig = shippingConfig;
         // Cliente construído diretamente (sem depender de auto-configuração), com timeouts
         // que toleram redes móveis/instáveis (o envio é assíncrono — não bloqueia pedidos).
@@ -244,6 +249,22 @@ public class EmailService {
                 </tr>
                 """.formatted(formatMeticais(order.getTotal())));
 
+        // Pedido à espera de pagamento com link conhecido: o botão principal do
+        // email é "Concluir pagamento" (o cliente pode ter fechado o browser do
+        // provedor e não ter outra forma de voltar a pagar). O acompanhamento
+        // fica como link de texto.
+        boolean awaitingPayment = order.getStatus() == OrderStatus.AGUARDA_PAGAMENTO
+                && order.getCheckoutUrl() != null && !order.getCheckoutUrl().isBlank();
+        String primaryButton = awaitingPayment
+                ? "<a href=\"" + escapeHtml(order.getCheckoutUrl()) + "\" style=\"" + buttonStyle()
+                    + "\">Concluir pagamento</a>"
+                : "<a href=\"" + escapeHtml(trackingUrl(order)) + "\" style=\"" + buttonStyle()
+                    + "\">Acompanhar pedido</a>";
+        String secondaryLine = awaitingPayment
+                ? "<p style=\"margin:12px 0 0;font-size:13px\"><a href=\"" + escapeHtml(trackingUrl(order))
+                    + "\" style=\"color:#1d4ed8\">Acompanhar o pedido</a></p>"
+                : "";
+
         String html = """
                 %s
                 <h2 style="margin:0 0 8px;font-size:18px">Obrigado pela sua compra, %s! 🛍️</h2>
@@ -251,6 +272,7 @@ public class EmailService {
                   O seu pedido <strong>%s</strong> foi registado em %s.
                   Estado atual: <strong style="color:#059669">%s</strong>.
                 </p>
+                %s
                 <table style="width:100%%;border-collapse:collapse">%s</table>
                 <table style="width:100%%;border-collapse:collapse;margin-top:6px">%s</table>
                 <p style="margin:16px 0 0;font-size:13px;color:#334155">
@@ -259,7 +281,7 @@ public class EmailService {
                   &nbsp;&nbsp;%s, %s — %s<br>
                   &nbsp;&nbsp;<span style="color:#64748b">Estimativa: %s dias úteis</span>
                 </p>
-                <a href="%s" style="%s">Acompanhar pedido</a>
+                %s
                 %s
                 """.formatted(
                 header(),
@@ -267,6 +289,10 @@ public class EmailService {
                 order.getId(),
                 DATE_FMT.format(order.getDate()),
                 escapeHtml(order.getStatus().getLabel()),
+                awaitingPayment
+                        ? "<p style=\"margin:0 0 16px;padding:12px;border:1px solid #fbbf24;background:#fffbeb;border-radius:8px;font-size:13px;color:#92400e\">"
+                            + "⏳ O pagamento ainda não foi concluído — use o botão abaixo para pagar com segurança.</p>"
+                        : "",
                 items,
                 totals,
                 escapeHtml(order.getPaymentMethod()),
@@ -276,12 +302,11 @@ public class EmailService {
                 escapeHtml(a.getCity() != null ? a.getCity() : ""),
                 escapeHtml(a.getProvince()),
                 deliveryEstimate(a.getProvince()),
-                trackingUrl(order),
-                buttonStyle(),
-                footer());
+                primaryButton,
+                secondaryLine.isEmpty() ? footer() : secondaryLine + footer());
 
         sendHtml(a.getEmail(), "Pedido " + order.getId() + " confirmado — NorteShopMoz", html,
-                trackingUrl(order));
+                awaitingPayment ? order.getCheckoutUrl() : trackingUrl(order));
     }
 
     /** Atualização de estado do pedido (admin avança a entrega). */
@@ -368,6 +393,97 @@ public class EmailService {
 
         sendHtml(a.getEmail(), "Pedido " + order.getId() + " cancelado — NorteShopMoz", html,
                 trackingUrl(order));
+    }
+
+    /**
+     * Aviso ao ADMIN: um pedido ficou em «Aguarda pagamento» sem link do
+     * gateway. Sem este email, o pedido só era descoberto quando o cliente
+     * reclamasse — e o stock ficava reservado até expirar.
+     */
+    @Async
+    public void sendPaymentLinkRequest(Order order) {
+        if (order == null) {
+            return;
+        }
+        if (isBlank(adminEmail)) {
+            log.info("Aviso de link de pagamento não enviado — ADMIN_EMAIL em falta (pedido {})",
+                    order.getId());
+            return;
+        }
+        OrderAddress a = order.getAddress();
+        String html = """
+                %s
+                <h2 style="margin:0 0 8px;font-size:18px">Pedido %s precisa de link de pagamento</h2>
+                <p style="margin:0 0 16px;font-size:14px;line-height:1.6">
+                  O pedido <strong>%s</strong> está em «Aguarda pagamento» e o gateway
+                  não devolveu um link. Abra o painel, cole o link no campo do pedido
+                  e o cliente é avisado automaticamente por email.
+                </p>
+                <p style="margin:0 0 16px;font-size:13px;color:#334155">
+                  <strong>Cliente:</strong> %s · %s<br>
+                  <strong>Total:</strong> %s<br>
+                  <strong>Método:</strong> %s
+                </p>
+                <a href="%s" style="%s">Abrir painel de pedidos</a>
+                %s
+                """.formatted(
+                header(),
+                escapeHtml(order.getId()),
+                escapeHtml(order.getId()),
+                escapeHtml(a == null || a.getFullName() == null ? "" : a.getFullName()),
+                escapeHtml(a == null || a.getPhone() == null ? "" : a.getPhone()),
+                formatMeticais(order.getTotal()),
+                escapeHtml(order.getPaymentMethod() == null ? "" : order.getPaymentMethod()),
+                baseUrl + "/admin",
+                buttonStyle(),
+                footer());
+        sendHtml(adminEmail, "Pedido " + order.getId() + " — link de pagamento em falta",
+                html, baseUrl + "/admin");
+    }
+
+    /** Aviso ao cliente: o link de pagamento do pedido já está disponível. */
+    @Async
+    public void sendPaymentLinkReady(Order order) {
+        if (order == null) {
+            return;
+        }
+        String link = order.getCheckoutUrl();
+        if (isBlank(link)) {
+            return;
+        }
+        if (order.getAddress() == null || isBlank(order.getAddress().getEmail())) {
+            log.info("Aviso de link pronto não enviado para o pedido {} — email em falta",
+                    order.getId());
+            return;
+        }
+        String firstName = escapeHtml(order.getAddress().getFullName().split(" ")[0]);
+        String html = """
+                %s
+                <h2 style="margin:0 0 8px;font-size:18px">O seu link de pagamento está pronto, %s 🔗</h2>
+                <p style="margin:0 0 16px;font-size:14px;line-height:1.6">
+                  Já pode concluir o pagamento do pedido <strong>%s</strong> (%s).
+                  O link é da página segura do provedor.
+                </p>
+                <a href="%s" style="%s">Pagar agora</a>
+                <p style="margin:16px 0 0;font-size:13px;color:#334155">
+                  Se o botão não funcionar, copie este endereço: %s
+                </p>
+                <p style="margin:12px 0 0;font-size:13px">
+                  <a href="%s" style="color:#1f46e6">Acompanhar pedido</a>
+                </p>
+                %s
+                """.formatted(
+                header(),
+                firstName,
+                escapeHtml(order.getId()),
+                formatMeticais(order.getTotal()),
+                escapeHtml(link),
+                buttonStyle(),
+                escapeHtml(link),
+                escapeHtml(trackingUrl(order)),
+                footer());
+        sendHtml(order.getAddress().getEmail(),
+                "Link de pagamento pronto — pedido " + order.getId(), html, link);
     }
 
     /* ── Envio comum ────────────────────────────────────────────── */

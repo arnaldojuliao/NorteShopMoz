@@ -66,7 +66,7 @@ class OrderRetentionCleanupDbTest {
                         .city("Maputo")
                         .province("Maputo Cidade")
                         .build())
-                .paymentMethod("Pagamento na entrega")
+                .paymentMethod("M-Pesa")
                 .build();
         return orderRepository.save(order);
     }

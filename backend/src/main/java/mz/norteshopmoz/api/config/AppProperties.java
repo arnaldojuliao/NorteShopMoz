@@ -96,6 +96,10 @@ public record AppProperties(Jwt jwt, Cors cors, Mail mail, Social social, Cookie
      * adaptador, endpoint próprio). {@code api-url} vazio → desligado (modo dev:
      * loga a mensagem em vez de a enviar). Falha aberta — nunca bloqueia o
      * pedido nem o email por causa do WhatsApp.
+     *
+     * <p>{@code adminPhone} (só dígitos, com indicativo) recebe os avisos
+     * operacionais da loja — hoje o pedido que ficou sem link de pagamento.
+     * Vazio = o admin só é avisado por email.</p>
      */
-    public record Whatsapp(String apiUrl, String apiToken) {}
+    public record Whatsapp(String apiUrl, String apiToken, String adminPhone) {}
 }

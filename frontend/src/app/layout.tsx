@@ -23,7 +23,7 @@ export const metadata: Metadata = {
     template: "%s · NorteShopMoz",
   },
   description:
-    "NorteShopMoz (NS) é a loja online moçambicana de eletrónica, moda, casa, beleza e muito mais. Entrega para todo Moçambique e pagamento na entrega.",
+    "NorteShopMoz (NS) é a loja online moçambicana de eletrónica, moda, casa, beleza e muito mais. Entrega para todo Moçambique e pagamento online seguro (M-Pesa, e-Mola, mKesh e cartão).",
   keywords: [
     "loja online Moçambique",
     "e-commerce Moçambique",

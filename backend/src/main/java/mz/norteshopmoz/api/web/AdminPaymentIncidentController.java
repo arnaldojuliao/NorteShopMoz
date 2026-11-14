@@ -55,9 +55,10 @@ public class AdminPaymentIncidentController {
             @AuthenticationPrincipal UserPrincipal principal,
             HttpServletRequest request) {
         requireAdmin(principal);
-        Map<String, Object> resolved = Map.of("incident", incidentService.resolve(id, principal.id()),
-                "note", body == null || body.note() == null ? "" : body.note());
-        return ResponseEntity.ok(ApiResponse.data(resolved));
+        // A nota fica gravada no caso (resolution_note) — o "o que foi feito"
+        // tem de sobreviver à resposta.
+        return ResponseEntity.ok(ApiResponse.data(incidentService.resolve(
+                id, principal.id(), body == null ? null : body.note())));
     }
 
     private static void requireAdmin(UserPrincipal principal) {

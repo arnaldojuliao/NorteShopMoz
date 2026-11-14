@@ -1,5 +1,5 @@
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
-import type { OrderStatus } from "@/lib/types";
+import type { Order, OrderStatus } from "@/lib/types";
 
 /**
  * Operações de backoffice adicionais do painel admin (e do cliente, nas
@@ -192,6 +192,18 @@ export async function decideReturn(id: number, decision: "APROVADA" | "REJEITADA
   return data;
 }
 
+/**
+ * Tenta de novo o estorno de uma devolução APROVADA cujo primeiro estorno
+ * falhou (gateway em baixo). Sucesso → REEMBOLSADA; falha → continua APROVADA.
+ */
+export async function retryRefund(id: number): Promise<ReturnRequestItem> {
+  const { data } = await apiPost<{ data: ReturnRequestItem }>(
+    `/api/admin/returns/${id}/retry-refund`,
+    {},
+  );
+  return data;
+}
+
 /** Cliente: pede a devolução de um pedido entregue. */
 export async function requestReturn(orderId: string, reason: string): Promise<ReturnRequestItem> {
   const { data } = await apiPost<{ data: ReturnRequestItem }>(
@@ -247,6 +259,19 @@ export async function fetchSalesStatsPeriod(from: string, to: string) {
     `/api/orders/admin/stats?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
     0,
     true,
+  );
+  return data;
+}
+
+/**
+ * Admin define o link de pagamento de um pedido em «Aguarda pagamento» —
+ * usado quando o gateway não devolveu link no checkout. O cliente é avisado
+ * pelo servidor (email/WhatsApp) ao gravar.
+ */
+export async function setOrderPaymentLink(id: string, url: string): Promise<Order> {
+  const { data } = await apiPost<{ data: Order }>(
+    `/api/orders/admin/${encodeURIComponent(id)}/payment-link`,
+    { url },
   );
   return data;
 }

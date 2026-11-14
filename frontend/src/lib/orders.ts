@@ -283,6 +283,11 @@ export interface AdminOrdersPage {
   hasNext: boolean;
   /** Total de pedidos por estado — os contadores dos filtros, não os da página. */
   statusCounts: Record<string, number>;
+  /**
+   * Pedidos em «Aguarda pagamento» sem link — o badge do painel. São os que o
+   * admin tem de resolver à mão (colar o link no cartão do pedido).
+   */
+  paymentLinkPending?: number;
 }
 
 /**

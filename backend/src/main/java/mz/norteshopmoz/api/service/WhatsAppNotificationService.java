@@ -11,6 +11,8 @@ import java.util.Map;
 import java.util.Optional;
 import mz.norteshopmoz.api.config.AppProperties;
 import mz.norteshopmoz.api.domain.Order;
+import mz.norteshopmoz.api.domain.OrderAddress;
+import mz.norteshopmoz.api.domain.OrderItem;
 import mz.norteshopmoz.api.domain.OrderStatus;
 import mz.norteshopmoz.api.domain.UserAccount;
 import mz.norteshopmoz.api.repository.UserRepository;
@@ -53,6 +55,8 @@ public class WhatsAppNotificationService {
     private final UserRepository userRepository;
     private final String apiUrl;
     private final String apiToken;
+    /** Número do admin para avisos operacionais (null = só email). */
+    private final String adminPhone;
     private final String storeBaseUrl;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient http;
@@ -64,6 +68,7 @@ public class WhatsAppNotificationService {
                 ? null : cfg.apiUrl().trim();
         this.apiToken = cfg == null || cfg.apiToken() == null || cfg.apiToken().isBlank()
                 ? null : cfg.apiToken().trim();
+        this.adminPhone = cfg == null ? null : normalizePhone(cfg.adminPhone());
         // Base dos links de acompanhamento (a mesma que o email usa nos seus links).
         String mailBase = props != null && props.mail() != null && props.mail().baseUrl() != null
                 && !props.mail().baseUrl().isBlank()
@@ -125,6 +130,70 @@ public class WhatsAppNotificationService {
         } catch (RuntimeException e) {
             log.warn("Falha ao preparar WhatsApp do pedido {} (ignorado)", order.getId(), e);
         }
+    }
+
+    /**
+     * O link de pagamento foi publicado pelo admin — avisa o cliente que já
+     * pode pagar (mesmas preferências do canal; best-effort).
+     */
+    public void sendPaymentLinkReady(Order order) {
+        if (order == null || order.getCheckoutUrl() == null || order.getCheckoutUrl().isBlank()) {
+            return;
+        }
+        String message = "O link de pagamento do pedido " + order.getId()
+                + " já está pronto: " + order.getCheckoutUrl();
+        sendToOrderCustomer(order, message);
+    }
+
+    /**
+     * Aviso ao ADMIN: um pedido ficou em «Aguarda pagamento» sem link do
+     * gateway. O email é o canal garantido
+     * ({@link EmailService#sendPaymentLinkRequest}); este é o empurrão no
+     * telemóvel para o link ser colado depressa — o stock está reservado e o
+     * prazo do cliente já corre.
+     *
+     * <p>Sem {@code app.whatsapp.admin-phone} configurado não envia nada (só
+     * loga em DEBUG): não há destinatário a inventar.</p>
+     */
+    public void sendPaymentLinkRequestToAdmin(Order order) {
+        if (order == null) {
+            return;
+        }
+        if (apiUrl == null || adminPhone == null) {
+            log.debug("Aviso de link de pagamento ao admin não enviado (canal ou número em falta) — pedido {}",
+                    order.getId());
+            return;
+        }
+        OrderAddress a = order.getAddress();
+        String resumo = resumoItens(order);
+        String message = "Pedido " + order.getId() + " sem link de pagamento"
+                + (resumo.isEmpty() ? "" : ": " + resumo)
+                + ". Total " + order.getTotal() + " MT"
+                + (a == null || a.getPhone() == null || a.getPhone().isBlank()
+                        ? "" : " — cliente " + a.getPhone())
+                + ". Cole o link em " + storeBaseUrl() + "/admin";
+        send(adminPhone, message);
+    }
+
+    /** «2× Camisola, 1× Boné» — o suficiente para o admin saber do que se trata. */
+    private static String resumoItens(Order order) {
+        if (order.getItems() == null || order.getItems().isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        int n = 0;
+        for (OrderItem item : order.getItems()) {
+            if (n == 3) {
+                sb.append(", …");
+                break;
+            }
+            if (n > 0) {
+                sb.append(", ");
+            }
+            sb.append(item.getQty()).append("× ").append(item.getName());
+            n++;
+        }
+        return sb.toString();
     }
 
     /** POST assíncrono {to, message} — o resultado só interessa ao log. */

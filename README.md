@@ -111,6 +111,7 @@ As mais importantes:
 | `PAYMENTS_API_KEY` / `PAYMENTS_WEBHOOK_SECRET` | Token da PaySuite (Settings → API Access) e chave que assina as notificações (`X-Signature`). Sem o segredo, os pedidos ficam presos em "Aguarda pagamento", porque a PaySuite confirma só por webhook |
 | `PAYMENTS_WEBHOOK_URL` / `PAYMENTS_RETURN_URL` | URLs públicos da loja enviados em cada pagamento (notificação e regresso do cliente). Omitir usa a configuração de conta na PaySuite |
 | `WHATSAPP_API_URL` / `WHATSAPP_API_TOKEN` | Canal WhatsApp (consumidor das preferências `notifWhatsapp*`). Provedor genérico: POST JSON `{to, message}` com Bearer opcional. Vazio = desligado (o email continua a ser o canal garantido; só contas com a preferência ligada recebem) |
+| `WHATSAPP_ADMIN_PHONE` | Número do admin (só dígitos, com indicativo). Recebe por WhatsApp o aviso de pedido em "Aguarda pagamento" que ficou sem link do gateway — além do email para `ADMIN_EMAIL`. Vazio = só email |
 | `AUDIT_WEBHOOK_URL` | Export opcional dos eventos de auditoria para um SIEM/endpoint próprio (POST JSON assíncrono; falha aberta). Vazio = só log local |
 | `NEXT_PUBLIC_API_BASE_URL` | URL da API consumido pelo frontend |
 | `APP_COOKIE_SECURE` | Cookies `Secure` (obrigatório `true` com HTTPS; `false` só enquanto a loja servir HTTP) |

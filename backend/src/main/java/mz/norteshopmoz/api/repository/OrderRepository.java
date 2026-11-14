@@ -56,6 +56,20 @@ public interface OrderRepository extends JpaRepository<Order, String> {
     List<Object[]> countGroupedByStatus();
 
     /**
+     * Pedidos num estado sem link de pagamento — o badge do painel admin.
+     *
+     * <p>Estes são os que o admin tem de resolver à mão: o gateway não devolveu
+     * link no checkout e o cliente só paga quando o link for colado. Contados no
+     * SQL para o número ser verdadeiro e não depender da página carregada.</p>
+     */
+    @Query("select count(o) from Order o where o.status = :status"
+            + " and (o.checkoutUrl is null or trim(o.checkoutUrl) = '')")
+    long countMissingPaymentLink(@Param("status") OrderStatus status);
+
+    /** Pedidos num estado criados antes do corte — expiração de pagamentos abandonados. */
+    List<Order> findByStatusAndDateBefore(OrderStatus status, Instant cutoff);
+
+    /**
      * Transição ATÓMICA para CANCELADO.
      *
      * <p>Devolve {@code 1} se ESTA chamada cancelou o pedido e {@code 0} se já
@@ -140,7 +154,7 @@ public interface OrderRepository extends JpaRepository<Order, String> {
      *
      * <p>O ticket médio divide a receita confirmada pelo número de pedidos que
      * a geraram. Usar o total de pedidos (incluindo cancelados e pedidos
-     * offline ainda por pagar) misturava grandezas: bastavam muitos pedidos
+     * ainda por pagar) misturava grandezas: bastavam muitos pedidos
      * "Pedido recebido" para o indicador desabar, apesar de a receita real não
      * ter mudado.</p>
      */

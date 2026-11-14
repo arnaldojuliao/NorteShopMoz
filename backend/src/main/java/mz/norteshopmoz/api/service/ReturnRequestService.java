@@ -84,6 +84,10 @@ public class ReturnRequestService {
                         "A janela de devolução (" + RETURN_WINDOW_DAYS + " dias) terminou. Fale com o suporte.");
             }
         }
+        // ADMIN: passa as validações de cliente de propósito (override da
+        // operação) — o suporte pode registar uma devolução fora da janela ou de
+        // um pedido ainda não entregue (ex.: combinado por WhatsApp). É uma
+        // decisão consciente, não um lapso: o admin também é quem aprova.
         if (returnRepository.findByOrderId(orderId).isPresent()) {
             throw ApiException.conflict("Este pedido já tem uma devolução registada");
         }
@@ -147,8 +151,8 @@ public class ReturnRequestService {
         }
 
         // APROVADA: o valor a devolver é o total pago (envio incluído — a devolução
-        // não foi culpa do cliente). Sem pagamento online (na entrega/transferência)
-        // não há estorno a fazer: fecha como REEMBOLSADA com valor 0 e nota.
+        // não foi culpa do cliente). Sem referência de pagamento online (dados
+        // antigos) não há estorno a fazer: fecha como REEMBOLSADA com valor 0 e nota.
         ret.setStatus("APROVADA");
         String reference = order.getPaymentReference();
         if (reference == null || reference.isBlank()) {
@@ -156,16 +160,58 @@ public class ReturnRequestService {
             ret.setRefundAmount(java.math.BigDecimal.ZERO);
             ret.setAdminNote(noteWith(ret.getAdminNote(),
                     "Sem pagamento online — devolução aceite sem estorno"));
-            log.info("Devolução do pedido {} aceite (pagamento offline — sem estorno)", ret.getOrderId());
+            log.info("Devolução do pedido {} aceite (sem referência de pagamento — sem estorno)", ret.getOrderId());
         } else {
             // Estorno FORA do fluxo transacional do retorno: PaymentService.refund
-            // nunca lança; falha abre incidência (REFUND_FAILED) e o caso fica
-            // APROVADA para a operação tentar de novo no painel.
-            paymentService.refund(reference, order.getTotal(), order.getId());
-            // Sem exceção, o estorno foi aceite pelo gateway (PaySuite aceita o
-            // pedido de reembolso; a confirmação final é do provedor).
+            // nunca lança — devolve true/false. Só fecha como REEMBOLSADA quando o
+            // dinheiro voltou de facto; na falha fica APROVADA (com a incidência
+            // REFUND_FAILED aberta) para a operação tentar de novo no painel.
+            boolean refunded = paymentService.refund(reference, order.getTotal(), order.getId());
+            if (refunded) {
+                ret.setStatus("REEMBOLSADA");
+                ret.setRefundAmount(order.getTotal());
+            } else {
+                ret.setAdminNote(noteWith(ret.getAdminNote(),
+                        "Estorno falhou — tente novamente no painel (fila de incidências)"));
+                log.warn("Devolução do pedido {} aprovada mas o estorno falhou — fica APROVADA",
+                        ret.getOrderId());
+            }
+        }
+        return toDto(returnRepository.save(ret));
+    }
+
+    /**
+     * Tenta de novo o estorno de uma devolução APROVADA cujo primeiro estorno
+     * falhou (ex.: gateway em baixo no momento). Sucesso → REEMBOLSADA; falha →
+     * continua APROVADA (a incidência REFUND_FAILED já está na fila).
+     */
+    @Transactional
+    public Map<String, Object> retryRefund(Long id, String adminId) {
+        ReturnRequest ret = returnRepository.findById(id)
+                .orElseThrow(() -> ApiException.notFound("Devolução não encontrada"));
+        if (!"APROVADA".equalsIgnoreCase(ret.getStatus())) {
+            throw ApiException.conflict("Só devoluções APROVADAS com estorno pendente podem ser reembolsadas (estado: "
+                    + ret.getStatus() + ")");
+        }
+        Order order = orderRepository.findById(ret.getOrderId())
+                .orElseThrow(() -> ApiException.notFound("Pedido da devolução já não existe"));
+        String reference = order.getPaymentReference();
+        if (reference == null || reference.isBlank()) {
+            // Sem pagamento online não havia estorno pendente — fecha logo.
+            ret.setStatus("REEMBOLSADA");
+            ret.setRefundAmount(java.math.BigDecimal.ZERO);
+            ret.setAdminNote(noteWith(ret.getAdminNote(), "Sem pagamento online — fechado no retry"));
+            return toDto(returnRepository.save(ret));
+        }
+        boolean refunded = paymentService.refund(reference, order.getTotal(), order.getId());
+        if (refunded) {
             ret.setStatus("REEMBOLSADA");
             ret.setRefundAmount(order.getTotal());
+            ret.setUpdatedAt(Instant.now());
+            log.info("Retry de estorno do pedido {} bem-sucedido (por {})", order.getId(), adminId);
+        } else {
+            ret.setUpdatedAt(Instant.now());
+            log.warn("Retry de estorno do pedido {} falhou de novo — continua APROVADA", order.getId());
         }
         return toDto(returnRepository.save(ret));
     }

@@ -1,12 +1,11 @@
-import { Banknote, CreditCard, Landmark, Lock, Smartphone } from "lucide-react";
+import { Banknote, CreditCard, Lock, Smartphone } from "lucide-react";
 import { highlightedPaymentMethods } from "@/lib/payments";
 
 /** Ícone de cada método (apresentação; os dados vêm de `@/lib/payments`). */
 const icons: Record<string, typeof Banknote> = {
-  cod: Banknote,
-  transfer: Landmark,
   mpesa: Smartphone,
   emola: Smartphone,
+  mkesh: Smartphone,
   card: CreditCard,
 };
 

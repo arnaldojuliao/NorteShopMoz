@@ -151,12 +151,11 @@ export interface Order {
   status: OrderStatus;
   address: OrderAddress;
   paymentMethod: string;
-  /** Referência da cobrança online (M-Pesa/e-Mola/cartão) — opcional. */
+  /** Referência da cobrança online (M-Pesa/e-Mola/mKesh/cartão) — opcional. */
   paymentReference?: string;
   /**
-   * URL da página de pagamento do provedor (PaySuite) — presente apenas na
-   * resposta que cria o pedido, quando o pagamento exige que o cliente pague
-   * fora da loja. Nunca vem no histórico (o servidor não o guarda).
+   * URL da página de pagamento do provedor (PaySuite). Persistida desde a V12:
+   * vem na criação, no histórico e depois de o admin a gerar ou colar de novo.
    */
   checkoutUrl?: string;
   /** Código do cupão aplicado ao pedido — opcional. */
@@ -192,7 +191,7 @@ export interface PaymentMethod {
   description: string;
   available: boolean;
   badge?: string;
-  /** Método pago online no checkout (M-Pesa/e-Mola/cartão) — exige dados extra. */
+  /** Método pago online no checkout — exige dados extra. */
   paidOnline?: boolean;
   needsPhone?: boolean;
   needsCard?: boolean;

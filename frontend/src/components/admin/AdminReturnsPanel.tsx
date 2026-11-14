@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { formatDate } from "@/lib/format";
 import { useCurrency } from "@/context/CurrencyContext";
-import { decideReturn, listAdminReturns, type ReturnRequestItem, type ReturnStatus } from "@/lib/admin";
+import { decideReturn, listAdminReturns, retryRefund, type ReturnRequestItem, type ReturnStatus } from "@/lib/admin";
 import { cn } from "@/lib/utils";
 
 /** Tons de estado da devolução (independente do estado do pedido). */
@@ -61,6 +61,25 @@ export function AdminReturnsPanel() {
     try {
       const updated = await decideReturn(ret.id, decision, note);
       setReturns((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Operação falhou");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  /** Retry do estorno — devolução APROVADA cujo primeiro estorno falhou. */
+  const retry = async (ret: ReturnRequestItem) => {
+    setBusyId(ret.id);
+    setError(null);
+    try {
+      const updated = await retryRefund(ret.id);
+      setReturns((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      if (updated.status === "REEMBOLSADA") {
+        window.alert("Estorno aceite pelo gateway — devolução fechada como REEMBOLSADA.");
+      } else {
+        window.alert("O estorno falhou de novo — a devolução continua APROVADA (veja as incidências).");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Operação falhou");
     } finally {
@@ -154,6 +173,16 @@ export function AdminReturnsPanel() {
                     loading={busyId === r.id}
                   >
                     <XCircle className="size-3.5" /> Rejeitar
+                  </Button>
+                </div>
+              )}
+              {r.status === "APROVADA" && (
+                <div className="flex shrink-0 flex-col items-end gap-1.5">
+                  <span className="text-xs font-semibold text-amber-700">
+                    Estorno pendente — tente novamente
+                  </span>
+                  <Button size="sm" onClick={() => void retry(r)} loading={busyId === r.id}>
+                    <Undo2 className="size-3.5" /> Estornar de novo
                   </Button>
                 </div>
               )}

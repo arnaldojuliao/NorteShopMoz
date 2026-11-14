@@ -12,7 +12,6 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderColumn;
 import jakarta.persistence.Table;
-import jakarta.persistence.Transient;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -89,7 +88,7 @@ public class Order {
     @Column(nullable = false, length = 80)
     private String paymentMethod;
 
-    /** Referência da cobrança online (M-Pesa/e-Mola/cartão) — null se pago na entrega/transferência. */
+    /** Referência da cobrança online (M-Pesa/e-Mola/mKesh/cartão) — null se o gateway não a devolveu. */
     @Column(length = 80)
     private String paymentReference;
 
@@ -102,16 +101,17 @@ public class Order {
     private String trackingCode;
 
     /**
-     * URL da página de pagamento do provedor (PaySuite ou página simulada), quando
-     * o pedido exige que o cliente pague fora da loja.
+     * URL da página de pagamento do provedor (PaySuite), para pedidos em
+     * "Aguarda pagamento".
      *
-     * <p>{@code @Transient} de propósito: é um dado de <em>trânsito</em>, válido
-     * apenas na resposta que cria o pedido — não faz sentido guardar no histórico
-     * um URL de checkout que expira, e os pedidos lidos da base de dados nunca o
-     * trazem (fica null). Nota: o {@code save()} de entidade com id atribuído faz
-     * {@code merge()} e devolve uma instância sem este campo — quem devolve o
-     * pedido na resposta repõe-o (ver OrderService.createOrder).</p>
+     * <p>Persistido (V12) de propósito: se o cliente fechar o browser sem pagar,
+     * a página de acompanhamento (/pedido/{id}) continua a poder enviá-lo para
+     * pagar — e o email de confirmação inclui o botão "Pagar agora". Para
+     * pedidos em estados seguintes fica null (o webhook limpa-o ao confirmar), e
+     * para pedidos sem link o admin cola-o no painel
+     * ({@code POST /api/orders/admin/{id}/payment-link}) — é o único caminho,
+     * o cliente nunca gera o seu próprio.</p>
      */
-    @Transient
+    @Column(length = 500)
     private String checkoutUrl;
 }

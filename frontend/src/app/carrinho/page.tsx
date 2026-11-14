@@ -29,7 +29,6 @@ export default function CartPage() {
   // subtotal de 0 MT mostrava «TOTAL 120 MT» num carrinho vazio.
   const shippingCost =
     items.length === 0 || subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : defaultFee;
-  const savings = items.reduce((acc, i) => acc + (i.oldPrice && i.oldPrice > i.price ? (i.oldPrice - i.price) * i.qty : 0), 0);
   const isEmpty = items.length === 0;
 
   const handleRemove = (productId: string, variant?: string) => {
@@ -175,12 +174,6 @@ export default function CartPage() {
               <dt className="text-slate-500">Subtotal</dt>
               <dd className="font-semibold text-slate-800 tabular-nums">{format(subtotal)}</dd>
             </div>
-            {savings > 0 && (
-              <div className="flex justify-between text-emerald-700">
-                <dt>Desconto</dt>
-                <dd className="font-semibold">-{format(savings)}</dd>
-              </div>
-            )}
             {!isEmpty && (
               <div className="flex justify-between">
                 <dt className="flex items-center gap-1.5 text-slate-500">
@@ -199,7 +192,7 @@ export default function CartPage() {
             <div className="flex justify-between border-t border-slate-100 pt-3">
               <dt className="font-bold text-slate-900">TOTAL</dt>
               <dd className="font-display text-xl font-extrabold text-slate-900 tabular-nums">
-                {format(Math.max(0, subtotal - savings) + shippingCost)}
+                {format(subtotal + shippingCost)}
               </dd>
             </div>
           </dl>

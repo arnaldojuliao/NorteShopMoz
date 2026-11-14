@@ -30,5 +30,12 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    // Tipos gerados pelo `next dev`. Um ficheiro truncado em .next/dev/types
+    // (artefacto de geração, gitignored) fazia `tsc --noEmit` falhar com
+    // erros que não existem no código — aconteceu com validator.ts. Os tipos
+    // do build (`next build`, em .next/types) continuam a ser verificados.
+    ".next/dev"
+  ]
 }

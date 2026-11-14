@@ -67,6 +67,10 @@ public class PaymentIncident {
     @Column(name = "resolved_by", length = 40)
     private String resolvedBy;
 
+    /** Nota escrita ao resolver o caso (o que foi feito no painel do provedor). */
+    @Column(name = "resolution_note", length = 500)
+    private String resolutionNote;
+
     public boolean isOpen() {
         return "ABERTA".equalsIgnoreCase(status);
     }

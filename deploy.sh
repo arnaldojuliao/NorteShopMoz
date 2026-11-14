@@ -334,12 +334,12 @@ fi
 
 # Bloqueio de negócio silencioso — tem de estar no output do deploy, onde alguém
 # o vê. Com PAYMENTS_MODE=simulated (o valor por omissão) e o perfil `prod`, o
-# gateway simulado NÃO é registado (ver SimulatedPaymentGateway): M-Pesa, e-Mola e
-# cartão respondem 503. O checkout desativa-os no UI, pelo que a loja PARECE
-# normal e só cobra à cobrança ou por transferência.
+# gateway simulado NÃO é registado (ver SimulatedPaymentGateway): todos os
+# métodos respondem 503. O checkout desativa-os no UI, pelo que a loja PARECE
+# normal mas não consegue fechar encomendas.
 if [[ "${PAYMENTS_MODE:-simulated}" != "live" ]]; then
-    warn "PAYMENTS_MODE=${PAYMENTS_MODE:-simulated}: pagamentos online (M-Pesa/e-Mola/cartão) DESATIVADOS (503)."
-    warn "A loja só cobra 'Pagamento na entrega' e 'Transferência bancária'. Implemente um gateway real e use PAYMENTS_MODE=live."
+    warn "PAYMENTS_MODE=${PAYMENTS_MODE:-simulated}: pagamentos online (M-Pesa/e-Mola/mKesh/cartão) DESATIVADOS (503)."
+    warn "Sem métodos de pagamento, a loja NÃO consegue fechar encomendas. Configure a PaySuite e use PAYMENTS_MODE=live."
 fi
 
 log "A subir Frontend + Nginx..."

@@ -77,9 +77,6 @@ class OrderCheckoutFlowTest {
     }
 
     private String body(Product product, String paymentMethod, int qty, String couponCode) {
-        String paymentInfo = "Pagamento na entrega".equals(paymentMethod)
-                ? "{}"
-                : "{\"phone\":\"+258840000000\"}";
         String coupon = couponCode == null ? "null" : "\"" + couponCode + "\"";
         return """
                 {
@@ -89,13 +86,13 @@ class OrderCheckoutFlowTest {
                   "discount": 0,
                   "total": 1120,
                   "paymentMethod": "%s",
-                  "paymentInfo": %s,
+                  "paymentInfo": {"phone":"+258840000000"},
                   "couponCode": %s,
                   "address": {"fullName":"Ana Teste","phone":"+258840000000","email":"ana-%s@example.com",
                               "address":"Rua 1","city":"Maputo","province":"Maputo Cidade"}
                 }
                 """.formatted(product.getId(), product.getSlug(), product.getName(), qty,
-                paymentMethod, paymentInfo, coupon, UUID.randomUUID());
+                paymentMethod, coupon, UUID.randomUUID());
     }
 
     private MvcResult checkout(Product product, String paymentMethod, String idempotencyKey) throws Exception {
@@ -120,12 +117,13 @@ class OrderCheckoutFlowTest {
                         .header("Idempotency-Key", "online-" + UUID.randomUUID())
                         .content(body(product, "m-pesa", 2, null)))
                 .andExpect(status().isCreated())
-                // Checkout hospedado (também no simulado): o pagamento é criado
-                // PENDENTE com link — o pedido só confirma quando a página de
-                // pagamento (demo ou PaySuite) reporta o sucesso.
+                // Pago online: o pedido só fica confirmado quando o provedor o
+                // disser (webhook assinado). Sem página de pagamento própria, o
+                // link chega do gateway ou é o admin que o cola no painel — por
+                // isso aqui não há checkoutUrl nenhum.
                 .andExpect(jsonPath("$.data.status").value("Aguarda pagamento"))
                 .andExpect(jsonPath("$.data.paymentReference").value(startsWith("SIM-")))
-                .andExpect(jsonPath("$.data.checkoutUrl").value(containsString("/pagamento-simulado")))
+                .andExpect(jsonPath("$.data.checkoutUrl").doesNotExist())
                 .andExpect(jsonPath("$.data.paymentMethod").value("M-Pesa"));
 
         // O stock reserva-se na criação do pedido (independente do pagamento).
@@ -134,20 +132,35 @@ class OrderCheckoutFlowTest {
     }
 
     @Test
-    void checkoutNaEntregaFicaPedidoRecebido() throws Exception {
+    void checkoutComMetodoOfflineRemovidoRejeitaSemMexerNoStock() throws Exception {
         Product product = product(5);
+
+        for (String removed : List.of("Pagamento na entrega", "Transferência bancária")) {
+            mockMvc.perform(post("/api/orders")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .header("Idempotency-Key", "offline-" + UUID.randomUUID())
+                            .content(body(product, removed, 1, null)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error").value(containsString("Método de pagamento indisponível")));
+        }
+
+        assertThat(stockOf(product.getId())).isEqualTo(5);
+    }
+
+    @Test
+    void checkoutSemMetodoPagamentoRejeitaSemMexerNoStock() throws Exception {
+        Product product = product(3);
+        String payload = body(product, "m-pesa", 1, null)
+                .replace("\"paymentMethod\": \"m-pesa\"", "\"paymentMethod\": null");
 
         mockMvc.perform(post("/api/orders")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .header("Idempotency-Key", "cod-" + UUID.randomUUID())
-                        .content(body(product, "Pagamento na entrega", 1, null)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.data.status").value("Pedido recebido"))
-                // Sem cobrança online não há referência para estornar nem para
-                // mostrar (o campo é omitido quando é null).
-                .andExpect(jsonPath("$.data.paymentReference").doesNotExist());
+                        .header("Idempotency-Key", "sem-metodo-" + UUID.randomUUID())
+                        .content(payload))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("Escolha um método de pagamento")));
 
-        assertThat(stockOf(product.getId())).isEqualTo(4);
+        assertThat(stockOf(product.getId())).isEqualTo(3);
     }
 
     @Test

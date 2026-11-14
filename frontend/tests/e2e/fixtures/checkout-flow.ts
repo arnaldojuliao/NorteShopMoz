@@ -6,14 +6,20 @@ import { expect, type Page } from '@playwright/test';
  * O checkout deixou de ter campos de entrega inline: a morada vem do livro de
  * endereços e é editada no modal «Dados de entrega». O pagamento é de SELEÇÃO
  * apenas: o cliente escolhe o método e, ao comprar, é encaminhado para o link
- * de pagamento (página simulada em dev, PaySuite em produção). Estes helpers
- * concentram esse caminho para os specs não o repetirem.
+ * de pagamento do provedor (PaySuite) — ou fica à espera do link que o admin
+ * cola no pedido, quando o gateway não devolve um. Estes helpers concentram
+ * esse caminho para os specs não o repetirem.
  */
 
 export const TEST_PRODUCT_URL = '/produto/capa-para-iphone';
 export const TEST_PRODUCT_NAME = 'Capa para iPhone';
 /** Número usado nos dados de entrega (formato aceite pelo servidor). */
 export const TEST_PAYMENT_PHONE = '+258 84 123 4567';
+
+/** Email único por pedido — o travão de checkout é por contacto (3/hora). */
+function uniqueContactEmail(): string {
+  return `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@test.com`;
+}
 
 /** Adiciona o produto de teste ao carrinho (badge do cabeçalho ≥ 1 item). */
 export async function addTestProductToCart(page: Page): Promise<void> {
@@ -69,7 +75,8 @@ export async function fillDeliveryAddress(
 
 /**
  * Escolhe um método de pagamento — só a seleção: os métodos pagos online usam
- * link de pagamento (checkout hospedado) e não pedem dados no checkout.
+ * link de pagamento (checkout hospedado do provedor, ou o que o admin cola no
+ * pedido) e não pedem dados no checkout.
  */
 export async function choosePaymentMethod(
   page: Page,
@@ -85,10 +92,12 @@ export async function choosePaymentMethod(
 
 /**
  * Caminho completo (carrinho → entrega → pagamento → compra) e devolve o ID do
- * pedido. O «Comprar» leva ao ecrã «Aguarde o link de pagamento» (sem
- * redirecionamento automático): o helper lê o ID do pedido no ecrã, abre a
- * página de pagamento simulada pelo link aí disponível, confirma e regressa à
- * loja (página de acompanhamento do pedido).
+ * pedido.
+ *
+ * <p>Sem gateway a devolver link, o «Comprar» leva ao ecrã «Pedido registado»:
+ * o pedido fica em «Aguarda pagamento» à espera do link que o admin cola no
+ * painel (o cliente é avisado). O ecrã tem os dois botões — falar com o agente
+ * de compra e continuar a comprar — e é daí que o helper lê o ID.</p>
  */
 export async function placeOrder(
   page: Page,
@@ -97,27 +106,29 @@ export async function placeOrder(
   await addTestProductToCart(page);
   await page.goto('/checkout');
   await fillDeliveryAddress(page, addressOptions);
+  // O email é obrigatório no submit (é a prova de contacto do convidado e o
+  // destino da confirmação). Único a cada pedido: o travão do checkout é por
+  // contacto (3 pedidos/hora) e sem isso os specs esgotavam a quota.
+  await page.getByPlaceholder('nome@email.com').fill(uniqueContactEmail());
   await choosePaymentMethod(page);
   await page.getByRole('button', { name: 'Comprar', exact: true }).click();
 
-  // Ecrã «Aguarde o link de pagamento» — o ID do pedido aparece no título/texto.
+  // Ecrã «Pedido registado» — o ID do pedido aparece no texto do resumo.
   await expect(
-    page.getByRole('heading', { name: /Aguarde o link de pagamento/i }),
+    page.getByRole('heading', { name: /Pedido registado/i }),
   ).toBeVisible({ timeout: 30000 });
   const summaryText = await page.locator('p', { hasText: /O seu pedido/ }).first().textContent();
   const idMatch = (summaryText ?? '').match(/([A-Z0-9-]{6,})/);
   expect(idMatch, `ID do pedido extraído de: ${summaryText}`).toBeTruthy();
   const orderId = idMatch![1];
 
-  // Pagar pelo link disponível no ecrã (página simulada em dev) e regressar.
-  const payLink = page.getByRole('link', { name: /Abrir página de pagamento/i });
-  await expect(payLink).toBeVisible({ timeout: 20000 });
-  await payLink.click();
-  await page.waitForURL(/\/pagamento-simulado/, { timeout: 30000 });
-  const confirmBtn = page.getByRole('button', { name: /Confirmar pagamento/i });
-  await expect(confirmBtn).toBeVisible({ timeout: 20000 });
-  await confirmBtn.click();
-  await page.waitForURL(/\/pedido\//, { timeout: 30000 });
+  // Os dois botões do pedido registado (sem link do provedor).
+  await expect(page.getByRole('link', { name: /Falar com o agente de compra/i })).toBeVisible({
+    timeout: 20000,
+  });
+  await expect(page.getByRole('link', { name: /Continuar a comprar/i })).toBeVisible({
+    timeout: 20000,
+  });
 
   return orderId;
 }

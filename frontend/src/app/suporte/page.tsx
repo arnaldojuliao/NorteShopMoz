@@ -49,8 +49,8 @@ const faqs = [
     a: "Maputo: 1–3 dias úteis. Restantes províncias: 2–10 dias úteis conforme a localização. O prazo exato é indicado no checkout.",
   },
   {
-    q: "Posso pagar na entrega?",
-    a: "A disponibilidade do pagamento na entrega depende da configuração atual da loja e é mostrada no checkout. Os métodos pagos online (M-Pesa, e-Mola e cartão) usam a PaySuite com confirmação automática.",
+    q: "Como pago a minha encomenda?",
+    a: "Escolha o método no checkout e clique em Comprar. Abrimos a página segura do provedor, onde conclui o pagamento com M-Pesa, e-Mola, mKesh ou cartão.",
   },
   {
     q: "E se o produto não for o que esperava?",

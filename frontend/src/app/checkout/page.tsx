@@ -3,8 +3,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import {
+  Check,
+  CheckCircle2,
   Loader2,
   Lock,
+  Mail,
   MapPin,
   PackageCheck,
   Plus,
@@ -19,7 +22,7 @@ import { useToast } from "@/context/ToastContext";
 import { useAsyncData, useLocalStorageState } from "@/lib/hooks";
 import { provinces as localProvinces } from "@/lib/data/provinces";
 import { getShippingConfig, LOCAL_FREE_SHIPPING_THRESHOLD } from "@/lib/shipping";
-import { paymentMethods } from "@/lib/payments";
+import { isProviderPaymentLink, paymentMethods } from "@/lib/payments";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { getStoredUser, saveLocalOrder, submitOrder, type OrderPayload } from "@/lib/orders";
 import { saveMyAddresses } from "@/lib/addresses";
@@ -44,7 +47,7 @@ const methodBg: Record<string, string> = {
 };
 
 /** Logótipos oficiais (ficheiro local em /public/payments). */
-const methodLogos: Record<string, { src: string; alt: string }> = {
+const methodLogos: Partial<Record<string, { src: string; alt: string }>> = {
   mpesa: { src: "/payments/m-pesa.png", alt: "M-Pesa" },
   emola: { src: "/payments/emola.png", alt: "e-Mola" },
   mkesh: { src: "/payments/mkesh.svg", alt: "mKesh" },
@@ -88,9 +91,17 @@ export default function CheckoutPage() {
   const [method, setMethod] = useState("mpesa");
   const [province, setProvince] = useState(localProvinces[0].name);
   const [placing, setPlacing] = useState(false);
-  /** Rótulos de método disponíveis segundo o backend (vazio = todos). */
+  /** Rótulos de método disponíveis segundo o backend. */
   const [methodAvailability, setMethodAvailability] = useState<Set<string>>(() => new Set());
+  /**
+   * A lista do backend já chegou? Distingue "ainda não sabemos" (mostrar todos,
+   * como antes) de "não há nenhum método" (loja sem gateway) — sem isto, uma
+   * lista vazia voltava a ativar métodos que só responderiam 503.
+   */
+  const [availabilityLoaded, setAvailabilityLoaded] = useState(false);
   const [placedOrder, setPlacedOrder] = useState<Order | null>(null);
+  // Contagem dos 3 s antes de abrir o link do provedor (null = sem link).
+  const [redirectSeconds, setRedirectSeconds] = useState<number | null>(null);
   const [couponCode, setCouponCode] = useState("");
   const [coupon, setCoupon] = useState<Coupon | null>(null);
   const [couponError, setCouponError] = useState("");
@@ -106,11 +117,14 @@ export default function CheckoutPage() {
     notes: "",
   });
   // Dados de pagamento online — NÃO são recolhidos aqui: todos os métodos
-  // pagos online usam link de pagamento (checkout hospedado — PaySuite em
-  // produção, página simulada em dev). O cliente só seleciona o método e,
-  // ao comprar, é encaminhado para o link; quem recolhe telefone/cartão é a
-  // página do provedor.
+  // pagos online usam link de pagamento (checkout hospedado da PaySuite). O
+  // cliente só seleciona o método e, ao comprar, é encaminhado para o link —
+  // que vem do provedor, ou é colado pelo admin quando o gateway não o devolve.
   const [addrModalOpen, setAddrModalOpen] = useState(false);
+  // Endereço escolhido para ESTE pedido (o padrão só serve de valor inicial):
+  // com vários endereços guardados, o cliente tem de poder trocar a morada sem
+  // ir às definições.
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
 
 
   // Pré-preenche com os dados do perfil quando o utilizador está logado
@@ -147,8 +161,12 @@ export default function CheckoutPage() {
     province: "",
     coords: undefined as AddressBookEntry["coords"],
   });
-  // Endereço padrão (ou o primeiro) — o que a encomenda usa e a secção mostra.
-  const defaultAddress = addressList.find((a) => a.isDefault) ?? addressList[0] ?? null;
+  // Endereço usado pela encomenda: o escolhido, ou o padrão, ou o primeiro.
+  const selectedAddress =
+    addressList.find((a) => a.id === selectedAddressId) ??
+    addressList.find((a) => a.isDefault) ??
+    addressList[0] ??
+    null;
 
   // Carrega o endereço padrão (ou o primeiro) uma vez, no arranque, e pré-
   // preenche o formulário em silêncio — a UI já não mostra campos de entrega,
@@ -164,6 +182,7 @@ export default function CheckoutPage() {
         const addr = list.find((a) => a.isDefault) ?? list[0] ?? null;
         if (!addr) return;
         setSavedAddress(addr);
+        setSelectedAddressId(addr.id);
         setForm((f) => ({
           ...f,
           fullName: f.fullName || addr.fullName,
@@ -220,10 +239,15 @@ export default function CheckoutPage() {
         if (cancelled || !res.data?.methods) return;
         const available = new Set(res.data.methods);
         setMethodAvailability(() => available);
-        // Se o método selecionado ficou indisponível, volta ao primeiro da lista
-        // (M-Pesa). Não há um método «de recurso» sem validação: os pagamentos
-        // online são a única via aceite no checkout.
-        setMethod((current) => (available.has(current) ? current : "mpesa"));
+        setAvailabilityLoaded(true);
+        // Se o método selecionado ficou indisponível (sem gateway, todos os
+        // métodos saem da lista), passa ao primeiro que o backend aceita. A
+        // comparação é por NOME: o backend devolve rótulos e o estado guarda ids.
+        setMethod((current) => {
+          const currentName = paymentMethods.find((m) => m.id === current)?.name;
+          if (currentName && available.has(currentName)) return current;
+          return paymentMethods.find((m) => available.has(m.name))?.id ?? current;
+        });
       })
       .catch(() => {
         /* sem sinal do backend: mantém todos visíveis (comportamento anterior) */
@@ -234,9 +258,31 @@ export default function CheckoutPage() {
   }, []);
 
   /**
-   * Escolhe o método de pagamento — só isso. O link de pagamento é gerado ao
-   * comprar; os dados do método (telefone/cartão) são pedidos na página do
-   * provedor, não aqui.
+   * Link do provedor: mostra 3 s de processamento e abre automaticamente.
+   * O botão «Pagar agora» no ecrã cobre o caso de o browser bloquear a
+   * navegação (ou de o cliente querer abrir noutro separador).
+   *
+   * Só links EXTERNOS (o checkout da PaySuite, ou o link que o admin colou no
+   * pedido) abrem sozinhos — um endereço da própria loja nunca é um link de
+   * pagamento a abrir no ecrã do cliente.
+   */
+  useEffect(() => {
+    const url = placedOrder?.checkoutUrl;
+    if (!url || !isProviderPaymentLink(url)) return;
+    const tick = window.setInterval(
+      () => setRedirectSeconds((s) => (s == null ? null : Math.max(0, s - 1))),
+      1000,
+    );
+    const go = window.setTimeout(() => window.location.assign(url), 3000);
+    return () => {
+      window.clearInterval(tick);
+      window.clearTimeout(go);
+    };
+  }, [placedOrder]);
+
+  /**
+   * Escolhe o método de pagamento — só isso. O link é gerado ao comprar; os
+   * dados do método (telefone/cartão) são pedidos na página do provedor.
    */
   const pickMethod = (id: string) => {
     setMethod(id);
@@ -244,20 +290,25 @@ export default function CheckoutPage() {
 
   const provinceInfo = provinces.find((p) => p.name === province);
   const shipping = subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : provinceInfo?.fee ?? 0;
-  const savings = items.reduce(
-    (acc, i) => acc + (i.oldPrice && i.oldPrice > i.price ? (i.oldPrice - i.price) * i.qty : 0),
-    0,
-  );
+  // O subtotal já usa o preço promocional (`price`); o preço riscado
+  // (`oldPrice`) é referência visual e NÃO se subtrai outra vez. O único
+  // desconto que mexe no total é o cupão.
   const couponDiscount = coupon?.discount ?? 0;
-  const discount = savings + couponDiscount;
-  const total = Math.max(0, subtotal - savings - couponDiscount) + shipping;
-  // Percentagem poupada nos preços riscados (rótulo do resumo).
-  const discountPct = subtotal > 0 ? `-${Math.round((savings / subtotal) * 100)}%` : "";
+  const discount = couponDiscount;
+  const total = Math.max(0, subtotal - couponDiscount) + shipping;
 
   const selectedMethod = useMemo(
     () => paymentMethods.find((m) => m.id === method)!,
     [method],
   );
+  // Disponibilidade efetiva do método escolhido: o backend desliga os métodos
+  // pagos online quando não há gateway, por isso não basta o `available` estático.
+  const selectedMethodAvailable =
+    selectedMethod.available &&
+    (!availabilityLoaded || methodAvailability.has(selectedMethod.name));
+  const onlinePaymentsAvailable =
+    !availabilityLoaded ||
+    paymentMethods.some((m) => m.paidOnline && methodAvailability.has(m.name));
 
   // Cliente identificado (conta) — mostra a foto no checkout.
 
@@ -278,7 +329,7 @@ export default function CheckoutPage() {
     );
   }
 
-  /* ── Ecrã "Aguarde o link de pagamento" ──────────────────── */
+  /* ── Ecrã de confirmação ────────────────────────────────── */
   if (placedOrder) {
     // Mensagem que o cliente envia ao fornecedor (WhatsApp) já preenchida:
     // código da compra, data, artigos com quantidades e total a pagar.
@@ -292,21 +343,52 @@ export default function CheckoutPage() {
       `Artigos:\n${itemsList}\n` +
       `Total a pagar: ${format(placedOrder.total)}\n` +
       `Método: ${placedOrder.paymentMethod}\n` +
-      `Fico a aguardar o link de pagamento.`;
+      `Obrigado!`;
+    // Link de pagamento do PROVEDOR (o tipo que o admin também envia). Um link
+    // interno da loja não abre sozinho nem é «Pagar agora».
+    const providerLink = isProviderPaymentLink(placedOrder.checkoutUrl);
+    // Pago online sem link do gateway: a loja vai enviar o link.
+    const awaitingLink =
+      !placedOrder.checkoutUrl &&
+      (paymentMethods.find((m) => m.name === placedOrder.paymentMethod)?.paidOnline ?? false);
     return (
       <div className="container-nsm py-6 pb-28">
         <div className="mx-auto max-w-2xl">
           <div className="rounded-2xl border border-primary-100 bg-primary-50/50 p-8 text-center">
             <span className="mx-auto flex size-14 items-center justify-center rounded-full bg-primary-100">
-              <Loader2 className="size-8 animate-spin text-primary-700" aria-hidden />
+              {providerLink ? (
+                <Loader2 className="size-8 animate-spin text-primary-700" aria-hidden />
+              ) : (
+                <CheckCircle2 className="size-8 text-primary-700" aria-hidden />
+              )}
             </span>
             <h1 className="mt-4 font-display text-2xl font-extrabold text-slate-900">
-              Aguarde o link de pagamento
+              {providerLink ? "A processar o pagamento…" : "Pedido registado"}
             </h1>
             <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-slate-600">
               O seu pedido <strong className="text-slate-900">{placedOrder.id}</strong> foi
-              registado. O link de pagamento chega na conversa com o fornecedor — fale connosco
-              para o receber e concluir a compra.
+              registado.{" "}
+              {providerLink ? (
+                <>
+                  Vamos abrir a página segura de pagamento
+                  {redirectSeconds != null ? ` em ${redirectSeconds} s` : ""} — se não
+                  abrir, use o botão «Pagar agora».
+                </>
+              ) : placedOrder.checkoutUrl ? (
+                <>
+                  Abra a página de pagamento para concluir a compra.
+                </>
+              ) : awaitingLink ? (
+                <>
+                  A loja foi notificada e vai enviar-lhe o link de pagamento por email
+                  (e WhatsApp, se tiver o canal ligado) assim que estiver pronto.
+                </>
+              ) : (
+                <>
+                  Combinamos consigo a entrega e o pagamento. Fale com o agente de
+                  compra se precisar de alguma coisa.
+                </>
+              )}
             </p>
           </div>
 
@@ -337,32 +419,57 @@ export default function CheckoutPage() {
             </p>
           </div>
 
-          {/* Ações pedidas: conversar com o fornecedor (WhatsApp com os dados da
-              compra já escritos) e fechar. O link do provedor, quando existe
-              (PaySuite/simulado), fica disponível para pagar já. */}
+          {/* Pedido registado (sem link do provedor): dois botões — falar com o
+              agente de compra (WhatsApp já com o pedido escrito) e continuar a
+              comprar. Com link do provedor, a ação principal é pagar JÁ (o
+              redirecionamento automático pode ser bloqueado pelo browser). */}
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            <Button
-              href={whatsappHref(supplierMessage)}
-              target="_blank"
-              rel="noopener noreferrer"
-              size="lg"
-            >
-              Conversar com o fornecedor
-            </Button>
-            <Button href="/" variant="outline" size="lg">
-              Fechar
-            </Button>
+            {providerLink ? (
+              <>
+                <Button href={placedOrder.checkoutUrl} size="lg">
+                  Pagar agora
+                </Button>
+                <Button
+                  href={whatsappHref(supplierMessage)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  variant="outline"
+                  size="lg"
+                >
+                  Falar com o agente de compra
+                </Button>
+              </>
+            ) : placedOrder.checkoutUrl ? (
+              <>
+                <Button href={placedOrder.checkoutUrl} size="lg">
+                  Abrir página de pagamento
+                </Button>
+                <Button
+                  href={whatsappHref(supplierMessage)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  variant="outline"
+                  size="lg"
+                >
+                  Falar com o agente de compra
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  href={whatsappHref(supplierMessage)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  size="lg"
+                >
+                  Falar com o agente de compra
+                </Button>
+                <Button href="/" variant="outline" size="lg">
+                  Continuar a comprar
+                </Button>
+              </>
+            )}
           </div>
-          {placedOrder.checkoutUrl && (
-            <p className="mt-4 text-center text-sm">
-              <a
-                href={placedOrder.checkoutUrl}
-                className="font-semibold text-primary-600 underline underline-offset-2"
-              >
-                Já tem o link? Abrir página de pagamento
-              </a>
-            </p>
-          )}
           <p className="mt-4 text-center text-xs text-slate-400">
             Guardámos o seu pedido — pode acompanhá-lo em{" "}
             <Link
@@ -381,7 +488,17 @@ export default function CheckoutPage() {
   /* ── Formulário ──────────────────────────────────────────── */
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!selectedMethod.available || placing) return;
+    if (placing) return;
+    if (!selectedMethodAvailable) {
+      notify("Escolha um método de pagamento disponível.", "info");
+      return;
+    }
+    // O email é a prova de contacto do convidado: é para ele que vai a
+    // confirmação e o link de acompanhamento do pedido.
+    if (!form.email.trim()) {
+      notify("Indique o seu email para receber a confirmação e acompanhar o pedido.", "info");
+      return;
+    }
     // Sem dados de entrega guardados, a encomenda não pode ser enviada:
     // encaminha para «Dados de entrega» nas definições (a UI do checkout já
     // não tem campos de entrega, a pedido).
@@ -427,13 +544,12 @@ export default function CheckoutPage() {
 
       saveLocalOrder(order, authUser?.id); // pedido real (totais recalculados no servidor)
       clear();
-      // O pedido (e o link de pagamento, quando o gateway devolve um) fica no
-      // ecrã "Aguarde o link de pagamento": sem redirecionamento automático —
-      // o cliente fala com o fornecedor (WhatsApp, mensagem já preenchida) e
-      // recebe o link na conversa. O botão "Abrir página de pagamento" no
-      // ecrã cobre o caso de querer pagar já.
       setPlacedOrder(order);
       notify("Pedido registado com sucesso ✅");
+      // Com link do provedor, o ecrã mostra 3 s de processamento e abre-o; sem
+      // link (gateway sem URL) fica o pedido registado e o admin é avisado por
+      // email para colar o link no painel.
+      setRedirectSeconds(isProviderPaymentLink(order.checkoutUrl) ? 3 : null);
     } catch (err) {
       // Erro de validação do backend (ex.: dados de entrega inválidos)
       notify(err instanceof ApiError ? err.message : "Não foi possível registar o pedido");
@@ -523,50 +639,107 @@ export default function CheckoutPage() {
       /* armazenamento indisponível */
     }
     setSavedAddress(entry);
-    // Pré-preenche o formulário da encomenda com o endereço escolhido.
+    // O endereço acabado de guardar é o que a encomenda passa a usar — e os
+    // dados do formulário são substituídos (não só preenchidos se estiverem
+    // vazios, senão trocar de endereço mantinha a morada antiga).
+    chooseAddress(entry);
+    notify("Endereço guardado ✅");
+  };
+
+  /** Passa a usar um endereço do livro neste checkout. */
+  const chooseAddress = (entry: AddressBookEntry) => {
+    setSelectedAddressId(entry.id);
+    setSavedAddress(entry);
     setForm((f) => ({
       ...f,
-      fullName: f.fullName || entry.fullName,
-      phone: f.phone || entry.phone,
-      address: f.address || entry.address,
-      city: f.city || entry.city,
+      fullName: entry.fullName,
+      phone: entry.phone,
+      address: entry.address,
+      city: entry.city,
     }));
-    setProvince((cur) => (cur === localProvinces[0].name && entry.province ? entry.province : cur));
-    notify("Endereço guardado ✅");
+    setProvince(entry.province || province);
+    setAddrModalOpen(false);
+  };
+
+  /** Remove um endereço do livro e, se era o escolhido, passa ao seguinte. */
+  const removeAddress = (entry: AddressBookEntry) => {
+    const next = addressList.filter((a) => a.id !== entry.id);
+    setAddressList(next);
+    try {
+      window.localStorage.setItem("nsm:addresses", JSON.stringify(next));
+      void saveMyAddresses(next);
+    } catch {
+      /* armazenamento indisponível */
+    }
+    if (entry.id !== selectedAddressId) return;
+    const fallback = next.find((a) => a.isDefault) ?? next[0] ?? null;
+    setSelectedAddressId(fallback?.id ?? null);
+    if (fallback) {
+      setForm((f) => ({
+        ...f,
+        fullName: fallback.fullName,
+        phone: fallback.phone,
+        address: fallback.address,
+        city: fallback.city,
+      }));
+      setProvince(fallback.province || province);
+    }
   };
 
   return (
     <div className="container-nsm py-6 pb-28">
       <form onSubmit={submit} className="mt-6 px-4 grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div className="space-y-6">
-          {/* Dados de entrega — o endereço padrão aparece gravado; o botão
-              tracejado abre o gestor (modal) para adicionar outro. */}
+          {/* Contacto — o email é a prova de contacto do convidado: é para ele
+              que vai a confirmação e o link de acompanhamento do pedido. */}
+          <div>
+            <h2 className="flex items-center gap-2 font-display text-lg font-bold text-slate-900">
+              <Mail className="size-5 text-primary-600" /> Contacto
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Enviamos a confirmação e o link de acompanhamento para este email.
+            </p>
+            <div className="mt-3">
+              <Input
+                label="Email"
+                type="email"
+                name="email"
+                required
+                autoComplete="email"
+                placeholder="nome@email.com"
+                leadingIcon={<Mail className="size-4" />}
+                value={form.email}
+                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          {/* Dados de entrega — o endereço escolhido aparece gravado; o botão
+              tracejado abre o gestor (modal) para escolher ou adicionar outro. */}
           <div>
             <h3 className="font-display text-lg font-bold text-slate-900">Endereços de Entrega</h3>
 
-            {defaultAddress ? (
-              <div>
-                {defaultAddress.isDefault && (
-                  <span className="absolute right-3 top-3 rounded-full bg-primary-50 px-2 py-0.5 text-xs font-bold text-primary-700">
-                    PADRÃO
-                  </span>
-                )}
-                <p className="font-bold text-slate-900">{defaultAddress.label}</p>
+            {selectedAddress ? (
+              <div className="relative mt-3 rounded-xl border border-slate-200 bg-surface p-4">
+                <span className="absolute right-3 top-3 rounded-full bg-primary-50 px-2 py-0.5 text-xs font-bold text-primary-700">
+                  {selectedAddress.isDefault ? "PADRÃO" : "SELECIONADO"}
+                </span>
+                <p className="font-bold text-slate-900">{selectedAddress.label}</p>
                 <p className="mt-1 text-sm text-slate-600">
-                  {defaultAddress.fullName} · {defaultAddress.phone}
+                  {selectedAddress.fullName} · {selectedAddress.phone}
                 </p>
                 <p className="mt-0.5 text-sm text-slate-500">
-                  {defaultAddress.address}, {defaultAddress.city} — {defaultAddress.province}
+                  {selectedAddress.address}, {selectedAddress.city} — {selectedAddress.province}
                 </p>
-                {defaultAddress.coords && (
+                {selectedAddress.coords && (
                   <a
-                    href={`https://www.google.com/maps?q=${defaultAddress.coords.lat},${defaultAddress.coords.lng}`}
+                    href={`https://www.google.com/maps?q=${selectedAddress.coords.lat},${selectedAddress.coords.lng}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="mt-1 flex items-center gap-1 text-xs font-medium text-primary-700 transition hover:underline"
                   >
                     <MapPin className="size-3" aria-hidden />
-                    {defaultAddress.coords.lat.toFixed(6)}, {defaultAddress.coords.lng.toFixed(6)}
+                    {selectedAddress.coords.lat.toFixed(6)}, {selectedAddress.coords.lng.toFixed(6)}
                   </a>
                 )}
               </div>
@@ -584,7 +757,8 @@ export default function CheckoutPage() {
               }}
               className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-primary-300 bg-primary-50/50 py-3 text-sm font-semibold text-primary-700 transition hover:bg-primary-50 active:scale-[0.99]"
             >
-              <Plus className="size-4" aria-hidden /> Adicionar novo endereço
+              <Plus className="size-4" aria-hidden />
+              {addressList.length > 0 ? "Escolher ou adicionar endereço" : "Adicionar novo endereço"}
             </button>
           </div>
 
@@ -635,32 +809,29 @@ export default function CheckoutPage() {
             <h2 className="flex items-center gap-2 font-display text-lg font-bold text-slate-900">
               <Lock className="size-5 text-primary-600" /> Método de pagamento
             </h2>
-            {/* Logótipos oficiais numa única linha — o cliente só SELECIONA o
-                método; o link de pagamento é gerado ao comprar. */}
-            {/* 4 métodos (M-Pesa, e-Mola, mKesh, cartão) — 2 colunas no telemóvel,
-                4 em linha no desktop. */}
-            <div className="mt-4 grid grid-cols-2 gap-3 place-items-center sm:grid-cols-4">
+            {/* O cliente só SELECIONA o método. Ao comprar, abrimos a página do
+                provedor, que recolhe os dados e confirma o pagamento. */}
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
               {paymentMethods.map((m) => {
                 const logo = methodLogos[m.id];
                 const active = method === m.id;
                 // Disponibilidade efetiva: o campo `available` estático E o que o
-                // backend diz (pagos online desligados sem gateway). Quando a lista
-                // do backend ainda não chegou (Set vazio), assume-se disponível.
-                const backendUnavailable = methodAvailability.size > 0 && !methodAvailability.has(m.name);
+                // backend diz (métodos desligados sem gateway). Enquanto a lista
+                // do backend não chegou, assume-se disponível.
+                const backendUnavailable = availabilityLoaded && !methodAvailability.has(m.name);
                 const isAvailable = m.available && !backendUnavailable;
                 return (
                   <button
                     key={m.id}
                     type="button"
                     disabled={!isAvailable}
-                    title={m.name}
+                    title={isAvailable ? m.name : `${m.name} — indisponível neste momento`}
                     onClick={() => pickMethod(m.id)}
                     aria-pressed={active}
                     className={cn(
-                      // Fundo da marca: M-Pesa vermelho, e-Mola amarelo, Visa branco.
-                      // Sem px/py dentro do quadrado.
-                      "relative flex h-20 w-20 items-center justify-center rounded-xl border-2 transition active:scale-[0.98]",
-                      methodBg[m.id],
+                      // Fundo da marca: M-Pesa branco, e-Mola amarelo, cartão branco.
+                      "relative flex h-20 w-full items-center justify-center gap-2 rounded-xl border-2 px-3 transition active:scale-[0.98]",
+                      methodBg[m.id] ?? "bg-white",
                       active
                         ? "border-primary-600 ring-2 ring-primary-600/20"
                         : isAvailable
@@ -668,17 +839,30 @@ export default function CheckoutPage() {
                           : "cursor-not-allowed border-slate-100 bg-slate-50 opacity-60",
                     )}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={logo.src} alt={logo.alt} className="max-h-20 w-auto rounded-lg object-contain" />
+                    {logo ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={logo.src} alt={logo.alt} className="max-h-16 w-auto rounded-lg object-contain" />
+                    ) : (
+                      <span className="text-left text-sm font-semibold text-slate-800">{m.name}</span>
+                    )}
                   </button>
                 );
               })}
             </div>
 
-            <p className="mt-4 flex items-center gap-1.5 text-xs text-slate-400">
-              <Lock className="size-3.5" />
-              Pagamento seguro · ao comprar recebe um link para concluir com o
-              método escolhido (a página do provedor é que pede o número/cartão).
+            {availabilityLoaded && !onlinePaymentsAvailable && (
+              <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium leading-relaxed text-amber-800">
+                Os pagamentos estão temporariamente indisponíveis. Tente novamente dentro
+                de instantes ou fale com o suporte.
+              </p>
+            )}
+
+            <p className="mt-4 flex items-start gap-1.5 text-xs text-slate-500">
+              <Lock className="mt-0.5 size-3.5 shrink-0" />
+              <span>
+                Pagamento seguro · ao comprar abrimos a página do provedor, onde conclui
+                com o método escolhido.
+              </span>
             </p>
           </section>
 
@@ -717,12 +901,6 @@ export default function CheckoutPage() {
                 <dt className="text-slate-500">Subtotal</dt>
                 <dd className="font-semibold text-slate-800 tabular-nums">{format(subtotal)}</dd>
               </div>
-              {savings > 0 && (
-                <div className="flex justify-between text-emerald-700">
-                  <dt>Desconto ({discountPct})</dt>
-                  <dd className="font-semibold">-{format(savings)}</dd>
-                </div>
-              )}
               {couponDiscount > 0 && (
                 <div className="flex justify-between text-emerald-700">
                   <dt>Cupão ({coupon?.code})</dt>
@@ -758,14 +936,9 @@ export default function CheckoutPage() {
             size="lg"
             fullWidth
             loading={placing}
-            disabled={items.length === 0}
-            className="hidden md:flex"
+            disabled={items.length === 0 || !selectedMethodAvailable}
           >
-            {placing && selectedMethod?.paidOnline
-              ? "A aguardar o link de pagamento…"
-              : placing
-                ? "A processar…"
-                : "Comprar"}
+            {placing ? "A processar…" : "Comprar"}
           </Button>
 
           {!logged && (
@@ -836,22 +1009,33 @@ export default function CheckoutPage() {
                     {a.coords.lat.toFixed(6)}, {a.coords.lng.toFixed(6)}
                   </a>
                 )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = addressList.filter((x) => x.id !== a.id);
-                    setAddressList(next);
-                    try {
-                      window.localStorage.setItem("nsm:addresses", JSON.stringify(next));
-                      void saveMyAddresses(next);
-                    } catch {
-                      /* ignora */
-                    }
-                  }}
-                  className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-slate-400 transition hover:text-red-600"
-                >
-                  <Trash2 className="size-3.5" aria-hidden /> Remover
-                </button>
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => chooseAddress(a)}
+                    className={cn(
+                      "flex items-center gap-1.5 text-xs font-semibold",
+                      a.id === selectedAddress?.id
+                        ? "text-emerald-700"
+                        : "text-primary-700 transition hover:underline",
+                    )}
+                  >
+                    {a.id === selectedAddress?.id ? (
+                      <>
+                        <Check className="size-3.5" aria-hidden /> Em uso
+                      </>
+                    ) : (
+                      "Usar este endereço"
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeAddress(a)}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 transition hover:text-red-600"
+                  >
+                    <Trash2 className="size-3.5" aria-hidden /> Remover
+                  </button>
+                </div>
               </div>
             ))}
           </div>

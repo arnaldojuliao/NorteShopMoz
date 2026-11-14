@@ -135,13 +135,7 @@ export function Footer() {
           <p>© {new Date().getFullYear()} NorteShopMoz (NS). Todos os direitos reservados.</p>
           <div className="flex flex-wrap items-center justify-center gap-2">
             <span className="rounded-md bg-white/5 px-2.5 py-1 font-semibold text-slate-300">
-              M-Pesa · e-Mola · Cartão
-            </span>
-            <span className="rounded-md bg-white/5 px-2.5 py-1 font-semibold text-slate-300">
-              Transferência
-            </span>
-            <span className="rounded-md bg-white/5 px-2.5 py-1 font-semibold text-slate-300">
-              M-Pesa
+              M-Pesa · e-Mola · mKesh · Cartão
             </span>
           </div>
         </div>

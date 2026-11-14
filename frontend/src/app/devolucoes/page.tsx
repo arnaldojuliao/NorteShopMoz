@@ -28,11 +28,22 @@ export default function DevolucoesPage() {
           body: (
             <>
               <ol className="list-decimal space-y-1.5 pl-5">
-                <li>Contacte o suporte (WhatsApp {site.phoneDisplay} ou email {site.email}).</li>
-                <li>Indique o número do pedido e o motivo da devolução.</li>
+                <li>
+                  Em <strong>Meus pedidos</strong>, abra o cartão do pedido entregue e clique em{" "}
+                  <strong>“Solicitar devolução”</strong>, indicando o motivo.
+                </li>
+                <li>A loja responde com a aprovação (ou a recusa, com o motivo).</li>
                 <li>Receba as instruções de recolha ou envio.</li>
-                <li>Após a verificação, o reembolso é processado em até 5 dias úteis.</li>
+                <li>
+                  Após a aprovação, o reembolso é processado pelo mesmo método de pagamento
+                  (em pagamentos online) em até 5 dias úteis — o estado da devolução aparece no
+                  próprio pedido.
+                </li>
               </ol>
+              <p className="mt-3 text-sm text-slate-500">
+                Também pode falar connosco diretamente: WhatsApp {site.phoneDisplay} ou email{" "}
+                {site.email}.
+              </p>
             </>
           ),
         },

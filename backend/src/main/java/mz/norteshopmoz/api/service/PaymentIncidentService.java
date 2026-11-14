@@ -80,12 +80,13 @@ public class PaymentIncidentService {
 
     /** Marca o caso como resolvido (a operação tratou no painel do provedor). */
     @Transactional
-    public PaymentIncident resolve(Long id, String adminId) {
+    public PaymentIncident resolve(Long id, String adminId, String note) {
         PaymentIncident incident = repository.findById(id)
                 .orElseThrow(() -> mz.norteshopmoz.api.exception.ApiException.notFound("Incidência não encontrada"));
         incident.setStatus("RESOLVIDA");
         incident.setResolvedAt(java.time.Instant.now());
         incident.setResolvedBy(adminId);
+        incident.setResolutionNote(note == null || note.isBlank() ? null : note.trim());
         return repository.save(incident);
     }
 }

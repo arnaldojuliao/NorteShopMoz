@@ -87,20 +87,20 @@ public class ProductionConfigGuard implements ApplicationRunner {
 
         // Pagamentos. Em `prod` o gateway simulado não é registado (ver
         // SimulatedPaymentGateway) e o gateway real exige credenciais: sem
-        // PAYMENTS_MODE=live a loja não cobra online (os três métodos aceitos no
+        // PAYMENTS_MODE=live a loja não cobra online (todos os métodos do
         // checkout respondem 503 e ficam desativados no browser).
         if (!"live".equalsIgnoreCase(paymentsMode)) {
-            log.warn("[PROD] PAYMENTS_MODE={} — pagamentos online (M-Pesa/e-Mola/cartão) estão DESATIVADOS "
-                    + "e respondem 503. Configure o gateway PaySuite (PAYMENTS_API_KEY) e "
-                    + "PAYMENTS_MODE=live para os aceitar. NOTA: o checkout só oferece estes três "
-                    + "métodos, portanto com este valor a loja NÃO consegue fechar nenhuma encomenda.",
+            log.warn("[PROD] PAYMENTS_MODE={} — pagamentos online (M-Pesa/e-Mola/mKesh/cartão) estão "
+                    + "DESATIVADOS e respondem 503. Configure o gateway PaySuite (PAYMENTS_API_KEY) e "
+                    + "PAYMENTS_MODE=live para os aceitar. NOTA: como todos os métodos são online, com "
+                    + "este valor nenhum método fica disponível e a loja NÃO consegue fechar encomendas.",
                     paymentsMode);
         } else if (gatewayProvider.getIfAvailable() == null) {
             // Com mode=live o PaySuitePaymentGateway é sempre registado (e falha o
             // arranque se faltar a api-key), pelo que chegar aqui indica um registo
             // substituído em runtime — nunca um estado normal.
             log.error("[PROD] PAYMENTS_MODE=live mas NÃO há nenhum PaymentGateway registado — a loja NÃO "
-                    + "cobra online: M-Pesa/e-Mola/cartão ficam ocultos no checkout e respondem 503. "
+                    + "cobra online: todos os métodos ficam ocultos no checkout e respondem 503. "
                     + "Verifique PAYMENTS_API_KEY (PaySuite) ou volte a PAYMENTS_MODE=simulated.");
         }
         // Webhook sem segredo: as notificações de pagamento nunca são aceites, pelo

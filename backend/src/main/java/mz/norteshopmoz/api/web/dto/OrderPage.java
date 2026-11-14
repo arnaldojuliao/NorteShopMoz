@@ -24,6 +24,8 @@ import mz.norteshopmoz.api.domain.Order;
  * @param totalPages  número de páginas
  * @param hasNext     existe uma página seguinte?
  * @param statusCounts total de pedidos por estado (rótulo do contrato)
+ * @param paymentLinkPending pedidos em «Aguarda pagamento» SEM link de pagamento
+ *        — o badge do painel: são os que o admin tem de resolver à mão
  */
 public record OrderPage(
         List<Order> items,
@@ -32,5 +34,6 @@ public record OrderPage(
         long totalItems,
         int totalPages,
         boolean hasNext,
-        Map<String, Long> statusCounts) {
+        Map<String, Long> statusCounts,
+        long paymentLinkPending) {
 }

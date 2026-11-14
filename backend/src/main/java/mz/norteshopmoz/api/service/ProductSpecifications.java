@@ -1,5 +1,7 @@
 package mz.norteshopmoz.api.service;
 
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
 import java.util.ArrayList;
 import java.util.List;
@@ -22,11 +24,19 @@ public final class ProductSpecifications {
             if (query.q() != null && !query.q().isBlank()) {
                 // Nota: tags é uma coluna JSONB — não é indexável com LIKE.
                 // A pesquisa cobre nome, marca e descrição curta.
-                String like = "%" + query.q().trim().toLowerCase() + "%";
+                //
+                // A expressão é `nsm_normalize(coluna)` — minúsculas + sem
+                // acentos — e não `lower(coluna)`: é exatamente a expressão dos
+                // índices GIN trigram criados na V13, e é o que faz o LIKE com
+                // `%` à esquerda usar índice em vez de varrer a tabela. Também
+                // faz «cha» encontrar «Chá». O termo passa pela mesma função
+                // (constante por execução) para as duas pontas normalizarem
+                // de forma idêntica.
+                Expression<String> like = normalize(cb, cb.literal("%" + query.q().trim() + "%"));
                 predicates.add(cb.or(
-                        cb.like(cb.lower(root.get("name")), like),
-                        cb.like(cb.lower(cb.coalesce(root.get("brand"), "")), like),
-                        cb.like(cb.lower(root.get("shortDescription")), like)));
+                        cb.like(normalize(cb, root.get("name")), like),
+                        cb.like(normalize(cb, root.get("brand")), like),
+                        cb.like(normalize(cb, root.get("shortDescription")), like)));
             }
 
             if (query.featured()) {
@@ -50,5 +60,13 @@ public final class ProductSpecifications {
 
             return cb.and(predicates.toArray(new Predicate[0]));
         };
+    }
+
+    /**
+     * {@code nsm_normalize(expr)} — a função IMMUTABLE criada na V13 (lower +
+     * unaccent). Tem de ser chamada desta forma para casar com o índice GIN.
+     */
+    private static Expression<String> normalize(CriteriaBuilder cb, Expression<?> expr) {
+        return cb.function("nsm_normalize", String.class, expr);
     }
 }

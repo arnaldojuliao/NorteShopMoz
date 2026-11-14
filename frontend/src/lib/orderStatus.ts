@@ -11,6 +11,24 @@ import type { Order, OrderStatus } from "@/lib/types";
  * remapeia — veja-se `html.dark` em `globals.css`.
  */
 
+/**
+ * Timeline dos estados — ordem usada para avançar pedidos. "Cancelado" fica
+ * FORA desta lista: é um estado terminal, não um passo da sequência (senão um
+ * pedido entregue poderia ser "avançado" para cancelado).
+ */
+export const ORDER_STATUSES: OrderStatus[] = [
+  // Primeiro passo dos pagamentos com checkout hospedado (PaySuite): o pedido
+  // existe mas ainda não foi pago. Fica na timeline para o admin o poder
+  // confirmar à mão quando o webhook do provedor não chega.
+  "Aguarda pagamento",
+  "Pedido recebido",
+  "Pagamento confirmado",
+  "Em preparação",
+  "Enviado",
+  "Em trânsito",
+  "Entregue",
+];
+
 /** Cor discreta de cada estado (pílula/badge). */
 export const STATUS_TONE: Record<OrderStatus, string> = {
   "Aguarda pagamento": "bg-amber-50 text-amber-700",
@@ -106,8 +124,9 @@ export function canCancelOrder(status: OrderStatus): boolean {
 
 /**
  * O pedido pode ser devolvido? A loja aceita devoluções até 7 dias após a
- * receção (política em `/devolucoes`) e sem fluxo de devolução no sistema: o
- * botão abre o suporte, não promete um reembolso automático.
+ * receção (política em `/devolucoes`). O botão abre o fluxo real de devolução
+ * (POST /api/returns/{orderId}, formulário no próprio cartão) — a decisão e o
+ * reembolso são da operação no painel.
  */
 export const RETURN_WINDOW_DAYS = 7;
 

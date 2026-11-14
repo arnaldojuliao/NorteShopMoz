@@ -1,10 +1,12 @@
 package mz.norteshopmoz.api.config;
 
 import java.lang.reflect.Method;
+import java.util.Map;
 import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.ThreadPoolExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.aop.interceptor.AsyncUncaughtExceptionHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -46,12 +48,42 @@ public class AsyncConfig implements AsyncConfigurer {
         executor.setQueueCapacity(500);
         executor.setThreadNamePrefix("nsm-async-");
         executor.setRejectedExecutionHandler(new LoggingDiscardPolicy());
+        // Propaga o X-Request-Id para o email que o pedido originou: sem isto, a
+        // linha "email enviado" aparecia sem qualquer ligação ao pedido, e um
+        // email que falha horas depois era impossível de correlacionar.
+        executor.setTaskDecorator(AsyncConfig::withMdc);
         // No shutdown: dá tempo às tarefas em curso (emails já em envio) sem
         // travar o arranque seguinte.
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(20);
         executor.initialize();
         return executor;
+    }
+
+    /**
+     * Envolve a tarefa com o MDC de quem a submeteu (o ID de correlação do
+     * pedido), restaurando o contexto da thread do executor no fim — as threads
+     * são reutilizadas e não podem herdar o ID de um pedido anterior.
+     */
+    private static Runnable withMdc(Runnable task) {
+        Map<String, String> submitter = MDC.getCopyOfContextMap();
+        return () -> {
+            Map<String, String> previous = MDC.getCopyOfContextMap();
+            if (submitter == null) {
+                MDC.clear();
+            } else {
+                MDC.setContextMap(submitter);
+            }
+            try {
+                task.run();
+            } finally {
+                if (previous == null) {
+                    MDC.clear();
+                } else {
+                    MDC.setContextMap(previous);
+                }
+            }
+        };
     }
 
     /** Falhas não capturadas de {@code void @Async} (as que o Spring não propaga). */

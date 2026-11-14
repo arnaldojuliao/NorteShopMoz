@@ -18,15 +18,14 @@ import org.springframework.stereotype.Service;
 /**
  * Registos e validação de métodos de pagamento.
  *
- * <p>Espelha o checkout do frontend. Métodos pagos online (M-Pesa, e-Mola,
- * cartão) passam pelo {@link PaymentGateway} — hoje simulado; os restantes
- * (pagamento na entrega, transferência) não são cobrados aqui e começam o
- * pedido em "Pedido recebido".</p>
+ * <p>Espelha o checkout do frontend. Todos os métodos (M-Pesa, e-Mola, mKesh e
+ * cartão) são pagos online e passam pelo {@link PaymentGateway} — hoje
+ * simulado.</p>
  *
  * <p>O gateway é resolvido por {@link ObjectProvider}: com {@code app.payments.mode=live}
- * e nenhum gateway real configurado, a aplicação continua a arrancar (métodos
- * offline funcionam) e as tentativas de pagamento online recebem um erro claro
- * em vez de derrubar o contexto Spring no arranque.</p>
+ * e nenhum gateway real configurado, a aplicação continua a arrancar (a loja
+ * não aceita encomendas) e as tentativas de pagamento recebem um erro claro em
+ * vez de derrubar o contexto Spring no arranque.</p>
  *
  * <p><strong>Valor da cobrança</strong>: {@link PaymentGateway#charge} recebe o
  * total do pedido — sem isto, a interface não permitia cobrar o valor certo quando
@@ -43,18 +42,14 @@ public class PaymentService {
 
     /** Registo dos métodos aceites — id, rótulo e aliases aceites no payload. */
     private static final List<PaymentMethodInfo> METHODS = List.of(
-            new PaymentMethodInfo("cod", "Pagamento na entrega",
-                    List.of("Cash on delivery", "CASH_ON_DELIVERY", "cod"), false, false, false),
-            new PaymentMethodInfo("transfer", "Transferência bancária",
-                    List.of("Bank transfer", "Transfer", "BANK_TRANSFER"), false, false, false),
             new PaymentMethodInfo("mpesa", "M-Pesa",
-                    List.of("MPESA"), true, true, false),
+                    List.of("MPESA"), true, false),
             new PaymentMethodInfo("emola", "e-Mola",
-                    List.of("EMOLA"), true, true, false),
+                    List.of("EMOLA"), true, false),
             new PaymentMethodInfo("mkesh", "mKesh",
-                    List.of("MKESH"), true, true, false),
+                    List.of("MKESH"), true, false),
             new PaymentMethodInfo("card", "Cartão Visa / Mastercard",
-                    List.of("Card", "Credit card", "CARD"), true, false, true));
+                    List.of("Card", "Credit card", "CARD"), false, true));
 
     private final ObjectProvider<PaymentGateway> gatewayProvider;
     /** Fila de reconciliação: estornos falhados ficam visíveis à operação. */
@@ -96,20 +91,16 @@ public class PaymentService {
     }
 
     /**
-     * Métodos disponíveis AGORA (rótulos): os pagos online só aparecem quando há
-     * um gateway configurado. O frontend consulta isto para desativar no checkout
-     * os métodos que devolveriam 503 — sem isto, o cliente escolhia M-Pesa e só
+     * Métodos disponíveis AGORA (rótulos): só aparecem quando há um gateway
+     * configurado. O frontend consulta isto para desativar no checkout os
+     * métodos que devolveriam 503 — sem isto, o cliente escolhia M-Pesa e só
      * descobria a indisponibilidade no fim, com o pedido a falhar.
      */
     public List<String> currentlyAvailableLabels() {
-        boolean gatewayPresent = gatewayProvider.getIfAvailable() != null;
-        return METHODS.stream()
-                .filter(m -> !m.paidOnline() || gatewayPresent)
-                .map(PaymentMethodInfo::label)
-                .toList();
+        return gatewayProvider.getIfAvailable() != null ? availableLabels() : List.of();
     }
 
-    /** true se o método pago online pode ser cobrado (gateway presente). */
+    /** true se os pagamentos online podem ser cobrados (gateway presente). */
     public boolean onlinePaymentsAvailable() {
         return gatewayProvider.getIfAvailable() != null;
     }
@@ -127,9 +118,8 @@ public class PaymentService {
     }
 
     /**
-     * Valida os dados de pagamento e, para métodos pagos online, cria a cobrança
-     * no gateway. Devolve o resultado (null para pagamento na entrega /
-     * transferência). Lança 400 se faltarem dados obrigatórios.
+     * Valida os dados de pagamento e cria a cobrança no gateway. Lança 400 se
+     * faltarem dados obrigatórios.
      *
      * <p>Nos gateways com <strong>checkout hospedado</strong> (PaySuite) o
      * telefone/cartão são recolhidos na página do provedor, pelo que não são
@@ -138,9 +128,6 @@ public class PaymentService {
      */
     public PaymentGateway.PaymentCharge authorize(PaymentMethodInfo method, String reference,
                                                   OrderRequest.PaymentInfoRequest info, BigDecimal total) {
-        if (!method.paidOnline()) {
-            return null;
-        }
         if (total == null || total.signum() < 0) {
             throw ApiException.badRequest("Valor de cobrança inválido");
         }
@@ -148,7 +135,7 @@ public class PaymentService {
         if (gateway == null) {
             throw ApiException.serviceUnavailable(
                     "Pagamentos online temporariamente indisponíveis — gateway não configurado."
-                            + " Escolha pagamento na entrega ou transferência bancária.");
+                            + " Tente novamente mais tarde.");
         }
         String phone = info == null ? null : normalizePhone(info.phone());
         String cardLast4 = info == null ? null : normalizeCardLast4(info.cardLast4());
@@ -225,10 +212,14 @@ public class PaymentService {
      * ({@code REFUND_FAILED}) na fila de reconciliação, não só no log.
      *
      * @param orderId id do pedido (opcional — liga a incidência ao painel)
+     * @return {@code true} se o gateway aceitou o estorno; {@code false} quando
+     *         falhou (não lança — quem chama decide o estado com o resultado,
+     *         ex.: a devolução só fecha como REEMBOLSADA quando o dinheiro
+     *         voltou de facto)
      */
-    public void refund(String reference, BigDecimal amount, String orderId) {
+    public boolean refund(String reference, BigDecimal amount, String orderId) {
         if (reference == null || reference.isBlank() || amount == null || amount.signum() <= 0) {
-            return;
+            return false;
         }
         try {
             PaymentGateway gateway = gatewayProvider.getIfAvailable();
@@ -236,14 +227,16 @@ public class PaymentService {
                 log.warn("Sem gateway de pagamento para estornar a referência {}", reference);
                 incidentService.record(orderId, reference, PaymentIncident.TYPE_REFUND_FAILED,
                         "Sem gateway configurado — o estorno não foi tentado.");
-                return;
+                return false;
             }
             gateway.refund(reference, amount);
+            return true;
         } catch (Exception e) {
             log.error("Falha ao estornar a referência {} — verifique manualmente no gateway",
                     reference, e);
             incidentService.record(orderId, reference, PaymentIncident.TYPE_REFUND_FAILED,
                     truncate(String.valueOf(e.getMessage()), 400));
+            return false;
         }
     }
 
@@ -274,8 +267,6 @@ public class PaymentService {
             String id,
             String label,
             List<String> aliases,
-            /** Pago online no checkout → pedido começa em "Pagamento confirmado". */
-            boolean paidOnline,
             /** Exige número de telemóvel (carteiras móveis). */
             boolean needsPhone,
             /** Exige dados de cartão. */

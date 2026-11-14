@@ -10,6 +10,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -57,6 +58,18 @@ public class AdminReturnController {
         }
         return ResponseEntity.ok(ApiResponse.data(
                 returnRequestService.decide(id, body.decision(), body.adminNote(), principal.id())));
+    }
+
+    /**
+     * Tenta de novo o estorno de uma devolução APROVADA cujo estorno falhou
+     * (gateway em baixo no primeiro attempt). Sucesso → REEMBOLSADA.
+     */
+    @PostMapping("/{id}/retry-refund")
+    public ResponseEntity<?> retryRefund(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        requireAdmin(principal);
+        return ResponseEntity.ok(ApiResponse.data(returnRequestService.retryRefund(id, principal.id())));
     }
 
     private static void requireAdmin(UserPrincipal principal) {

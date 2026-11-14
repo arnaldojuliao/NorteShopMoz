@@ -40,6 +40,10 @@ class OrderServiceTest {
     @Autowired
     OrderService orderService;
 
+    /** Leitura/estatísticas/export vivem no OrderQueryService (split do OrderService). */
+    @Autowired
+    OrderQueryService orderQueryService;
+
     @Autowired
     OrderRepository orderRepository;
 
@@ -219,7 +223,7 @@ class OrderServiceTest {
         orderService.createOrder(createOrderRequest("user1-" + unique + "@example.com"), user1.getId(), "k2-" + UUID.randomUUID());
         orderService.createOrder(createOrderRequest("user2-" + unique + "@example.com"), user2.getId(), "k3-" + UUID.randomUUID());
 
-        List<Order> orders = orderService.getMyOrders(user1.getId());
+        List<Order> orders = orderQueryService.getMyOrders(user1.getId());
 
         assertThat(orders).hasSize(2);
         assertThat(orders).allMatch(o -> o.getUserId().equals(user1.getId()));
@@ -231,7 +235,7 @@ class OrderServiceTest {
         UserAccount user = userRepository.save(createUser("owner-" + unique + "@example.com"));
         Order order = orderService.createOrder(createOrderRequest("owner-" + unique + "@example.com"), user.getId(), "k-" + UUID.randomUUID());
 
-        Order found = orderService.getOrder(order.getId(), createPrincipal(user.getId(), "CUSTOMER"));
+        Order found = orderQueryService.getOrder(order.getId(), createPrincipal(user.getId(), "CUSTOMER"));
 
         assertThat(found.getId()).isEqualTo(order.getId());
     }
@@ -243,7 +247,7 @@ class OrderServiceTest {
         Order order = orderService.createOrder(createOrderRequest("adminTarget-" + unique + "@example.com"), user.getId(), "k-" + UUID.randomUUID());
         UserAccount admin = userRepository.save(createUser("admin-" + unique + "@example.com", "ADMIN"));
 
-        Order found = orderService.getOrder(order.getId(), createPrincipal(admin.getId(), "ADMIN"));
+        Order found = orderQueryService.getOrder(order.getId(), createPrincipal(admin.getId(), "ADMIN"));
 
         assertThat(found.getId()).isEqualTo(order.getId());
     }
@@ -255,8 +259,25 @@ class OrderServiceTest {
         UserAccount user2 = userRepository.save(createUser("user2-" + unique + "@example.com"));
         Order order = orderService.createOrder(createOrderRequest("user1-" + unique + "@example.com"), user1.getId(), "k-" + UUID.randomUUID());
 
-        assertThatThrownBy(() -> orderService.getOrder(order.getId(), createPrincipal(user2.getId(), "CUSTOMER")))
+        assertThatThrownBy(() -> orderQueryService.getOrder(order.getId(), createPrincipal(user2.getId(), "CUSTOMER")))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("Não tem acesso a este pedido");
+    }
+
+    @Test
+    void setPaymentLinkByAdmin_gravaLinkParaPedidoAPagar() throws Exception {
+        String email = "link-" + UUID.randomUUID() + "@example.com";
+        Order order = orderService.createOrder(createOrderRequest(email), null, "k-" + UUID.randomUUID());
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.AGUARDA_PAGAMENTO);
+
+        Order updated = orderService.setPaymentLinkByAdmin(
+                order.getId(), " https://paysuite.tech/checkout/manual-1 ");
+
+        assertThat(updated.getCheckoutUrl()).isEqualTo("https://paysuite.tech/checkout/manual-1");
+        // Link nao-http(s) nao pode ser gravado (o valor e mostrado ao cliente).
+        assertThatThrownBy(() -> orderService.setPaymentLinkByAdmin(
+                order.getId(), "javascript:alert(1)"))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("Link de pagamento inválido");
     }
 }

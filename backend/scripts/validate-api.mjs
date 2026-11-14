@@ -303,8 +303,9 @@ async function computeExpected(province) {
     { p: p2, qty: 2 },
   ];
   const subtotal = items.reduce((acc, { p, qty }) => acc + p.price * qty, 0);
-  const discount = items.reduce((acc, { p, qty }) =>
-    acc + (p.oldPrice && p.oldPrice > p.price ? (p.oldPrice - p.price) * qty : 0), 0);
+  // O subtotal já usa o preço promocional; o oldPrice é só visual e não se
+  // subtrai outra vez — o único desconto que mexe no total é o cupão.
+  const discount = 0;
   const fee = { "Maputo Cidade": 120, "Maputo Província": 150, "Gaza": 200, "Inhambane": 220,
                 "Sofala": 260, "Manica": 280, "Tete": 320, "Zambézia": 300, "Nampula": 320,
                 "Cabo Delgado": 360, "Niassa": 380 }[province] ?? 0;
@@ -325,7 +326,7 @@ async function computeExpected(province) {
     subtotal: 99999, shipping: 999, discount: 999, total: 1, // valores do cliente — devem ser ignorados
     address: { fullName: "Anabela Teste", phone: "+258840000000", email, address: "Av. 24 de Julho, 100",
                city: "Maputo", province, notes: "Ligar antes de entregar" },
-    paymentMethod: "Pagamento na entrega",
+    paymentMethod: "M-Pesa",
   };
   const expected = await computeExpected(province);
 
@@ -336,11 +337,11 @@ async function computeExpected(province) {
   const o = created.body?.data;
   check("POST /api/orders → 201 {data}", created.status === 201 && o?.id?.startsWith("NSM-"));
   check(`subtotal recalculado no catálogo (${expected.subtotal})`, o?.subtotal === expected.subtotal, `subtotal=${o?.subtotal}`);
-  check(`desconto = Σ(oldPrice−price)×qty (${expected.discount})`, o?.discount === expected.discount, `desconto=${o?.discount}`);
+  check(`desconto sem cupão = 0 (${expected.discount})`, o?.discount === expected.discount, `desconto=${o?.discount}`);
   check(`envio por província / grátis (${expected.shipping})`, o?.shipping === expected.shipping, `envio=${o?.shipping}`);
   check(`total = subtotal − desconto + envio (${expected.total})`, o?.total === expected.total, `total=${o?.total}`);
-  check("status inicial 'Pedido recebido'", o?.status === "Pedido recebido", `status=${o?.status}`);
-  check("address/province/paymentMethod persistidos", o?.address?.province === province && o?.paymentMethod === "Pagamento na entrega");
+  check("status inicial 'Aguarda pagamento'", o?.status === "Aguarda pagamento", `status=${o?.status}`);
+  check("address/province/paymentMethod persistidos", o?.address?.province === province && o?.paymentMethod === "M-Pesa");
   check("date ISO", o && !Number.isNaN(Date.parse(o.date)));
 
   const mine = await api("/api/orders", { headers: { Authorization: `Bearer ${token}` } });
@@ -383,57 +384,36 @@ console.log("\n💳 Pagamentos online");
                address: "Av. 1", city: "Maputo", province: "Maputo Cidade" },
   };
 
-  // Checkout hospedado (também no simulado): o pagamento é criado PENDENTE com
-  // link — o pedido só confirma quando a página de pagamento reporta o sucesso.
+  // Pago online: o pedido nasce PENDENTE e só o provedor (webhook assinado) o
+  // confirma. Sem gateway a devolver link, fica à espera do link que o admin
+  // cola no painel — não há página de pagamento da própria loja.
   const mpesa = await api("/api/orders", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...base, paymentMethod: "M-Pesa" }),
   });
-  check("M-Pesa sem telefone → 201 + Aguarda pagamento + link (checkout hospedado)",
+  check("M-Pesa sem telefone → 201 + Aguarda pagamento + referência (sem link próprio)",
         mpesa.status === 201 && mpesa.body?.data?.status === "Aguarda pagamento"
           && /^SIM-/.test(mpesa.body?.data?.paymentReference ?? "")
-          && typeof mpesa.body?.data?.checkoutUrl === "string"
-          && mpesa.body.data.checkoutUrl.includes("/pagamento-simulado"),
+          && mpesa.body?.data?.checkoutUrl == null,
         `status=${mpesa.status} ref=${mpesa.body?.data?.paymentReference} url=${mpesa.body?.data?.checkoutUrl}`);
 
   const emola = await api("/api/orders", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...base, paymentMethod: "e-Mola" }),
   });
-  check("e-Mola → 201 + referência SIM- + link",
+  check("e-Mola → 201 + referência SIM- + Aguarda pagamento",
         emola.status === 201 && /^SIM-/.test(emola.body?.data?.paymentReference ?? "")
-          && typeof emola.body?.data?.checkoutUrl === "string",
+          && emola.body?.data?.status === "Aguarda pagamento",
         `status=${emola.status} ref=${emola.body?.data?.paymentReference}`);
 
   const card = await api("/api/orders", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...base, paymentMethod: "Cartão Visa / Mastercard" }),
   });
-  check("cartão → 201 + referência SIM- + link",
+  check("cartão → 201 + referência SIM- + Aguarda pagamento",
         card.status === 201 && /^SIM-/.test(card.body?.data?.paymentReference ?? "")
-          && typeof card.body?.data?.checkoutUrl === "string",
+          && card.body?.data?.status === "Aguarda pagamento",
         `status=${card.status} ref=${card.body?.data?.paymentReference}`);
-
-  // Confirmação pela página simulada (o equivalente demo do webhook da PaySuite).
-  if (mpesa.body?.data?.paymentReference) {
-    const confirm = await api("/api/payments/simulated/confirm", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ref: mpesa.body.data.paymentReference }),
-    });
-    check("página simulada confirma pagamento → PAGAMENTO_CONFIRMADO",
-          confirm.status === 200 && confirm.body?.data?.orderId === mpesa.body?.data?.id
-            && confirm.body?.data?.status === "Pagamento confirmado",
-          `status=${confirm.status} body=${JSON.stringify(confirm.body?.data ?? {})}`);
-
-    // Idempotência: repetir a confirmação não avança mais (nem rebenta).
-    const confirmAgain = await api("/api/payments/simulated/confirm", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ref: mpesa.body.data.paymentReference }),
-    });
-    check("confirmação repetida é idempotente",
-          confirmAgain.status === 200 && confirmAgain.body?.data?.orderId === mpesa.body?.data?.id,
-          `status=${confirmAgain.status}`);
-  }
 
   // Os pedidos inválidos usam um contacto NOVO cada um: com o mesmo email, o
   // travão (3/hora) recusava-os com 429 antes de a validação do pagamento correr
@@ -447,6 +427,16 @@ console.log("\n💳 Pagamentos online");
     body: JSON.stringify(withContact({ paymentMethod: "Bitcoin" })),
   });
   check("método desconhecido → 400", unknown.status === 400, `status=${unknown.status}`);
+
+  // Regressão: estes métodos offline foram removidos do checkout. Se voltarem
+  // ao backend, o contrato quebra aqui antes de chegarem ao cliente.
+  for (const removed of ["Pagamento na entrega", "Transferência bancária"]) {
+    const gone = await api("/api/orders", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(withContact({ paymentMethod: removed })),
+    });
+    check(`método removido «${removed}» → 400`, gone.status === 400, `status=${gone.status}`);
+  }
 }
 
 // ── 6. Admin — transições de estado do pedido ─────────────────────
@@ -467,7 +457,7 @@ console.log("\n🛡️ Admin — estado dos pedidos");
     subtotal: 0, shipping: 0, discount: 0, total: 0,
     address: { fullName: "Cliente Teste", phone: "+258840000000", email: adminOrderEmail,
                address: "Av. 1", city: "Maputo", province: "Maputo Cidade" },
-    paymentMethod: "Pagamento na entrega",
+    paymentMethod: "M-Pesa",
   };
   const fresh = await api("/api/orders", {
     method: "POST", headers: { "Content-Type": "application/json" },
@@ -739,7 +729,7 @@ console.log("\n🎟️  Cupões");
     subtotal: 0, shipping: 0, discount: 0, total: 0,
     address: { fullName: "Cli Cupão", phone: "+258840000000", email: contact("cupao"),
                address: "Av. 1", city: "Maputo", province: "Maputo Cidade" },
-    paymentMethod: "Pagamento na entrega",
+    paymentMethod: "M-Pesa",
   };
   // Contactos distintos: o travão é por contacto (3/hora) e dois pedidos seguidos
   // com o mesmo email consomem quota sem necessidade.
@@ -798,7 +788,7 @@ console.log("\n🚫 Cancelamento de pedidos");
     subtotal: 0, shipping: 0, discount: 0, total: 0,
     address: { fullName: "Cli Cancelamento", phone: "+258840000000", email: contact("cancel"),
                address: "Av. 1", city: "Maputo", province: "Maputo Cidade" },
-    paymentMethod: "Pagamento na entrega",
+    paymentMethod: "M-Pesa",
   };
   // Cada pedido usa um contacto NOVO: o travão é por contacto (3/hora) e esta
   // secção cria quatro pedidos — com o mesmo email o último recebia 429.

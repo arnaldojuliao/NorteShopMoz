@@ -237,6 +237,18 @@ services:
       PAYMENTS_WEBHOOK_URL: ${PAYMENTS_WEBHOOK_URL:-}
       PAYMENTS_RETURN_URL: ${PAYMENTS_RETURN_URL:-}
       PAYMENTS_TIMEOUT_MS: ${PAYMENTS_TIMEOUT_MS:-15000}
+      # Prazo de expiração dos pagamentos abandonados (minutos): pedidos em
+      # "Aguarda pagamento" mais antigos são cancelados e o stock reposto.
+      # 0 = desligado (não recomendado — o stock fica reservado para sempre).
+      PAYMENT_EXPIRY_MINUTES: ${PAYMENT_EXPIRY_MINUTES:-1440}
+
+      # Canal WhatsApp (preferências notifWhatsapp*) e export de auditoria para
+      # SIEM — sem estas linhas as variáveis do .env.prod nunca chegavam ao
+      # contentor e as funcionalidades ficavam silenciosamente desligadas.
+      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-}
+      WHATSAPP_API_TOKEN: ${WHATSAPP_API_TOKEN:-}
+      WHATSAPP_ADMIN_PHONE: ${WHATSAPP_ADMIN_PHONE:-}
+      AUDIT_WEBHOOK_URL: ${AUDIT_WEBHOOK_URL:-}
 
       # Social Login
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}

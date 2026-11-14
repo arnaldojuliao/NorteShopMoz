@@ -12,8 +12,8 @@ import org.springframework.web.bind.annotation.RestController;
  * Métodos de pagamento disponíveis — GET /api/payments/methods (público).
  *
  * <p>O checkout consulta isto para desativar no UI os métodos que o servidor não
- * consegue cobrar: em produção sem gateway real, M-Pesa/e-Mola/cartão devolviam
- * 503 só no fim do checkout — o cliente escolhia, preenchia tudo e via o pedido
+ * consegue cobrar: em produção sem gateway real, todos os métodos devolviam 503
+ * só no fim do checkout — o cliente escolhia, preenchia tudo e via o pedido
  * falhar. Com este endpoint, o frontend esconde os métodos indisponíveis antes
  * de o cliente os escolher.</p>
  */

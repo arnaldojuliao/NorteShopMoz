@@ -29,7 +29,7 @@ function makeOrder(id: string, status: OrderStatus, daysAgo = 1): Order {
       city: "Maputo",
       province: "Maputo",
     },
-    paymentMethod: "Pagamento na entrega",
+    paymentMethod: "M-Pesa",
   };
 }
 

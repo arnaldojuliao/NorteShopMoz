@@ -31,10 +31,14 @@
 		<dependency-check.version>13.0.0</dependency-check.version>
 		<testcontainers.version>1.20.3</testcontainers.version>
 		<mockito.version>5.14.2</mockito.version>
-		<assertj.version>3.26.3</assertj.version>
-		<springdoc.version>2.5.0</springdoc.version>
+		<assertj.version>3.26.3</assertj.version>        <!-- 3.x é a linha compatível com Spring Boot 4 / Spring Framework 7.
+             A 2.5.0 compilava mas rebentava em runtime:
+             NoSuchMethodError: ControllerAdviceBean.<init>(Object) ao gerar
+             /v3/api-docs (o Swagger respondia 500, não a documentação). -->
+        <springdoc.version>3.2.0</springdoc.version>
 		<!-- Compatível com Spring Boot 4.x (matriz oficial do ShedLock 7.x). -->
 		<shedlock.version>7.7.0</shedlock.version>
+		<jacoco.version>0.8.13</jacoco.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -284,6 +288,30 @@
 								</path>
 							</annotationProcessorPaths>
 						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+			<!-- Cobertura de testes (relatório HTML/XML em target/site/jacoco). O CI
+			     publica o relatório como artefacto; não há gate mínimo de propósito —
+			     um número imposto à pressa faz baixar asserções em vez de código
+			     testado. Serve para ver a tendência e onde há buracos. -->
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<version>${jacoco.version}</version>
+				<executions>
+					<execution>
+						<id>prepare-agent</id>
+						<goals>
+							<goal>prepare-agent</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>report</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>report</goal>
+						</goals>
 					</execution>
 				</executions>
 			</plugin>

@@ -10,8 +10,9 @@ import java.math.BigDecimal;
  * mercado moçambicano:</p>
  *
  * <ul>
- *   <li><b>Cobrança síncrona</b> — a resposta confirma logo o pagamento e o
- *       pedido nasce em {@code Pagamento confirmado} (o simulado em dev/testes).</li>
+ *   <li><b>Cobrança síncrona</b> — a resposta confirma logo o pagamento. Nenhum
+ *       gateway a usa hoje: dinheiro só entra quando o provedor o confirma por
+ *       webhook assinado, nunca pela resposta de criação.</li>
  *   <li><b>Checkout hospedado</b> — a resposta cria um pedido de pagamento
  *       <em>pendente</em> e devolve um URL onde o cliente paga; a confirmação
  *       chega depois por webhook ({@link PaymentWebhookService}). É o caso da

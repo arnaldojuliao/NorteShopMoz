@@ -214,13 +214,12 @@ não consegue ler os cookies; o cliente HTTP envia-os automaticamente com
 **`POST /api/orders`** → 201 — **público (guest checkout)**: o checkout do frontend não exige login.
 Se vier `Authorization: Bearer`, o pedido fica associado ao utilizador.
 
-**Métodos de pagamento aceites**: pagamento na entrega, transferência bancária,
-M-Pesa, e-Mola e cartão Visa/Mastercard (rótulos ou aliases em inglês). Os três
-últimos são **pagos online** e passam pelo gateway:
+**Métodos de pagamento aceites**: M-Pesa, e-Mola, mKesh e cartão Visa/Mastercard
+(rótulos ou aliases em inglês). Todos são **pagos online** e passam pelo gateway:
 
 - `PAYMENTS_MODE=simulated` (omissão, dev/testes) — o servidor força uma
-  referência realista sem cobrar e o pedido entra em **"Pagamento confirmado"**
-  (ex.: `MP-4F3K9Q2X7Z` ou `CARD-••••1234`).
+  referência realista sem cobrar e o pedido entra em **"Aguarda pagamento"**
+  (ex.: `SIM-4F3K9Q2X7Z`), à espera do link que o admin cola no painel.
 - `PAYMENTS_MODE=live` — o adaptador da **PaySuite** cria o pagamento
   (`POST {base-url}/payments`) e devolve `checkout_url`: o checkout redireciona o
   cliente para a página do provedor e o pedido nasce em **"Aguarda pagamento"**
@@ -547,7 +546,7 @@ node --input-type=module -e "import { products } from './src/lib/data/products.t
 - **UserAccount** — `id` (UUID), `email` (único), `password` (BCrypt), `fullName`, `phone`, `role` (`CUSTOMER` | `ADMIN`)
 - **Order / OrderItem / OrderAddress** — itens com snapshot de preço/nome/imagem,
   endereço, `paymentMethod`, `status`, `date` (Instant), `paymentReference`
-  (referência da cobrança online — null em pagamento na entrega/transferência),
+  (referência da cobrança online — null se o gateway não a devolveu),
   `couponCode` (código aplicado — null sem cupão)
 - **Coupon** — `code` (único), `discountType` (`PERCENT`/`FIXED`),
   `discountValue`, `minimumSubtotal`, `expiresAt` (Instant), `active`,

@@ -303,8 +303,7 @@ public class PaySuitePaymentGateway implements PaymentGateway {
             log.error("PaySuite rejeitou as credenciais (HTTP 401) em {} — verifique PAYMENTS_API_KEY",
                     description);
             throw ApiException.serviceUnavailable(
-                    "Pagamentos online temporariamente indisponíveis. Escolha pagamento na entrega "
-                            + "ou transferência bancária.");
+                    "Pagamentos online temporariamente indisponíveis. Tente novamente mais tarde.");
         }
         log.warn("PaySuite recusou {} (HTTP {})", description, status);
         throw ApiException.badRequest(

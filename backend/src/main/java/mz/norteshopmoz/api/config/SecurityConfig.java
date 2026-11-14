@@ -57,6 +57,13 @@ public class SecurityConfig {
                                 "/error").permitAll()
                         // Newsletter — subscrição pública; lista de subscritores apenas admin.
                         .requestMatchers(HttpMethod.POST, "/api/newsletter/subscribe").permitAll()
+                        // Documentação da API (springdoc/Swagger). Desligada em produção
+                        // (ver `springdoc.*` no perfil `prod` do application.yaml); se
+                        // estiver ligada, é só para admin — antes caía em
+                        // `.anyRequest().authenticated()` e qualquer comprador com
+                        // sessão listava toda a superfície da API, incluindo /api/admin.
+                        .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**")
+                        .hasRole("ADMIN")
                         // ── Área de administração (rotas /api/admin) ─────────────────────
                         // Cupões — gestão apenas para admin (tem de vir antes do denyAll).
                         .requestMatchers("/api/admin/coupons", "/api/admin/coupons/**").hasRole("ADMIN")
@@ -76,8 +83,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/**").denyAll()
                         // Lista de todos os pedidos, estatísticas, export CSV e
                         // transição de estado — apenas admin.
-                        .requestMatchers("/api/orders/admin/all", "/api/orders/admin/stats",
-                                "/api/orders/admin/export").hasRole("ADMIN")
+                        .requestMatchers("/api/orders/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/orders/*/status").hasRole("ADMIN")
                         // Subscritores da newsletter — apenas admin.
                         .requestMatchers("/api/newsletter/subscribers").hasRole("ADMIN")
@@ -116,10 +122,6 @@ public class SecurityConfig {
                         // validado em PaymentWebhookService. Sem segredo configurado
                         // responde 503, nunca aceita uma notificação não assinada.
                         .requestMatchers(HttpMethod.POST, "/api/payments/webhook").permitAll()
-                        // Resultado do pagamento na página SIMULADA (só existe fora de
-                        // prod — o bean é @Profile("!prod")). Público como o webhook:
-                        // é o "provedor de demonstração" a reportar o resultado.
-                        .requestMatchers(HttpMethod.POST, "/api/payments/simulated/**").permitAll()
                         // Validação de cupão no checkout — pública (guest checkout).
                         .requestMatchers(HttpMethod.POST, "/api/orders/validate-coupon").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/orders").permitAll()

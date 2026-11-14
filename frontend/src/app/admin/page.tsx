@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { SalesStatsPanel } from "@/components/admin/SalesStatsPanel";
+import { AdminOrderCard } from "@/components/admin/AdminOrderCard";
 import { AdminUsersPanel } from "@/components/admin/AdminUsersPanel";
 import { AdminCategoriesPanel } from "@/components/admin/AdminCategoriesPanel";
 import { AdminIncidentsPanel } from "@/components/admin/AdminIncidentsPanel";
@@ -74,28 +75,10 @@ import {
   type CreateProductPayload,
 } from "@/lib/products";
 import { createCoupon, deleteCoupon, listCoupons } from "@/lib/coupons";
-import { fetchSalesStatsPeriod, adminOrdersExportUrl } from "@/lib/admin";
+import { fetchSalesStatsPeriod, adminOrdersExportUrl, setOrderPaymentLink } from "@/lib/admin";
 import type { Coupon, Order, OrderStatus, Product } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { STATUS_TONE } from "@/lib/orderStatus";
-
-/**
- * Timeline dos estados — ordem usada para avançar pedidos. "Cancelado" fica
- * FORA desta lista: é um estado terminal, não um passo da sequência (senão um
- * pedido entregue poderia ser "avançado" para cancelado).
- */
-const ORDER_STATUSES: OrderStatus[] = [
-  // Primeiro passo dos pagamentos com checkout hospedado (PaySuite): o pedido
-  // existe mas ainda não foi pago. Fica na timeline para o admin o poder
-  // confirmar à mão quando o webhook do provedor não chega.
-  "Aguarda pagamento",
-  "Pedido recebido",
-  "Pagamento confirmado",
-  "Em preparação",
-  "Enviado",
-  "Em trânsito",
-  "Entregue",
-];
+import { ORDER_STATUSES } from "@/lib/orderStatus";
 
 /** Filtros do painel — timeline + o estado terminal de cancelamento. */
 const ORDER_FILTERS: OrderStatus[] = [...ORDER_STATUSES, "Cancelado"];
@@ -109,22 +92,8 @@ const EMPTY_ORDERS_PAGE: AdminOrdersPage = {
   totalPages: 0,
   hasNext: false,
   statusCounts: {},
+  paymentLinkPending: 0,
 };
-
-
-function StatusPill({ status }: { status: OrderStatus }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 rounded-full px-2.5 py-1 text-xs font-bold",
-        // Fonte única dos tons de estado (evita a cópia que vivia aqui).
-        STATUS_TONE[status],
-      )}
-    >
-      {status}
-    </span>
-  );
-}
 
 function OrderSkeleton() {
   return (
@@ -200,9 +169,7 @@ export default function AdminPage() {
   const [ordersPage, setOrdersPage] = useState(0);
   const [advancingId, setAdvancingId] = useState<string | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
-  // Rascunho do código de tracking por pedido (input do cartão) e id em gravação.
-  const [trackingDraft, setTrackingDraft] = useState<Record<string, string>>({});
-  const [savingTrackingId, setSavingTrackingId] = useState<string | null>(null);
+  // Os rascunhos do tracking e do link de pagamento vivem no AdminOrderCard.
   // Pasta semanal aberta na vista "Todos" (null = mostra as pastas).
   const [openWeek, setOpenWeek] = useState<string | null>(null);
   // Chave da pasta com avanço em massa em curso (botão desabilitado).
@@ -796,6 +763,20 @@ export default function AdminPage() {
     }
   };
 
+  /**
+   * Baixa o badge de «pedidos sem link» quando um deixa de contar: recebeu
+   * link, foi cancelado ou avançou de estado. Sem isto o número só acertava
+   * no próximo carregamento da página.
+   */
+  const dropMissingLink = (order: Order) => {
+    if (order.status !== "Aguarda pagamento" || order.checkoutUrl) return;
+    setOrdersResult((prev) =>
+      prev
+        ? { ...prev, paymentLinkPending: Math.max(0, (prev.paymentLinkPending ?? 0) - 1) }
+        : prev,
+    );
+  };
+
   const advance = async (order: Order) => {
     const index = ORDER_STATUSES.indexOf(order.status);
     if (index < 0 || index >= ORDER_STATUSES.length - 1) return;
@@ -810,6 +791,7 @@ export default function AdminPage() {
           .map((o) => (o.id === updated.id ? updated : o))
           .sort((a, b) => Date.parse(b.date) - Date.parse(a.date)),
       );
+      dropMissingLink(order);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         logout();
@@ -838,6 +820,7 @@ export default function AdminPage() {
     try {
       const updated = await cancelOrder(order.id);
       setOrders((prev) => (prev ?? []).map((o) => (o.id === updated.id ? updated : o)));
+      dropMissingLink(order);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         logout();
@@ -879,6 +862,7 @@ export default function AdminPage() {
         setOrders((prev) =>
           (prev ?? []).map((x) => (x.id === updated.id ? updated : x)),
         );
+        dropMissingLink(o);
       } catch {
         failures++;
       }
@@ -1072,156 +1056,38 @@ export default function AdminPage() {
     [weekGroups, openWeek],
   );
 
-  /** Cartão de pedido individual — usado na pasta aberta e nos filtros por estado. */
-  const renderOrderCard = (o: Order) => {
-    const index = ORDER_STATUSES.indexOf(o.status);
-    const canAdvance = index >= 0 && index < ORDER_STATUSES.length - 1;
-    return (
-      <div key={o.id} className="rounded-2xl border border-slate-100 bg-surface p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="font-display font-bold text-slate-900">{o.id}</p>
-              <StatusPill status={o.status} />
-              {o.items.length > 1 && (
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-500">
-                  {o.items.length} itens
-                </span>
-              )}
-            </div>
-            <p className="mt-1 text-sm text-slate-600">
-              {o.address.fullName} · {o.address.phone}
-            </p>
-            <p className="mt-0.5 line-clamp-1 text-xs text-slate-400">
-              {o.address.address}, {o.address.city} — {o.address.province} ·{" "}
-              {o.paymentMethod}
-            </p>
-          </div>
-          <div className="flex flex-col items-end gap-1">
-            <span className="font-display text-lg font-bold text-slate-900">
-              {format(o.total)}
-            </span>
-            <span className="text-xs text-slate-400">{formatDate(o.date)}</span>
-          </div>
-        </div>
-
-        <ul className="mt-3 space-y-1 border-t border-slate-100 pt-3 text-sm">
-          {o.items.slice(0, 3).map((i) => (
-            <li key={i.productId + (i.variant ?? "")} className="flex justify-between gap-3">
-              <Link
-                href={`/produto/${i.slug}`}
-                className="line-clamp-1 text-slate-600 hover:text-primary-700"
-              >
-                {i.qty}× {i.name}
-                {i.variant ? ` · ${i.variant}` : ""}
-              </Link>
-              <span className="shrink-0 font-semibold text-slate-700">
-                {format(i.price * i.qty)}
-              </span>
-            </li>
-          ))}
-          {o.items.length > 3 && (
-            <li className="text-xs font-medium text-slate-400">
-              + {o.items.length - 3} outro{o.items.length - 3 === 1 ? "" : "s"} artigo
-              {o.items.length - 3 === 1 ? "" : "s"}
-            </li>
-          )}
-        </ul>
-
-        {/* Código de tracking do envio — definido tipicamente ao marcar "Enviado".
-            Grava sem mudar o estado (PATCH com o estado atual). */}
-        {o.status !== "Cancelado" && (
-          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 text-sm">
-            <label className="text-xs font-semibold text-slate-500" htmlFor={`tracking-${o.id}`}>
-              Tracking:
-            </label>
-            <input
-              id={`tracking-${o.id}`}
-              value={trackingDraft[o.id] ?? o.trackingCode ?? ""}
-              onChange={(e) => setTrackingDraft((d) => ({ ...d, [o.id]: e.target.value }))}
-              placeholder={o.trackingCode || "nº da transportadora"}
-              maxLength={80}
-              className="w-48 rounded-lg border border-slate-200 bg-surface px-2.5 py-1.5 text-sm text-slate-900 shadow-sm focus:border-primary-400 focus:outline-none"
-            />
-            {(trackingDraft[o.id] ?? "") !== (o.trackingCode ?? "") && (
-              <Button
-                variant="outline"
-                size="sm"
-                loading={savingTrackingId === o.id}
-                onClick={() => {
-                  const code = (trackingDraft[o.id] ?? "").trim();
-                  if (!code) return;
-                  setSavingTrackingId(o.id);
-                  updateOrderTracking(o.id, o.status, code)
-                    .then((updated) => {
-                      setOrders((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
-                      setTrackingDraft((d) => {
-                        const next = { ...d };
-                        delete next[o.id];
-                        return next;
-                      });
-                    })
-                    .catch((err) => {
-                      const msg = err instanceof Error ? err.message : "Falha ao gravar o tracking";
-                      window.alert(`Não foi possível gravar o tracking do pedido ${o.id}:\n${msg}`);
-                    })
-                    .finally(() => setSavingTrackingId(null));
-                }}
-              >
-                Gravar tracking
-              </Button>
-            )}
-          </div>
-        )}
-
-        {canAdvance ? (
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
-            <span className="text-xs text-slate-400">
-              Próximo estado: <strong className="text-slate-600">{ORDER_STATUSES[index + 1]}</strong>
-            </span>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => printOrderReceipt(o)}>
-                <Printer className="size-3.5" /> Imprimir recibo
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                loading={cancellingId === o.id}
-                onClick={() => void cancel(o)}
-              >
-                <XCircle className="size-3.5" /> Cancelar
-              </Button>
-              <Button
-                size="sm"
-                loading={advancingId === o.id}
-                onClick={() => void advance(o)}
-              >
-                Avançar estado <ArrowRight className="size-3.5" />
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3">
-            {o.status === "Cancelado" ? (
-              <span className="flex items-center gap-1.5 text-xs font-semibold text-red-600">
-                <XCircle className="size-3.5" /> Pedido cancelado
-              </span>
-            ) : (
-              <>
-                <span className="mr-auto flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
-                  <Package className="size-3.5" /> Pedido concluído
-                </span>
-                {/* Também num pedido entregue o recibo pode ser reimpresso. */}
-                <Button variant="outline" size="sm" onClick={() => printOrderReceipt(o)}>
-                  <Printer className="size-3.5" /> Imprimir recibo
-                </Button>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-    );
+  /**
+   * Grava o tracking de um pedido (ou limpa, com "-") e reflete a resposta do
+   * servidor na lista — sem reload. Lança para o cartão mostrar o erro.
+   */
+  const saveTracking = async (order: Order, code: string) => {
+    const updated = await updateOrderTracking(order.id, order.status, code);
+    setOrders((prev) => (prev ?? []).map((x) => (x.id === updated.id ? updated : x)));
   };
+
+  /** Grava o link de pagamento colado pelo admin e atualiza o badge de pendentes. */
+  const savePaymentLink = async (order: Order, url: string) => {
+    const updated = await setOrderPaymentLink(order.id, url);
+    setOrders((prev) => (prev ?? []).map((x) => (x.id === updated.id ? updated : x)));
+    // O badge conta pedidos SEM link: resolver um (e não só reescrever um link
+    // existente) baixa o número já aqui.
+    dropMissingLink(order);
+  };
+
+  /** Cartão de pedido individual — usado na pasta aberta e nos filtros por estado. */
+  const renderOrderCard = (o: Order) => (
+    <AdminOrderCard
+      key={o.id}
+      order={o}
+      advancing={advancingId === o.id}
+      cancelling={cancellingId === o.id}
+      onAdvance={advance}
+      onCancel={cancel}
+      onPrintReceipt={printOrderReceipt}
+      onSaveTracking={saveTracking}
+      onSavePaymentLink={savePaymentLink}
+    />
+  );
 
   // Sem sessão ou sem privilégios de administrador → nunca mostra um login próprio;
   // usa o login principal da loja (modal). Administradores veem apenas o painel.
@@ -1340,6 +1206,24 @@ export default function AdminPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Badge do cabeçalho: visível em QUALQUER secção (produtos, stock,
+              estatísticas…) — um pedido sem link está a segurar stock e um
+              cliente à espera. Clicar abre a lista filtrada. */}
+          {(ordersResult?.paymentLinkPending ?? 0) > 0 && (
+            <button
+              onClick={() => {
+                setSection("pedidos");
+                setStatusFilter("Aguarda pagamento");
+                goToPage(0);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              className="flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-900 transition hover:bg-amber-100"
+              title="Pedidos à espera de link de pagamento — abrir a lista"
+            >
+              <ClipboardList className="size-3.5" aria-hidden />
+              {ordersResult?.paymentLinkPending} sem link de pagamento
+            </button>
+          )}
           {section === "pedidos" && (
             <Button variant="outline" size="sm" onClick={() => void reload()} disabled={refreshing}>
               <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} /> Atualizar
@@ -1397,6 +1281,17 @@ export default function AdminPage() {
             )}
           >
             <tab.icon className="size-4" /> {tab.label}
+            {/* Badge: pedidos em «Aguarda pagamento» sem link — o que o admin
+                tem de resolver à mão. Visível em qualquer separador, para não
+                passar despercebido enquanto o stock está reservado. */}
+            {tab.id === "pedidos" && (ordersResult?.paymentLinkPending ?? 0) > 0 && (
+              <span
+                className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-extrabold text-white"
+                title={`${ordersResult?.paymentLinkPending} pedido(s) à espera de link de pagamento`}
+              >
+                {ordersResult?.paymentLinkPending}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -2116,6 +2011,22 @@ export default function AdminPage() {
       {/* ─── Secção: Pedidos ─────────────────────────────────── */}
       {section === "pedidos" && (
         <>
+      {/* Aviso: pedidos sem link de pagamento (badge do separador "Pedidos"). */}
+      {(ordersResult?.paymentLinkPending ?? 0) > 0 && (
+        <div className="mt-5 flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <ClipboardList className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <p>
+            <strong>
+              {ordersResult?.paymentLinkPending} pedido
+              {(ordersResult?.paymentLinkPending ?? 0) === 1 ? "" : "s"}
+            </strong>{" "}
+            {(ordersResult?.paymentLinkPending ?? 0) === 1 ? "está" : "estão"} à espera de link
+            de pagamento — o cliente já foi avisado e só paga quando o link for colado no cartão
+            do pedido (filtro «Aguarda pagamento»).
+          </p>
+        </div>
+      )}
+
       {/* Filtros por estado */}
       <div className="no-scrollbar mt-5 flex gap-1.5 overflow-x-auto pb-1">
         {ORDER_FILTERS.map((s) => (

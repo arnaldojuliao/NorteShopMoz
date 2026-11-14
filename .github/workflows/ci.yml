@@ -170,6 +170,19 @@ jobs:
       - name: Run tests
         run: mvn -B test
 
+      # O jacoco.exec é escrito pelo prepare-agent durante o `mvn test`; o
+      # relatório é gerado aqui e publicado como artefacto. Sem isto, a
+      # cobertura era medida mas ninguém a via.
+      - name: Gerar relatório de cobertura (JaCoCo)
+        run: mvn -B jacoco:report
+
+      - name: Publicar cobertura do backend
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/target/site/jacoco
+          retention-days: 7
+
       - name: Build JAR (skip tests, already ran)
         run: mvn -B package -DskipTests
 
@@ -324,6 +337,19 @@ jobs:
 
       - name: Run tests
         run: npm run test
+
+      # Cobertura do frontend (v8). É um relatório, não um portão: o número
+      # ainda é baixo porque a maior parte do código são páginas, e impor um
+      # mínimo agora só levaria a testes de fachada.
+      - name: Cobertura dos testes (frontend)
+        run: npm run test:coverage
+
+      - name: Publicar cobertura do frontend
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage
+          retention-days: 7
 
       - name: Build application
         env:

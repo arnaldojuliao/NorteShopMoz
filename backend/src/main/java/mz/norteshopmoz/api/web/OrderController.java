@@ -1,6 +1,8 @@
 package mz.norteshopmoz.api.web;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -11,6 +13,7 @@ import mz.norteshopmoz.api.domain.OrderStatus;
 import mz.norteshopmoz.api.exception.ApiException;
 import mz.norteshopmoz.api.security.UserPrincipal;
 import mz.norteshopmoz.api.service.CouponService;
+import mz.norteshopmoz.api.service.OrderQueryService;
 import mz.norteshopmoz.api.service.OrderService;
 import mz.norteshopmoz.api.web.dto.ApiResponse;
 import mz.norteshopmoz.api.web.dto.CouponValidateRequest;
@@ -34,10 +37,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class OrderController {
 
     private final OrderService orderService;
+    private final OrderQueryService orderQueryService;
     private final CouponService couponService;
 
-    public OrderController(OrderService orderService, CouponService couponService) {
+    public OrderController(OrderService orderService, OrderQueryService orderQueryService,
+            CouponService couponService) {
         this.orderService = orderService;
+        this.orderQueryService = orderQueryService;
         this.couponService = couponService;
     }
 
@@ -68,7 +74,7 @@ public class OrderController {
 
     @GetMapping
     public ResponseEntity<?> listMyOrders(@AuthenticationPrincipal UserPrincipal principal) {
-        List<Order> orders = orderService.getMyOrders(principal.id());
+        List<Order> orders = orderQueryService.getMyOrders(principal.id());
         return ResponseEntity.ok(ApiResponse.data(orders));
     }
 
@@ -92,7 +98,7 @@ public class OrderController {
         if (!"ADMIN".equalsIgnoreCase(principal.role())) {
             throw ApiException.forbidden("Apenas administradores podem listar todos os pedidos");
         }
-        return ResponseEntity.ok(ApiResponse.data(orderService.listAllOrders(status, page, size)));
+        return ResponseEntity.ok(ApiResponse.data(orderQueryService.listAllOrders(status, page, size)));
     }
 
     /**
@@ -111,10 +117,10 @@ public class OrderController {
             @AuthenticationPrincipal UserPrincipal principal) {
         requireAdmin(principal, "Apenas administradores podem ver as estatísticas");
         if (from == null && to == null) {
-            return ResponseEntity.ok(ApiResponse.data(orderService.salesStats()));
+            return ResponseEntity.ok(ApiResponse.data(orderQueryService.salesStats()));
         }
         Instant[] window = parsePeriod(from, to);
-        return ResponseEntity.ok(ApiResponse.data(orderService.salesStats(window[0], window[1])));
+        return ResponseEntity.ok(ApiResponse.data(orderQueryService.salesStats(window[0], window[1])));
     }
 
     /**
@@ -135,7 +141,7 @@ public class OrderController {
             orderStatus = OrderStatus.fromLabel(status)
                     .orElseThrow(() -> ApiException.badRequest("Estado inválido: " + status));
         }
-        List<Object[]> rows = orderService.exportRows(window[0], window[1], orderStatus);
+        List<Object[]> rows = orderQueryService.exportRows(window[0], window[1], orderStatus);
 
         StringBuilder csv = new StringBuilder();
         csv.append('\ufeff'); // BOM UTF-8
@@ -239,6 +245,27 @@ public class OrderController {
         // pedido). Pedidos de convidado exigem também a prova de contacto
         // (`email`, que o link do email de acompanhamento transporta) — ver
         // OrderService.getOrder.
-        return ResponseEntity.ok(ApiResponse.data(orderService.getOrder(id, principal, email)));
+        return ResponseEntity.ok(ApiResponse.data(orderQueryService.getOrder(id, principal, email)));
     }
+
+    /**
+     * Admin define o link de pagamento de um pedido em «Aguarda pagamento» —
+     * POST /api/orders/admin/{id}/payment-link. Usado quando o gateway não
+     * devolveu link no checkout: o admin cola-o aqui e o cliente é avisado.
+     * É o ÚNICO caminho para um link: o cliente nunca gere o seu próprio.
+     */
+    @PostMapping("/admin/{id}/payment-link")
+    public ResponseEntity<?> setPaymentLink(
+            @PathVariable String id,
+            @Valid @RequestBody PaymentLinkRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        requireAdmin(principal, "Apenas administradores podem definir o link de pagamento");
+        return ResponseEntity.ok(ApiResponse.data(
+                orderService.setPaymentLinkByAdmin(id, request.url())));
+    }
+
+    /** Corpo do POST /api/orders/admin/{id}/payment-link. */
+    public record PaymentLinkRequest(
+            @NotBlank(message = "Link de pagamento é obrigatório")
+            @Size(max = 500, message = "Link demasiado longo") String url) {}
 }

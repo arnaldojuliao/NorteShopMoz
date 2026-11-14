@@ -329,6 +329,13 @@ app:
     # curso). 0 = desligado (mantém todo o histórico, para obrigações de
     # conservação/contabilidade). Aumente o valor se precisar de mais histórico.
     retention-days: ${ORDERS_RETENTION_DAYS:730}
+    # Expiração de pagamentos abandonados (minutos). Com o checkout hospedado o
+    # stock é reservado na criação do pedido e o pagamento acontece FORA da loja:
+    # um cliente que desista deixa o stock bloqueado. Pedidos em "Aguarda
+    # pagamento" mais antigos que este prazo são cancelados automaticamente
+    # (com reposição de stock e email) — 24 h por omissão. 0 = desligado
+    # (não recomendado: o stock fica reservado para sempre).
+    payment-expiry-minutes: ${PAYMENT_EXPIRY_MINUTES:1440}
   # Diretório onde ficam as imagens enviadas pelos administradores (fallback local;
   # com Cloudinary configurada, as imagens vão para a nuvem e este diretório é ignorado).
   upload-dir: ${UPLOAD_DIR:./uploads}
@@ -384,7 +391,43 @@ app:
     # email transacional continua a ser o canal garantido).
     api-url: ${WHATSAPP_API_URL:}
     api-token: ${WHATSAPP_API_TOKEN:}
+    # Número do admin (só dígitos, com indicativo: 25884...). Recebe os avisos
+    # operacionais da loja — hoje o pedido em «Aguarda pagamento» que ficou sem
+    # link do gateway. Vazio = o admin só é avisado por email (ADMIN_EMAIL).
+    admin-phone: ${WHATSAPP_ADMIN_PHONE:}
 
 logging:
   level:
     mz.norteshopmoz: INFO
+  pattern:
+    # Identificador de correlação do pedido (RequestIdFilter) em cada linha.
+    # Sem isto, seguir um pedido do nginx ao email/WhatsApp é procurar por hora
+    # e palpite. Também vai no header X-Request-Id e no corpo dos erros.
+    level: "%5p [%X{requestId:-}]"
+
+# Documentação interativa da API (springdoc/Swagger). Em dev fica ligada em
+# /swagger-ui.html; em produção é desligada pelo documento `prod` no fim deste
+# ficheiro. Mesmo ligada, o SecurityConfig exige role ADMIN (antes qualquer
+# cliente autenticado conseguia listar todas as rotas, incluindo /api/admin).
+springdoc:
+  api-docs:
+    enabled: ${SPRINGDOC_ENABLED:true}
+  swagger-ui:
+    enabled: ${SPRINGDOC_ENABLED:true}
+
+---
+# ── Perfil de produção ────────────────────────────────────────────────────────
+# Só se aplica com SPRING_PROFILES_ACTIVE=prod (docker-compose.prod.yml).
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+# A documentação da API não é publicada em produção: expõe toda a superfície
+# interna sem que ninguém a use. `SPRINGDOC_ENABLED=true` volta a ligá-la
+# (para depuração pontual, e continua restrita a ADMIN).
+springdoc:
+  api-docs:
+    enabled: ${SPRINGDOC_ENABLED:false}
+  swagger-ui:
+    enabled: ${SPRINGDOC_ENABLED:false}

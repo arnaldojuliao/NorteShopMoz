@@ -69,7 +69,7 @@ class OrderServicePaymentFlowTest {
             stockService, whatsApp, immediateTransactions());
 
     private static final PaymentService.PaymentMethodInfo MPESA =
-            new PaymentService.PaymentMethodInfo("mpesa", "M-Pesa", List.of("MPESA"), true, true, false);
+            new PaymentService.PaymentMethodInfo("mpesa", "M-Pesa", List.of("MPESA"), true, false);
 
     /**
      * Gestor de transações sem base de dados: o {@code TransactionTemplate}
@@ -185,8 +185,8 @@ class OrderServicePaymentFlowTest {
     }
 
     @Test
-    void metodoOfflineNaoEstornaNada() {
-        // Pagamento na entrega: authorize devolve null → nada a compensar.
+    void semReferenciaDeCobrancaNaoEstornaNada() {
+        // Defensivo: sem referência devolvida pelo gateway não há nada a estornar.
         when(payments.authorize(any(), any(), any(), any())).thenReturn(null);
         when(orders.save(any())).thenThrow(new IllegalStateException("falha ao gravar"));
 

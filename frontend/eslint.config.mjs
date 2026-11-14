@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Relatório de cobertura (npm run test:coverage): código gerado, não é
+    // código do projeto — sem isto o lint avisava sobre o HTML do relatório.
+    "coverage/**",
   ]),
 ]);
 

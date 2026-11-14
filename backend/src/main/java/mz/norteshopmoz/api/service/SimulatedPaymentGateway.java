@@ -12,22 +12,21 @@ import org.springframework.stereotype.Component;
 /**
  * Gateway de pagamento SIMULADO — usado por omissão (dev/demo).
  *
- * <p>Imita o fluxo de <strong>checkout hospedado</strong> da PaySuite para o
- * ambiente de demonstração ser idêntico ao de produção: o cliente escolhe o
- * método no checkout, clica em «Comprar» e recebe um <strong>link de
- * pagamento</strong> — a página {@code /pagamento-simulado} da própria loja,
- * que simula o provedor (confirmar/falhar). O pedido nasce em {@code Aguarda
- * pagamento} e só avança quando a página demo confirma (via
- * {@code PaymentSimulatedController}, disponível só fora de {@code prod}).
- * Antes a cobrança era síncrona ("confirma logo"): o dev testava um fluxo que
- * a produção nunca teria.</p>
+ * <p>Cria a <strong>referência de cobrança</strong> e deixa o pedido em
+ * {@code Aguarda pagamento} — sem página de pagamento própria.
+ *
+ * <p>Existiu uma página {@code /pagamento-simulado} que imitava o provedor e
+ * confirmava o pedido sem dinheiro nenhum; foi removida. O link que o cliente
+ * abre é sempre o do provedor (PaySuite) ou o que o admin cola no pedido — em
+ * dev, o pedido fica a aguardar esse link, exatamente como em produção quando
+ * o gateway não devolve um. Quem confirma um pagamento é o webhook assinado,
+ * nunca a loja.</p>
  *
  * <p><strong>Nunca é registado no perfil {@code prod}</strong>: um deploy com
  * {@code PAYMENTS_MODE=simulated} (o valor por omissão) não pode confirmar
  * pagamentos online sem cobrar nada — prejuízo direto. Em produção, os métodos
  * pagos online respondem 503 ("gateway não configurado") até existir uma
- * integração real; os métodos offline (entrega/transferência) continuam a
- * funcionar.</p>
+ * integração real.</p>
  */
 @Component
 @Profile("!prod")
@@ -41,20 +40,16 @@ public class SimulatedPaymentGateway implements PaymentGateway {
     /** Alfabeto do id de pagamento (sem caracteres ambíguos). */
     private static final char[] CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".toCharArray();
 
-    /** Base da loja — é onde vive a página de pagamento simulada. */
-    private final String storeBaseUrl;
-
     public SimulatedPaymentGateway(AppProperties props) {
-        String base = props == null || props.mail() == null || props.mail().baseUrl() == null
-                ? "" : props.mail().baseUrl().replaceAll("/+$", "");
-        this.storeBaseUrl = base;
+        // Sem estado: já não existe página de pagamento própria (o link vem do
+        // provedor, ou é o admin que o cola no pedido). O parâmetro mantém-se
+        // para o bean continuar igual ao dos gateways reais.
     }
 
     /**
-     * Cria um pagamento <strong>pendente</strong> com um link para a página
-     * simulada — mesmo contrato do checkout hospedado real (referência do
-     * provedor + {@code checkout_url}). Sem telefone/cartão: quem os recolheria
-     * seria a página do provedor, e a simulada não precisa.
+     * Cria a cobrança <strong>pendente</strong> — referência do provedor, sem
+     * {@code checkout_url}. O link que o cliente abre vem da PaySuite ou do
+     * admin (campo do pedido no painel); este gateway não tem página própria.
      */
     @Override
     public PaymentCharge charge(String reference, String methodId, String phone, String cardLast4,
@@ -65,14 +60,14 @@ public class SimulatedPaymentGateway implements PaymentGateway {
             throw new IllegalArgumentException("Valor de cobrança inválido: " + amount);
         }
         String paymentId = "SIM-" + randomCode(10);
-        String checkoutUrl = storeBaseUrl + "/pagamento-simulado"
-                + "?ref=" + paymentId
-                + "&order=" + reference
-                + "&method=" + methodId
-                + "&amount=" + amount.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
-        log.info("[PAGAMENTO SIMULADO] Criado pagamento {} (método {}, {} {}) — link de pagamento: {}",
-                paymentId, methodId, amount, currency, checkoutUrl);
-        return PaymentCharge.redirect(paymentId, checkoutUrl);
+        // Sem página de pagamento própria: o link que o cliente abre é o do
+        // provedor (PaySuite) ou o que o admin cola no painel. Antes gerava-se
+        // aqui um link interno (/pagamento-simulado) que parecia um pagamento a
+        // sério e confirmava pedidos sem dinheiro nenhum — foi removido.
+        log.info("[PAGAMENTO SIMULADO] Cobrança {} criada (método {}, {} {}) SEM link de pagamento "
+                        + "— o pedido {} fica a aguardar o link enviado pelo admin.",
+                paymentId, methodId, amount, currency, reference);
+        return new PaymentCharge(paymentId, null);
     }
 
     /** No modo simulado não há dinheiro a devolver: apenas se regista o estorno. */

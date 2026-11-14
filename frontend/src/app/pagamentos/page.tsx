@@ -1,21 +1,20 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Banknote, CreditCard, Landmark, Smartphone } from "lucide-react";
+import { Banknote, CreditCard, Smartphone } from "lucide-react";
 import { InfoPage } from "@/components/layout/InfoPage";
 import { paymentMethods } from "@/lib/payments";
 
 export const metadata: Metadata = {
   title: "Métodos de pagamento",
   description:
-    "Todos os métodos de pagamento aceites na NorteShopMoz: pagamento na entrega, transferência bancária, M-Pesa, e-Mola e cartão Visa/Mastercard.",
+    "Métodos de pagamento aceites na NorteShopMoz: M-Pesa, e-Mola, mKesh e cartão Visa/Mastercard.",
 };
 
 /** Ícone de cada método (apresentação; os dados vêm de `@/lib/payments`). */
 const icons: Record<string, typeof Banknote> = {
-  cod: Banknote,
-  transfer: Landmark,
   mpesa: Smartphone,
   emola: Smartphone,
+  mkesh: Smartphone,
   card: CreditCard,
 };
 
@@ -33,8 +32,8 @@ export default function PagamentosPage() {
   return (
     <InfoPage
       title="Métodos de pagamento"
-      subtitle="Pague como preferir: na entrega, por transferência bancária ou carteira móvel."
-      updatedAt="Agosto de 2026"
+      subtitle="Pague com carteira móvel ou cartão."
+      updatedAt="Outubro de 2026"
       sections={[
         {
           title: "Métodos aceites",
@@ -78,22 +77,22 @@ export default function PagamentosPage() {
           title: "Como pagar no checkout",
           body: (
             <p>
-              Escolha o método no passo de pagamento e confirme o pedido. No
-              pagamento na entrega e na transferência bancária o pedido fica
-              reservado à espera da confirmação; no cartão e nas carteiras
-              móveis o pagamento é confirmado na hora, com a referência gerada
-              pelo gateway da loja.
+              No checkout, escolha o método e clique em Comprar. A loja abre
+              logo a página segura do provedor, onde conclui com o número da
+              carteira (M-Pesa, e-Mola ou mKesh) ou o cartão — e o pedido fica
+              pago em minutos.
             </p>
           ),
         },
         {
-          title: "Transferência bancária",
+          title: "Perdeu o link de pagamento?",
           body: (
             <p>
-              Recebe os dados da conta e a referência do pedido logo após
-              finalizar a compra (MBCI, Standard Bank, BCI, BIM, Absa, FNB ou
-              Letshego). Assim que o pagamento é confirmado, a encomenda entra
-              em preparação.
+              Sem problema: abra o pedido em{" "}
+              <Link href="/pedidos" className={linkClass}>Meus pedidos</Link> e use
+              o botão <strong>Pagar agora</strong> (ou “Gerar link de
+              pagamento”). Também pode falar com o suporte — a mensagem já vai
+              com o código, os artigos e o total.
             </p>
           ),
         },
@@ -101,10 +100,11 @@ export default function PagamentosPage() {
           title: "Segurança",
           body: (
             <p>
-              Os pagamentos com cartão e carteiras móveis são processados pelo
-              gateway de pagamentos da loja e a ligação ao site é sempre
-              cifrada (HTTPS). Não guardamos os dados do seu cartão nem os
-              códigos das carteiras móveis.
+              Todos os pagamentos são processados pelo gateway de pagamentos da
+              loja numa página segura, e a ligação ao site é sempre cifrada
+              (HTTPS). Não guardamos os dados do seu cartão nem os códigos das
+              carteiras móveis — quem os recolhe é a página de pagamento do
+              provedor.
             </p>
           ),
         },

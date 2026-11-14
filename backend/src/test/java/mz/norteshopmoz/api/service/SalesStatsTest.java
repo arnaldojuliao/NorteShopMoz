@@ -44,6 +44,10 @@ class SalesStatsTest {
     @Autowired
     OrderService orderService;
 
+    /** Leitura/estatísticas/export vivem no OrderQueryService (split do OrderService). */
+    @Autowired
+    OrderQueryService orderQueryService;
+
     @Autowired
     OrderRepository orderRepository;
 
@@ -73,7 +77,7 @@ class SalesStatsTest {
                         .city("Maputo")
                         .province("Maputo")
                         .build())
-                .paymentMethod("Pagamento na entrega")
+                .paymentMethod("M-Pesa")
                 .build();
     }
 
@@ -122,7 +126,7 @@ class SalesStatsTest {
         orderRepository.save(order(OrderStatus.CANCELADO, "NSM-S3" + suffix.substring(0, 4),
                 "300", "0", "0", "pZ-" + suffix, "300", 1));
 
-        Map<String, Object> stats = orderService.salesStats();
+        Map<String, Object> stats = orderQueryService.salesStats();
 
         assertThat((long) stats.get("totalOrders")).isEqualTo(baseTotal + 3);
         assertThat((long) stats.get("deliveredOrders")).isEqualTo(baseDelivered + 1);
@@ -167,13 +171,13 @@ class SalesStatsTest {
 
     @Test
     void avgOrderValueIgnoraPedidosSemReceitaConfirmada() {
-        // Um pedido "Pedido recebido" (offline, ainda por pagar) não é receita:
+        // Um pedido "Pedido recebido" (ainda por pagar) não é receita:
         // não pode diluir o ticket médio nem a receita confirmada.
         String suffix = Long.toString(System.nanoTime());
         orderRepository.save(order(OrderStatus.PEDIDO_RECEBIDO, "NSM-A1" + suffix.substring(0, 4),
                 "5000", "0", "0", "pA-" + suffix, "5000", 1));
 
-        Map<String, Object> stats = orderService.salesStats();
+        Map<String, Object> stats = orderQueryService.salesStats();
 
         long paid = orderRepository.countByStatusIn(REVENUE);
         BigDecimal revenue = orderRepository.sumTotalByStatusIn(REVENUE);

@@ -45,19 +45,32 @@ class PaymentServiceTest {
         assertThat(service.resolve("M-Pesa")).map(PaymentService.PaymentMethodInfo::id).contains("mpesa");
         assertThat(service.resolve("MPESA")).map(PaymentService.PaymentMethodInfo::id).contains("mpesa");
         assertThat(service.resolve("emola")).map(PaymentService.PaymentMethodInfo::id).contains("emola");
-        assertThat(service.resolve("Cash on delivery")).map(PaymentService.PaymentMethodInfo::id).contains("cod");
         assertThat(service.resolve("metodo-inexistente")).isEmpty();
         assertThat(service.resolve(null)).isEmpty();
     }
 
     @Test
-    void authorize_offlineMethod_doesNotTouchGateway() {
+    void resolve_rejeitaMetodosOfflineRemovidos() {
+        assertThat(service.resolve("Pagamento na entrega")).isEmpty();
+        assertThat(service.resolve("Transferência bancária")).isEmpty();
+        assertThat(service.resolve("Cash on delivery")).isEmpty();
+        assertThat(service.resolve("Bank transfer")).isEmpty();
+        assertThat(service.resolve("cod")).isEmpty();
+        assertThat(service.resolve("transfer")).isEmpty();
+    }
+
+    @Test
+    void currentlyAvailableLabels_semGateway_naoOfereceNenhumMetodo() {
+        assertThat(service.currentlyAvailableLabels()).isEmpty();
+    }
+
+    @Test
+    void currentlyAvailableLabels_comGateway_ofereceTodosOsMetodosOnline() {
         PaymentGateway gateway = mock(PaymentGateway.class);
         PaymentService withGateway = new PaymentService(provider(gateway), incidentService, 8, 10);
-        PaymentService.PaymentMethodInfo cod = service.resolve("cod").orElseThrow();
 
-        assertThat(withGateway.authorize(cod, "NSM-1", null, BigDecimal.TEN)).isNull();
-        verify(gateway, never()).charge(any(), any(), any(), any(), any(), any(), any());
+        assertThat(withGateway.currentlyAvailableLabels())
+                .containsExactly("M-Pesa", "e-Mola", "mKesh", "Cartão Visa / Mastercard");
     }
 
     @Test

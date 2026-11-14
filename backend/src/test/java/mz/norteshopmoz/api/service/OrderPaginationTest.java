@@ -40,6 +40,10 @@ class OrderPaginationTest {
     @Autowired
     OrderService orderService;
 
+    /** Leitura/estatísticas/export vivem no OrderQueryService (split do OrderService). */
+    @Autowired
+    OrderQueryService orderQueryService;
+
     @Autowired
     OrderRepository orderRepository;
 
@@ -68,7 +72,7 @@ class OrderPaginationTest {
                         .city("Maputo")
                         .province("Maputo")
                         .build())
-                .paymentMethod("Pagamento na entrega")
+                .paymentMethod("M-Pesa")
                 .build();
     }
 
@@ -82,7 +86,7 @@ class OrderPaginationTest {
         }
         long total = orderRepository.count();
 
-        OrderPage first = orderService.listAllOrders(null, 0, 2);
+        OrderPage first = orderQueryService.listAllOrders(null, 0, 2);
         assertThat(first.items()).hasSize(2);
         assertThat(first.page()).isZero();
         assertThat(first.size()).isEqualTo(2);
@@ -92,31 +96,31 @@ class OrderPaginationTest {
 
         // Página seguinte sem repetir pedidos (o desempate por id evita que dois
         // pedidos com a mesma data troquem de posição entre páginas).
-        OrderPage second = orderService.listAllOrders(null, 1, 2);
+        OrderPage second = orderQueryService.listAllOrders(null, 1, 2);
         assertThat(second.page()).isEqualTo(1);
         assertThat(second.items()).hasSize(2);
         assertThat(second.items()).extracting(Order::getId)
                 .doesNotContainAnyElementsOf(first.items().stream().map(Order::getId).toList());
 
         // Última página sem `hasNext`.
-        OrderPage last = orderService.listAllOrders(null, first.totalPages() - 1, 2);
+        OrderPage last = orderQueryService.listAllOrders(null, first.totalPages() - 1, 2);
         assertThat(last.hasNext()).isFalse();
 
         // Filtro por estado resolvido no SQL: só devolve o estado pedido e o
         // total corresponde a esse estado (não ao histórico todo).
-        OrderPage delivered = orderService.listAllOrders("Entregue", 0, 100);
+        OrderPage delivered = orderQueryService.listAllOrders("Entregue", 0, 100);
         assertThat(delivered.totalItems()).isEqualTo(orderRepository.countByStatus(OrderStatus.ENTREGUE));
         assertThat(delivered.totalItems()).isLessThanOrEqualTo(total);
         assertThat(delivered.items()).isNotEmpty()
                 .allSatisfy(o -> assertThat(o.getStatus()).isEqualTo(OrderStatus.ENTREGUE));
 
         // Estado inválido → 400 (falha cedo em vez de devolver lista vazia).
-        assertThatThrownBy(() -> orderService.listAllOrders("NaoExiste", 0, 2))
+        assertThatThrownBy(() -> orderQueryService.listAllOrders("NaoExiste", 0, 2))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("Estado inválido");
 
         // Teto de página: `?size=100000` não pode voltar a carregar tudo.
-        OrderPage huge = orderService.listAllOrders(null, 0, 100_000);
+        OrderPage huge = orderQueryService.listAllOrders(null, 0, 100_000);
         assertThat(huge.size()).isEqualTo(100);
         assertThat(huge.items()).hasSize((int) Math.min(100, total));
 
