@@ -25,8 +25,10 @@ try {
 }
 
 const nextConfig: NextConfig = {
-  // Enable standalone output for Docker deployment
-  output: 'standalone',
+  // Standalone é usado pelo Docker. Na Vercel é ignorado — e no Next 16.3
+  // combiná-lo com o adapter da Vercel rebenta o build com ENOENT em
+  // `.next/next-server.js.nft.json` (regressão corrigida só em 16.4).
+  output: process.env.VERCEL ? undefined : 'standalone',
   // Não anunciar o framework/framework version a quem faz pedidos.
   poweredByHeader: false,
   // /procurar foi unificado em /explore (mesmos parâmetros: q, deal, new,

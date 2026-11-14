@@ -1,5 +1,44 @@
+import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures/test-fixtures';
 import { placeOrder } from './fixtures/checkout-flow';
+
+/**
+ * Abre a primeira pasta semanal.
+ *
+ * O clique num filtro de estado dispara uma nova listagem e substitui os nós do
+ * DOM; o `toPass` re-tenta o clique se o botão for desanexado entre a
+ * verificação de visibilidade e o clique (foi a causa de um timeout de 90s).
+ */
+async function openFirstWeekFolder(page: Page): Promise<void> {
+  await expect(page.getByRole('button', { name: /Ver pedidos/i }).first()).toBeVisible({
+    timeout: 20000,
+  });
+  await expect(async () => {
+    await page.getByRole('button', { name: /Ver pedidos/i }).first().click({ timeout: 5000 });
+  }).toPass({ timeout: 30000 });
+}
+
+/**
+ * Filtra a lista de pedidos por estado e espera pela resposta do servidor.
+ *
+ * Sem esta espera, o teste podia clicar na pasta da lista anterior enquanto a
+ * listagem filtrada era carregada — a pasta era substituída a meio do clique.
+ */
+async function filterOrdersByStatus(page: Page, status: string): Promise<void> {
+  const chip = page.getByRole('button', { name: new RegExp(status, 'i') }).first();
+  await expect(chip).toBeVisible({ timeout: 15000 });
+
+  const filtered = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'GET' &&
+      response.url().includes('/api/orders/admin/all') &&
+      response.url().includes('status=') &&
+      response.ok(),
+    { timeout: 20000 },
+  );
+  await chip.click();
+  await filtered;
+}
 
 /**
  * Cancelamento de pedidos.
@@ -41,9 +80,7 @@ test.describe('Cancelamento de pedidos', () => {
 
     // Abre a pasta semanal mais recente ("Ver pedidos") — o botão Cancelar
     // aparece nos cartões de pedidos ainda em curso dentro da pasta.
-    const openFolder = page.locator('button:has-text("Ver pedidos")').first();
-    await expect(openFolder).toBeVisible({ timeout: 20000 });
-    await openFolder.click();
+    await openFirstWeekFolder(page);
 
     // Com pedidos em curso na pasta, o botão Cancelar fica visível.
     // (A pasta semanal só mostra Cancelar em estados não terminais.)
@@ -57,14 +94,11 @@ test.describe('Cancelamento de pedidos', () => {
     await page.goto('/admin');
     await expect(page.locator('h1.font-display').first()).toBeVisible({ timeout: 15000 });
 
-    // Filtra por um estado com pedidos ("Pagamento confirmado") e abre a pasta.
-    const chip = page.locator('button:has-text("Pagamento confirmado")').first();
-    await expect(chip).toBeVisible({ timeout: 15000 });
-    await chip.click();
+    // Filtra por um estado com pedidos — o checkout deixa-os em
+    // "Aguarda pagamento" enquanto o link não é enviado.
+    await filterOrdersByStatus(page, 'Aguarda pagamento');
 
-    const openFolder = page.locator('button:has-text("Ver pedidos")').first();
-    await expect(openFolder).toBeVisible({ timeout: 20000 });
-    await openFolder.click();
+    await openFirstWeekFolder(page);
 
     // Dentro da pasta, cartões de pedidos em curso têm o botão Cancelar.
     const cancelBtn = page.locator('button:has-text("Cancelar")').first();
@@ -79,13 +113,9 @@ test.describe('Cancelamento de pedidos', () => {
     await expect(page.locator('h1.font-display').first()).toBeVisible({ timeout: 15000 });
 
     // Filtra por um estado com pedidos e abre a pasta semanal.
-    const chip = page.locator('button:has-text("Pagamento confirmado")').first();
-    await expect(chip).toBeVisible({ timeout: 15000 });
-    await chip.click();
+    await filterOrdersByStatus(page, 'Aguarda pagamento');
 
-    const openFolder = page.locator('button:has-text("Ver pedidos")').first();
-    await expect(openFolder).toBeVisible({ timeout: 20000 });
-    await openFolder.click();
+    await openFirstWeekFolder(page);
 
     const cancelBtn = page.locator('button:has-text("Cancelar")').first();
     await expect(cancelBtn).toBeVisible({ timeout: 20000 });

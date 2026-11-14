@@ -379,7 +379,8 @@ else
 fi
 ORDER_REPO="backend/src/main/java/mz/norteshopmoz/api/repository/OrderRepository.java"
 ORDER_SVC="backend/src/main/java/mz/norteshopmoz/api/service/OrderService.java"
-if has "$ORDER_REPO" "group by" && has "$ORDER_SVC" "salesStats"; then
+ORDER_QUERY_SVC="backend/src/main/java/mz/norteshopmoz/api/service/OrderQueryService.java"
+if has "$ORDER_REPO" "group by" && has "$ORDER_QUERY_SVC" "salesStats"; then
     pass "estatísticas de vendas agregadas no SQL (sem varrer pedidos em memória)"
 else
     fail "estatísticas a somar pedidos em memória (O(n) de memória/latência)"
@@ -431,7 +432,7 @@ else
 fi
 # A listagem do painel carregava o histórico completo (com itens EAGER) e filtrava
 # em memória: memória e latência a crescer sem limite com o número de pedidos.
-if has "$ORDER_SVC" "PageRequest.of" && has "$ORDER_REPO" "Page<Order> findByStatus" \
+if has "$ORDER_QUERY_SVC" "PageRequest.of" && has "$ORDER_REPO" "Page<Order> findByStatus" \
         && lacks "$ORDER_REPO" "findAllByOrderByDateDesc"; then
     pass "listagem de pedidos paginada e filtrada no SQL (não carrega o histórico)"
 else
