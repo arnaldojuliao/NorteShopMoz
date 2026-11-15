@@ -34,11 +34,14 @@ public class CloudinaryService {
 
     private static final String API_BASE = "https://api.cloudinary.com/v1_1/";
     private static final String FOLDER = "norteshopmoz/products";
+    private static final String FOLDER_AVATARS = "norteshopmoz/avatars";
     /**
      * Transformações aplicadas às URLs: formato automático (WebP/AVIF), qualidade
      * otimizada e largura máxima de 1600px (o next/image redimensiona a partir daí).
      */
     private static final String TRANSFORMATIONS = "f_auto,q_auto,w_1600";
+    /** Avatares: pequenos por natureza — 400px chega para o header/nav. */
+    private static final String TRANSFORMATIONS_AVATARS = "f_auto,q_auto,w_400";
 
     private final HttpClient http;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -95,14 +98,34 @@ public class CloudinaryService {
      */
     public String upload(MultipartFile file) {
         try {
+            return uploadBytes(file.getBytes(), file.getContentType(), file.getOriginalFilename(),
+                    FOLDER, TRANSFORMATIONS);
+        } catch (IOException e) {
+            throw ApiException.badRequest("Não foi possível ler a imagem enviada");
+        }
+    }
+
+    /**
+     * Envia a foto de perfil (bytes de uma data URL) para a Cloudinary e devolve
+     * o link público. A base de dados guarda apenas este link — nunca o base64.
+     */
+    public String uploadAvatar(byte[] bytes, String contentType) {
+        return uploadBytes(bytes, contentType, "avatar" + extensionOf(contentType),
+                FOLDER_AVATARS, TRANSFORMATIONS_AVATARS);
+    }
+
+    /** Núcleo do upload: multipart assinado + parse da secure_url + transformações. */
+    private String uploadBytes(byte[] fileBytes, String contentType, String filename,
+            String folder, String transformations) {
+        try {
             String timestamp = String.valueOf(System.currentTimeMillis() / 1000);
             // Assinatura: parâmetros ordenados por nome (sem file/api_key/cloud_name/signature)
             // concatenados + api_secret, com hash SHA-1.
-            String params = "folder=" + FOLDER + "&timestamp=" + timestamp;
+            String params = "folder=" + folder + "&timestamp=" + timestamp;
             String signature = sha1(params + apiSecret);
 
             String boundary = "----NSM" + UUID.randomUUID();
-            byte[] body = multipartBody(boundary, file, timestamp, signature);
+            byte[] body = multipartBody(boundary, fileBytes, contentType, filename, folder, timestamp, signature);
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(API_BASE + cloudName + "/image/upload"))
@@ -120,7 +143,7 @@ public class CloudinaryService {
             if (url == null || url.isBlank()) {
                 throw ApiException.badRequest("A Cloudinary não devolveu uma URL válida");
             }
-            return withTransformations(url);
+            return withTransformations(url, transformations);
         } catch (IOException e) {
             throw ApiException.badRequest("Não foi possível enviar a imagem para a Cloudinary");
         } catch (InterruptedException e) {
@@ -130,34 +153,46 @@ public class CloudinaryService {
     }
 
     /** Insere as transformações na URL após o segmento /image/upload/. */
-    private static String withTransformations(String url) {
+    private static String withTransformations(String url, String transformations) {
         String marker = "/image/upload/";
         int idx = url.indexOf(marker);
         if (idx < 0) {
             return url;
         }
         int insertAt = idx + marker.length();
-        return url.substring(0, insertAt) + TRANSFORMATIONS + "/" + url.substring(insertAt);
+        return url.substring(0, insertAt) + transformations + "/" + url.substring(insertAt);
+    }
+
+    /** Extensão para o filename a partir do tipo MIME (Cloudinary detecta o formato real). */
+    private static String extensionOf(String contentType) {
+        if (contentType == null) return "";
+        return switch (contentType) {
+            case "image/webp" -> ".webp";
+            case "image/png" -> ".png";
+            case "image/jpeg" -> ".jpg";
+            case "image/gif" -> ".gif";
+            default -> "";
+        };
     }
 
     /** Corpo multipart/form-data: campos de texto + o ficheiro binário. */
-    private byte[] multipartBody(String boundary, MultipartFile file, String timestamp, String signature)
-            throws IOException {
+    private byte[] multipartBody(String boundary, byte[] fileBytes, String contentType, String filename,
+            String folder, String timestamp, String signature) throws IOException {
         StringBuilder sb = new StringBuilder();
         addField(sb, boundary, "api_key", apiKey);
         addField(sb, boundary, "timestamp", timestamp);
-        addField(sb, boundary, "folder", FOLDER);
+        addField(sb, boundary, "folder", folder);
         addField(sb, boundary, "signature", signature);
         sb.append("--").append(boundary).append("\r\n");
         sb.append("Content-Disposition: form-data; name=\"file\"; filename=\"")
-                .append(sanitizeFilename(file.getOriginalFilename())).append("\"\r\n");
+                .append(sanitizeFilename(filename)).append("\"\r\n");
         sb.append("Content-Type: ")
-                .append(file.getContentType() != null ? file.getContentType() : "application/octet-stream")
+                .append(contentType != null ? contentType : "application/octet-stream")
                 .append("\r\n\r\n");
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         out.write(sb.toString().getBytes(StandardCharsets.UTF_8));
-        out.write(file.getBytes());
+        out.write(fileBytes);
         out.write(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
         return out.toByteArray();
     }

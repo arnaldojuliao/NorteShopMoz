@@ -37,7 +37,7 @@ public class UserAccount {
     @Column(length = 30)
     private String phone;
 
-    /** Foto de perfil — data URL (ex.: data:image/webp;base64,…), opcional. */
+    /** Foto de perfil — link público (Cloudinary ou fornecedor social), opcional. */
     @Column(columnDefinition = "TEXT")
     private String avatar;
 

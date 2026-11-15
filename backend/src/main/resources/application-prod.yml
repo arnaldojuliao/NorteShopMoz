@@ -1,6 +1,6 @@
-# NorteShopMoz — configuração de produção para Render + Supabase + Upstash.
-# Ativado por SPRING_PROFILES_ACTIVE=prod (ver render.yaml).
-# Segredos vêm das Environment Variables do Render; NÃO colocar valores aqui.
+# NorteShopMoz — configuração de produção para Railway + Supabase + Upstash.
+# Ativado por SPRING_PROFILES_ACTIVE=prod (ver backend/railway.json).
+# Segredos vêm das Variables do serviço no Railway; NÃO colocar valores aqui.
 
 spring:
   config:
@@ -13,7 +13,7 @@ spring:
     # extrai user/password quando não há DB_USER/DB_PASSWORD separados.
     #
     # Use o Session Pooler (porta 5432) — não o Transaction Pooler (6543):
-    # o Flyway precisa de sessão/DDL e o Render é um backend persistente.
+    # o Flyway precisa de sessão/DDL e a API no Railway é um backend persistente.
     url: ${DB_URL:${DATABASE_URL}}
     username: ${DB_USER}
     password: ${DB_PASSWORD}
@@ -49,7 +49,8 @@ spring:
     baseline-version: 0
 
 server:
-  # O Render injeta PORT (10000 por omissão); SERVER_PORT mantém compatibilidade.
+  # O domínio gerado pelo Railway encaminha para a porta em PORT; SERVER_PORT
+  # mantém compatibilidade (Railway lê PORT quando definido nas Variables).
   port: ${SERVER_PORT:${PORT:8080}}
 
 app:
@@ -72,7 +73,7 @@ app:
       ssl: ${CACHE_REDIS_SSL:true}
 
   security:
-    # O pedido chega pelo proxy do Render; sem confiar nele todos os clientes
+    # O pedido chega pelo proxy da Vercel; sem confiar nele todos os clientes
     # partilham o mesmo IP e o rate limit atua sobre a loja inteira. O caminho
     # normal (loja na Vercel → middleware → X-Proxy-Token/X-Real-IP) não precisa
     # disto: deixe TRUSTED_PROXIES vazio.

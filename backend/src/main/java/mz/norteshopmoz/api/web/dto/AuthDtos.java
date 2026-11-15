@@ -37,7 +37,8 @@ public final class AuthDtos {
             @NotBlank(message = "Fornecedor é obrigatório") @Pattern(regexp = "^(google|facebook)$", message = "Fornecedor inválido") String provider,
             @NotBlank(message = "Token é obrigatório") String token) {}
 
-    /** Atualização da foto de perfil (data URL de imagem). `avatar` vazio/null remove. */
+    /** Atualização da foto de perfil (data URL de imagem). A API envia-a para a
+     * Cloudinary e guarda apenas o link. `avatar` vazio/null remove. */
     public record UpdateAvatarRequest(
             @Size(max = 2_000_000, message = "Imagem demasiado grande") String avatar) {}
 

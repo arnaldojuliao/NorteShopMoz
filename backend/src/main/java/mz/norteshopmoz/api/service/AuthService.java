@@ -72,13 +72,14 @@ public class AuthService {
     private final SessionIdleService sessionIdleService;
     private final AuditService auditService;
     private final EmailThrottleService emailThrottle;
+    private final CloudinaryService cloudinaryService;
 
     public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtService jwtService,
             RefreshTokenService refreshTokenService,
             EmailService emailService, SessionRevocationService sessionRevocationService,
             SocialAuthService socialAuthService, AppProperties props, JwtCookieService jwtCookieService,
             LoginAttemptService loginAttemptService, SessionIdleService sessionIdleService,
-            AuditService auditService, EmailThrottleService emailThrottle) {
+            AuditService auditService, EmailThrottleService emailThrottle, CloudinaryService cloudinaryService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
@@ -92,6 +93,7 @@ public class AuthService {
         this.sessionIdleService = sessionIdleService;
         this.auditService = auditService;
         this.emailThrottle = emailThrottle;
+        this.cloudinaryService = cloudinaryService;
     }
 
     @Transactional
@@ -408,14 +410,16 @@ public class AuthService {
     }
 
     /**
-     * Atualiza a foto de perfil (data URL de imagem). `avatar` vazio/null remove a foto.
-     * Devolve o perfil atualizado — incluído em /me, login e registo seguintes.
+     * Atualiza a foto de perfil. O frontend envia a imagem como data URL; a API
+     * envia-a para a Cloudinary e guarda APENAS o link público na base de dados
+     * (nunca o base64). `avatar` vazio/null remove a foto. Devolve o perfil
+     * atualizado — incluído em /me, login e registo seguintes.
      */
     @Transactional
     public UserDto updateAvatar(String userId, String avatar) {
         UserAccount user = userRepository.findById(userId)
                 .orElseThrow(() -> ApiException.unauthorized("Utilizador não encontrado"));
-        user.setAvatar(validateAvatar(avatar));
+        user.setAvatar(storeAvatar(avatar));
         userRepository.save(user);
         return UserDto.from(user);
     }
@@ -440,8 +444,11 @@ public class AuthService {
         return UserDto.from(user);
     }
 
-    /** Valida a data URL da imagem e devolve-a; null/blank remove. */
-    private String validateAvatar(String avatar) {
+    /**
+     * Valida a data URL da imagem, envia-a para a Cloudinary e devolve o link
+     * público; null/blank remove a foto.
+     */
+    private String storeAvatar(String avatar) {
         if (avatar == null || avatar.isBlank()) return null;
         if (!avatar.startsWith("data:image/")) {
             throw ApiException.badRequest("Foto inválida — deve ser uma imagem (data URL)");
@@ -450,15 +457,27 @@ public class AuthService {
         if (comma <= 0 || comma >= avatar.length() - 1) {
             throw ApiException.badRequest("Foto inválida — dados da imagem em falta");
         }
+        byte[] bytes;
         try {
-            byte[] bytes = Base64.getDecoder().decode(avatar.substring(comma + 1));
-            if (bytes.length > MAX_AVATAR_BYTES) {
-                throw ApiException.badRequest("Imagem demasiado grande (máx. 1,5 MB)");
-            }
+            bytes = Base64.getDecoder().decode(avatar.substring(comma + 1));
         } catch (IllegalArgumentException e) {
             throw ApiException.badRequest("Foto inválida — base64 corrompido");
         }
-        return avatar;
+        if (bytes.length > MAX_AVATAR_BYTES) {
+            throw ApiException.badRequest("Imagem demasiado grande (máx. 1,5 MB)");
+        }
+        if (!cloudinaryService.isConfigured()) {
+            throw ApiException.badRequest(
+                    "Foto de perfil indisponível — o armazenamento Cloudinary não está configurado neste ambiente");
+        }
+        return cloudinaryService.uploadAvatar(bytes, contentTypeOf(avatar));
+    }
+
+    /** Extrai o tipo MIME da data URL (ex.: data:image/webp;base64,... → image/webp). */
+    private static String contentTypeOf(String dataUrl) {
+        int semi = dataUrl.indexOf(';');
+        String mime = semi > 0 ? dataUrl.substring(5, semi) : "";
+        return mime.startsWith("image/") ? mime : "image/jpeg";
     }
 
     /**

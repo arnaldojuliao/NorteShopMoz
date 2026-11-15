@@ -218,11 +218,12 @@ o `next.config.ts` reescreve `/api/*` e `/uploads/*` para o backend. Para o SSR
 não passar pelo domínio público, define `API_INTERNAL_BASE_URL=https://api.<loja>`.
 
 O rewrite é autenticado: define `API_PROXY_SECRET` na Vercel com o mesmo valor
-da env var `PROXY_TOKEN` no Render (a API vive em `https://<serviço>.onrender.com`,
-criada pelo Blueprint `render.yaml` na raiz). A middleware acrescenta
+da env var `PROXY_TOKEN` no Railway (a API vive em
+`https://<serviço>.up.railway.app`, criada a partir do repo GitHub com
+Root Directory=`backend` e config `backend/railway.json`). A middleware acrescenta
 `X-Proxy-Token` e a API só aceita o `X-Real-IP` (IP do visitante enviado pela
 Vercel) quando esse segredo confere; sem isto, pedidos diretos podiam forjar o
-header e fugir ao rate limit. No Render, `CLIENT_IP_HEADER=X-Real-IP`.
+header e fugir ao rate limit. No Railway, `CLIENT_IP_HEADER=X-Real-IP`.
 
 ### Disco e registos
 

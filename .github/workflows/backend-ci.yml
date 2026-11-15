@@ -1,11 +1,11 @@
-# NorteShopMoz - Backend CI/CD (Render Deploy)
-# 
+# NorteShopMoz - Backend CI/CD (Railway Deploy)
+#
 # Required GitHub Secrets:
-# - RENDER_DEPLOY_HOOK_URL (Render Dashboard → norteshop-api → Settings →
-#   Deploy Hook; opcional — sem ele o Render faz deploy automático no push)
-# - RENDER_SERVICE_URL (default: https://norteshop-api.onrender.com)
+# - RAILWAY_DEPLOY_HOOK_URL (Railway → Service → Settings → Deploy Hook;
+#   opcional — sem ele o Railway faz deploy automático no push)
+# - RAILWAY_SERVICE_URL (default: https://norteshop-api-production.up.railway.app)
 
-name: Backend - CI & Deploy Render
+name: Backend - CI & Deploy Railway
 
 "on":
   push:
@@ -20,7 +20,7 @@ name: Backend - CI & Deploy Render
   workflow_dispatch:
 
 env:
-  RENDER_SERVICE_URL: ${{ secrets.RENDER_SERVICE_URL || 'https://norteshop-api.onrender.com' }}
+  RAILWAY_SERVICE_URL: ${{ secrets.RAILWAY_SERVICE_URL || 'https://norteshop-api-production.up.railway.app' }}
 
 jobs:
   # ═══════════════════════════════════════════════════════════════════════════
@@ -164,10 +164,10 @@ jobs:
           sarif_file: 'backend/trivy-results.sarif'
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # DEPLOY RENDER (apenas em push para main)
+  # DEPLOY RAILWAY (apenas em push para main)
   # ═══════════════════════════════════════════════════════════════════════════
   deploy:
-    name: Deploy to Render
+    name: Deploy to Railway
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [test, security]
@@ -175,22 +175,22 @@ jobs:
     permissions:
       contents: read
     env:
-      RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+      RAILWAY_DEPLOY_HOOK_URL: ${{ secrets.RAILWAY_DEPLOY_HOOK_URL }}
 
     steps:
       - name: Skip notice
-        if: env.RENDER_DEPLOY_HOOK_URL == ''
-        run: echo "RENDER_DEPLOY_HOOK_URL não configurado — deploy Render ignorado (auto-deploy no push)."
+        if: env.RAILWAY_DEPLOY_HOOK_URL == ''
+        run: echo "RAILWAY_DEPLOY_HOOK_URL não configurado — deploy Railway ignorado (auto-deploy no push)."
 
-      - name: Trigger Render deploy hook
-        if: env.RENDER_DEPLOY_HOOK_URL != ''
-        run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL" >/dev/null
+      - name: Trigger Railway deploy hook
+        if: env.RAILWAY_DEPLOY_HOOK_URL != ''
+        run: curl -fsS -X POST "$RAILWAY_DEPLOY_HOOK_URL" >/dev/null
 
       - name: Verify deployment
-        if: env.RENDER_DEPLOY_HOOK_URL != ''
+        if: env.RAILWAY_DEPLOY_HOOK_URL != ''
         run: |
           for i in $(seq 1 60); do
-            if curl -sf "$RENDER_SERVICE_URL/actuator/health/liveness" | grep -q '"status":"UP"'; then
+            if curl -sf "$RAILWAY_SERVICE_URL/actuator/health" | grep -q '"status":"UP"'; then
               echo "✓ API healthy"; exit 0
             fi
             sleep 10
