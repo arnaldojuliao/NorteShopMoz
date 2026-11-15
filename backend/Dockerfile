@@ -33,8 +33,9 @@ USER spring
 EXPOSE 8080
 
 # Healthcheck próprio da imagem: liveness (não depende de Redis/DB), coerente
-# com o do docker-compose.prod.yml. Usa curl (ver acima).
+# com o do docker-compose.prod.yml. Usa curl (ver acima). No Render a app liga
+# à porta injetada em $PORT.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -fsS http://localhost:8080/actuator/health/liveness || exit 1
+    CMD curl -fsS "http://localhost:${PORT:-8080}/actuator/health/liveness" || exit 1
 
 ENTRYPOINT ["java", "-jar", "app.jar"]

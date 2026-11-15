@@ -157,7 +157,10 @@ public class SecurityConfig {
         return (authentication, context) -> {
             HttpServletRequest request = context.getRequest();
             String ip = ClientIpResolver.resolve(request);
-            if (ClientIpResolver.isPrivate(ip)) {
+            // Com CLIENT_IP_HEADER configurado (Fly/Vercel), o peer direto é
+            // sempre o proxy privado da plataforma; o bypass por "rede interna"
+            // deixaria /actuator/prometheus público. Nesse caso exige-se admin.
+            if (ClientIpResolver.isPrivate(ip) && !ClientIpResolver.hasPlatformClientIpHeader()) {
                 return new AuthorizationDecision(true);
             }
             var current = authentication == null ? null : authentication.get();

@@ -98,6 +98,36 @@ class ClientIpResolverTest {
     }
 
     @Test
+    void usaCabecalhoDaPlataformaQuandoOProxyEstaAutenticado() {
+        ClientIpResolver.configure(List.of(), "segredo-vercel", "X-Real-IP");
+
+        MockHttpServletRequest request = request("172.19.0.5", "1.2.3.4, 66.241.124.81", "segredo-vercel");
+        request.addHeader("X-Real-IP", "203.0.113.55");
+
+        assertThat(ClientIpResolver.resolve(request)).isEqualTo("203.0.113.55");
+    }
+
+    @Test
+    void ignoraCabecalhoDaPlataformaSemProxyFidedigno() {
+        ClientIpResolver.configure(List.of(), "", "X-Real-IP");
+
+        MockHttpServletRequest request = request("198.51.100.4", null, null);
+        request.addHeader("X-Real-IP", "203.0.113.55");
+
+        // Um cliente direto pode forjar X-Real-IP; sem autenticar o proxy, o
+        // header não pode servir para escolher o bucket de rate limit.
+        assertThat(ClientIpResolver.resolve(request)).isEqualTo("198.51.100.4");
+    }
+
+    @Test
+    void semCabecalhoDaPlataformaMantemUltimoElementoDoXff() {
+        ClientIpResolver.configure(List.of("10.1.1.1"), "", "");
+
+        assertThat(ClientIpResolver.resolve(request("10.1.1.1", "1.2.3.4, 203.0.113.7", null)))
+                .isEqualTo("203.0.113.7");
+    }
+
+    @Test
     void reconheceEnderecosPrivados() {
         assertThat(ClientIpResolver.isPrivate("172.17.0.5")).isTrue();
         assertThat(ClientIpResolver.isPrivate("10.0.0.1")).isTrue();

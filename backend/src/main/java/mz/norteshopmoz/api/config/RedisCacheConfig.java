@@ -25,6 +25,7 @@ import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisPassword;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
@@ -103,10 +104,12 @@ public class RedisCacheConfig implements CachingConfigurer {
             @Value("${spring.datasource.url:}") String datasourceUrl,
             @Value("${app.cache.redis.host:}") String cacheHost,
             @Value("${app.cache.redis.port:0}") int cachePort,
+            @Value("${app.cache.redis.username:}") String cacheUsername,
             @Value("${app.cache.redis.password:}") String cachePassword,
-            @Value("${app.cache.redis.database:-1}") int cacheDatabase) {
+            @Value("${app.cache.redis.database:-1}") int cacheDatabase,
+            @Value("${app.cache.redis.ssl:false}") boolean cacheSsl) {
         RedisConnectionFactory cacheConnection = dedicatedCacheConnection(
-                connectionFactory, cacheHost, cachePort, cachePassword, cacheDatabase);
+                connectionFactory, cacheHost, cachePort, cacheUsername, cachePassword, cacheDatabase, cacheSsl);
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
         mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -155,19 +158,25 @@ public class RedisCacheConfig implements CachingConfigurer {
      */
     private RedisConnectionFactory dedicatedCacheConnection(
             RedisConnectionFactory fallback,
-            String host, int port, String password, int database) {
+            String host, int port, String username, String password, int database, boolean ssl) {
         if (host == null || host.isBlank()) {
             return fallback;
         }
         RedisStandaloneConfiguration config = new RedisStandaloneConfiguration(
                 host, port > 0 ? port : 6379);
+        if (username != null && !username.isBlank()) {
+            config.setUsername(username);
+        }
         if (password != null && !password.isBlank()) {
             config.setPassword(RedisPassword.of(password));
         }
         if (database >= 0) {
             config.setDatabase(database);
         }
-        LettuceConnectionFactory connection = new LettuceConnectionFactory(config);
+        LettuceClientConfiguration client = ssl
+                ? LettuceClientConfiguration.builder().useSsl().build()
+                : LettuceClientConfiguration.builder().build();
+        LettuceConnectionFactory connection = new LettuceConnectionFactory(config, client);
         connection.afterPropertiesSet();
         ownedConnections.add(connection);
         return connection;

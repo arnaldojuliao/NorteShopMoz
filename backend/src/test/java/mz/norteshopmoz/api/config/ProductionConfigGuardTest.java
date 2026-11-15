@@ -67,7 +67,7 @@ class ProductionConfigGuardTest {
         return new ProductionConfigGuard(environment, paymentsMode, "segredo-webhook",
                 "https://loja.mz/api/payments/webhook", provider(gateway),
                 cookieSecure, baseUrl,
-                List.of("https://loja.mz"), "172.28.0.10", "re_chave", "cloud", 730,
+                List.of("https://loja.mz"), "172.28.0.10", "", "re_chave", "cloud", 730,
                 "noreply@loja.mz", "google-cli", "fb-id", "fb-secret");
     }
 
@@ -76,7 +76,7 @@ class ProductionConfigGuardTest {
             String paymentsMode) {
         return new ProductionConfigGuard(environment, paymentsMode, "segredo-webhook", "",
                 provider(GATEWAY), true, "https://loja.mz",
-                List.of("https://loja.mz"), "172.28.0.10", "re_chave", "cloud", 730,
+                List.of("https://loja.mz"), "172.28.0.10", "", "re_chave", "cloud", 730,
                 "noreply@loja.mz", "google-cli", "fb-id", "fb-secret");
     }
 

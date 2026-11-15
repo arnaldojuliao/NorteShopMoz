@@ -49,6 +49,20 @@ function apiOrigins(): string[] {
 }
 
 export function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // Rewrites same-origin para a API: autentica o proxy da Vercel com um segredo
+  // partilhado. Sem ele, a API ignora o X-Real-IP (que um cliente direto podia
+  // forjar) e o rate limit passa a usar o IP do proxy. O header é sobrescrito
+  // aqui, por isso um valor enviado pelo browser nunca chega à API.
+  if (pathname.startsWith("/api") || pathname.startsWith("/uploads")) {
+    const secret = process.env.API_PROXY_SECRET;
+    if (!secret) return NextResponse.next();
+    const headers = new Headers(request.headers);
+    headers.set("x-proxy-token", secret);
+    return NextResponse.next({ request: { headers } });
+  }
+
   const isProduction = process.env.NODE_ENV === "production";
   const isHttps = request.nextUrl.protocol === "https:";
 
@@ -107,12 +121,9 @@ export const config = {
   // Aplicar a todas as rotas exceto assets estáticos e API routes
   matcher: [
     /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico, robots.txt, sitemap.xml (static files)
+     * O /api e /uploads entram no matcher para o proxy autenticar o rewrite
+     * com X-Proxy-Token. Os restantes excluem assets estáticos.
      */
-    "/((?!api|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)",
+    "/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)",
   ],
 };

@@ -1,0 +1,2 @@
+# Converte a URI postgresql:// do Supabase para jdbc:postgresql:// (Hikari/Flyway).
+org.springframework.boot.env.EnvironmentPostProcessor=mz.norteshopmoz.api.config.DbUrlEnvironmentPostProcessor

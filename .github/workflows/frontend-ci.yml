@@ -1,0 +1,189 @@
+# NorteShopMoz - Frontend CI/CD (Vercel Deploy)
+#
+# Required GitHub Secrets:
+# - VERCEL_TOKEN (vercel login → vercel tokens create)
+# - VERCEL_ORG_ID (vercel inspect <deployment> --scope <team> → orgId)
+# - VERCEL_PROJECT_ID (vercel inspect <deployment> → projectId)
+#
+# Environment Variables (configured in Vercel Dashboard, not here):
+# - NEXT_PUBLIC_API_BASE_URL
+# - NEXT_PUBLIC_API_URL
+# - NEXT_PUBLIC_APP_URL
+# - NEXT_PUBLIC_SITE_URL
+# - NEXT_PUBLIC_GOOGLE_CLIENT_ID
+# - NEXT_PUBLIC_FACEBOOK_APP_ID
+# - NEXT_PUBLIC_SESSION_TIMEOUT_MINUTES
+# - NEXT_PUBLIC_SUPPORT_PHONE
+# - NEXT_PUBLIC_SUPPORT_EMAIL
+
+name: Frontend - CI & Deploy Vercel
+
+"on":
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+  workflow_dispatch:
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # TEST & BUILD
+  # ═══════════════════════════════════════════════════════════════════════════
+  test:
+    name: Test & Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linting
+        run: npm run lint
+
+      - name: Run tests
+        run: npm run test
+
+      - name: Generate coverage report
+        run: npm run test:coverage
+
+      - name: Upload frontend coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage
+          retention-days: 7
+
+      - name: Build application
+        env:
+          # Build-time env vars (fallbacks for PR checks)
+          NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+          NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
+          NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
+          NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: |
+            frontend/.next/standalone
+            frontend/.next/static
+            frontend/public
+          retention-days: 7
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # SECURITY SCAN
+  # ═══════════════════════════════════════════════════════════════════════════
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Run Snyk (optional)
+        uses: snyk/actions/node@master
+        if: env.SNYK_TOKEN != ''
+        with:
+          args: --file=frontend/package.json --severity-threshold=high
+          snyk-token: ${{ secrets.SNYK_TOKEN }}
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        if: github.event_name == 'push'
+        with:
+          scan-type: 'fs'
+          scan-ref: './frontend'
+          format: 'sarif'
+          output: 'frontend/trivy-results.sarif'
+          severity: 'HIGH,CRITICAL'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('frontend/trivy-results.sarif') != ''
+        with:
+          sarif_file: 'frontend/trivy-results.sarif'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # DEPLOY VERCEL (apenas em push para main)
+  # ═══════════════════════════════════════════════════════════════════════════
+  deploy:
+    name: Deploy to Vercel
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [test, security]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Skip notice
+        if: env.VERCEL_TOKEN == '' || env.VERCEL_ORG_ID == '' || env.VERCEL_PROJECT_ID == ''
+        run: echo "VERCEL_TOKEN/VERCEL_ORG_ID/VERCEL_PROJECT_ID não configurados — deploy Vercel ignorado."
+
+      - name: Install Vercel CLI
+        if: env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != ''
+        run: npm install -g vercel@latest
+
+      - name: Pull Vercel Environment Information
+        if: env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != ''
+        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Build Project Artifacts
+        if: env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != ''
+        run: vercel build --prod --token="$VERCEL_TOKEN"
+
+      - name: Deploy Project Artifacts to Vercel
+        if: env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != ''
+        run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"

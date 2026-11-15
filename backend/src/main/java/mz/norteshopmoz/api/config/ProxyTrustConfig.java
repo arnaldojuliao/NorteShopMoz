@@ -19,6 +19,7 @@ import mz.norteshopmoz.api.security.ClientIpResolver;
  *   TRUSTED_PROXIES=172.20.0.10            # IP do proxy
  *   TRUSTED_PROXIES=172.20.0.0/16          # sub-rede do proxy
  *   PROXY_TOKEN=...                        # segredo que o proxy envia em X-Proxy-Token
+ *   CLIENT_IP_HEADER=X-Real-IP             # header do IP real (só após confiança)
  * </pre>
  */
 @Configuration
@@ -26,8 +27,9 @@ public class ProxyTrustConfig {
 
     public ProxyTrustConfig(
             @Value("${app.security.trusted-proxies:}") String trustedProxies,
-            @Value("${app.security.proxy-token:}") String proxyToken) {
-        ClientIpResolver.configure(parse(trustedProxies), proxyToken);
+            @Value("${app.security.proxy-token:}") String proxyToken,
+            @Value("${app.security.client-ip-header:}") String clientIpHeader) {
+        ClientIpResolver.configure(parse(trustedProxies), proxyToken, clientIpHeader);
     }
 
     private static List<String> parse(String value) {

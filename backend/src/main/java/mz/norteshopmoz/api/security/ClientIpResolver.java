@@ -20,6 +20,10 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *       anteriores podem ter sido fornecidos pelo cliente e apenas o último é
  *       acrescentado pelo proxy. (O nginx do projeto também sobrescreve o header
  *       com {@code $remote_addr}.)</li>
+ *   <li>Quando a plataforma/proxy define um cabeçalho de IP de cliente próprio
+ *       (ex.: {@code X-Real-IP} enviado pela Vercel), esse cabeçalho é usado
+ *       <strong>depois</strong> de o proxy ser considerado fidedigno. Sem essa
+ *       confiança, um cliente que alcance a API diretamente podia forjá-lo.</li>
  * </ul>
  *
  * <p>Como se marca um proxy como fidedigno ({@code app.security.*}, ver
@@ -41,6 +45,7 @@ public final class ClientIpResolver {
 
     private static final List<String> TRUSTED_PROXIES = new CopyOnWriteArrayList<>();
     private static volatile String proxyToken = "";
+    private static volatile String clientIpHeader = "";
 
     private ClientIpResolver() {
     }
@@ -51,6 +56,15 @@ public final class ClientIpResolver {
      * limpam a lista — nenhum proxy é fidedigno.
      */
     public static void configure(List<String> trustedProxies, String token) {
+        configure(trustedProxies, token, "");
+    }
+
+    /**
+     * Define os proxies fidedignos e, opcionalmente, o cabeçalho de IP de cliente
+     * definido pela plataforma (ex.: {@code Fly-Client-IP}). O cabeçalho só deve
+     * ser configurado quando a plataforma o sobrescreve em todos os pedidos.
+     */
+    public static void configure(List<String> trustedProxies, String token, String platformClientIpHeader) {
         TRUSTED_PROXIES.clear();
         if (trustedProxies != null) {
             trustedProxies.stream()
@@ -59,6 +73,17 @@ public final class ClientIpResolver {
                     .forEach(TRUSTED_PROXIES::add);
         }
         proxyToken = token == null ? "" : token.trim();
+        clientIpHeader = platformClientIpHeader == null ? "" : platformClientIpHeader.trim();
+    }
+
+    /**
+     * Verdadeiro quando há um cabeçalho de IP de plataforma configurado. Nesse
+     * caso o endereço direto da ligação é o proxy da plataforma (privado), pelo
+     * que {@link #isPrivate(String)} não pode ser usado para inferir "rede
+     * interna" — ver {@code SecurityConfig.actuatorAccess()}.
+     */
+    public static boolean hasPlatformClientIpHeader() {
+        return !clientIpHeader.isEmpty();
     }
 
     /** IP do cliente a usar como chave de rate limit / lockout / auditoria. */
@@ -66,6 +91,12 @@ public final class ClientIpResolver {
         String remoteAddr = request.getRemoteAddr();
         if (!isTrustedProxy(request, remoteAddr)) {
             return remoteAddr;
+        }
+        if (!clientIpHeader.isEmpty()) {
+            String platformIp = request.getHeader(clientIpHeader);
+            if (platformIp != null && !platformIp.isBlank()) {
+                return platformIp.trim();
+            }
         }
         String xff = request.getHeader("X-Forwarded-For");
         if (xff != null && !xff.isBlank()) {

@@ -36,6 +36,7 @@ public class ProductionConfigGuard implements ApplicationRunner {
     private final String baseUrl;
     private final List<String> corsOrigins;
     private final String trustedProxies;
+    private final String clientIpHeader;
     private final String resendApiKey;
     private final String cloudinaryCloudName;
     private final int orderRetentionDays;
@@ -54,6 +55,7 @@ public class ProductionConfigGuard implements ApplicationRunner {
             @Value("${app.mail.base-url:}") String baseUrl,
             @Value("${app.cors.allowed-origins:}") List<String> corsOrigins,
             @Value("${app.security.trusted-proxies:}") String trustedProxies,
+            @Value("${app.security.client-ip-header:}") String clientIpHeader,
             @Value("${app.mail.resend-api-key:}") String resendApiKey,
             @Value("${app.cloudinary.cloud-name:}") String cloudinaryCloudName,
             @Value("${app.orders.retention-days:0}") int orderRetentionDays,
@@ -70,6 +72,7 @@ public class ProductionConfigGuard implements ApplicationRunner {
         this.baseUrl = baseUrl;
         this.corsOrigins = corsOrigins;
         this.trustedProxies = trustedProxies;
+        this.clientIpHeader = clientIpHeader;
         this.resendApiKey = resendApiKey;
         this.cloudinaryCloudName = cloudinaryCloudName;
         this.orderRetentionDays = orderRetentionDays;
@@ -146,10 +149,12 @@ public class ProductionConfigGuard implements ApplicationRunner {
             }
         }
 
-        if (trustedProxies == null || trustedProxies.isBlank()) {
-            log.warn("[PROD] TRUSTED_PROXIES vazio — o backend ignora X-Forwarded-For: todos os clientes "
-                    + "partilham o mesmo IP, o que faz o rate limit e o lockout de login atuarem sobre a "
-                    + "loja inteira. Defina o IP do proxy inverso (ex.: 172.28.0.10).");
+        if ((trustedProxies == null || trustedProxies.isBlank())
+                && (clientIpHeader == null || clientIpHeader.isBlank())) {
+            log.warn("[PROD] TRUSTED_PROXIES/CLIENT_IP_HEADER vazios — o backend ignora "
+                    + "X-Forwarded-For: todos os clientes partilham o mesmo IP, o que faz o rate "
+                    + "limit e o lockout de login atuarem sobre a loja inteira. Defina o IP do "
+                    + "proxy inverso (ex.: 172.28.0.10) ou, no Fly.io, CLIENT_IP_HEADER=Fly-Client-IP.");
         }
 
         if (corsOrigins == null || corsOrigins.stream().noneMatch(o -> o != null && !o.isBlank())) {

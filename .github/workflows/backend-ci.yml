@@ -1,0 +1,198 @@
+# NorteShopMoz - Backend CI/CD (Render Deploy)
+# 
+# Required GitHub Secrets:
+# - RENDER_DEPLOY_HOOK_URL (Render Dashboard → norteshop-api → Settings →
+#   Deploy Hook; opcional — sem ele o Render faz deploy automático no push)
+# - RENDER_SERVICE_URL (default: https://norteshop-api.onrender.com)
+
+name: Backend - CI & Deploy Render
+
+"on":
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+  workflow_dispatch:
+
+env:
+  RENDER_SERVICE_URL: ${{ secrets.RENDER_SERVICE_URL || 'https://norteshop-api.onrender.com' }}
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # TEST & BUILD
+  # ═══════════════════════════════════════════════════════════════════════════
+  test:
+    name: Test & Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: ./backend
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6381:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Install redis-cli
+        run: sudo apt-get update && sudo apt-get install -y redis-tools
+
+      - name: Wait for Redis
+        run: |
+          for i in {1..30}; do
+            redis-cli -h localhost -p 6381 ping && break
+            sleep 1
+          done
+
+      - name: Run tests
+        run: mvn -B test
+
+      - name: Generate coverage report (JaCoCo)
+        run: mvn -B jacoco:report
+
+      - name: Upload backend coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/target/site/jacoco
+          retention-days: 7
+
+      - name: Build JAR
+        run: mvn -B package -DskipTests
+
+      - name: Upload JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-jar
+          path: backend/target/norteshopmoz-api-*.jar
+          retention-days: 7
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # SECURITY SCAN
+  # ═══════════════════════════════════════════════════════════════════════════
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
+
+      - name: Resolve Maven dependencies
+        run: mvn -B -q dependency:resolve
+
+      - name: Run OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        continue-on-error: true
+        with:
+          project: 'NorteShopMoz API'
+          path: '.'
+          format: 'HTML'
+          out: 'reports'
+          args: >
+            --failOnCVSS 7
+            --suppressionFile './.github/dependency-check-suppressions.xml'
+
+      - name: Upload Dependency Check Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-check-report
+          path: backend/reports/
+          retention-days: 30
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        id: trivy-backend
+        continue-on-error: true
+        if: github.event_name == 'push'
+        with:
+          scan-type: 'fs'
+          scan-ref: './backend'
+          format: 'sarif'
+          output: 'backend/trivy-results.sarif'
+          severity: 'HIGH,CRITICAL'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('backend/trivy-results.sarif') != ''
+        with:
+          sarif_file: 'backend/trivy-results.sarif'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # DEPLOY RENDER (apenas em push para main)
+  # ═══════════════════════════════════════════════════════════════════════════
+  deploy:
+    name: Deploy to Render
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [test, security]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    env:
+      RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+
+    steps:
+      - name: Skip notice
+        if: env.RENDER_DEPLOY_HOOK_URL == ''
+        run: echo "RENDER_DEPLOY_HOOK_URL não configurado — deploy Render ignorado (auto-deploy no push)."
+
+      - name: Trigger Render deploy hook
+        if: env.RENDER_DEPLOY_HOOK_URL != ''
+        run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL" >/dev/null
+
+      - name: Verify deployment
+        if: env.RENDER_DEPLOY_HOOK_URL != ''
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf "$RENDER_SERVICE_URL/actuator/health/liveness" | grep -q '"status":"UP"'; then
+              echo "✓ API healthy"; exit 0
+            fi
+            sleep 10
+          done
+          echo "✗ API unhealthy após 10 min" && exit 1

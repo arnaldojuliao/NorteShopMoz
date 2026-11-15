@@ -4,6 +4,12 @@ import { envOr } from "./src/lib/env";
 // `envOr` porque um build arg ausente chega como string vazia (não undefined).
 const API_BASE = envOr(process.env.NEXT_PUBLIC_API_BASE_URL, "http://localhost:8080");
 
+// Destino do proxy same-origin (/api e /uploads) usado na Vercel.
+// O domínio real fica numa env var do projeto — não no repositório — para que
+// o browser continue a chamar apenas https://<loja>/api/... e os cookies
+// HttpOnly (Domain=.dominio.com) sejam enviados sem problemas de SameSite.
+const API_PROXY_TARGET = envOr(process.env.API_PROXY_TARGET, "").replace(/\/+$/, "");
+
 const remotePatterns: NonNullable<NextConfig["images"]>["remotePatterns"] = [
   { protocol: "https", hostname: "images.unsplash.com" },
   { protocol: "https", hostname: "picsum.photos" },
@@ -11,17 +17,21 @@ const remotePatterns: NonNullable<NextConfig["images"]>["remotePatterns"] = [
   { protocol: "https", hostname: "res.cloudinary.com" },
 ];
 
-// Imagens enviadas pelos administradores são servidas pelo backend (API base) —
-// adiciona o host da API aos padrões para o next/image as poder otimizar.
-try {
-  const u = new URL(API_BASE);
-  remotePatterns.push({
-    protocol: u.protocol.replace(":", "") as "http" | "https",
-    hostname: u.hostname,
-    ...(u.port ? { port: u.port } : {}),
-  });
-} catch {
-  // URL inválida — mantém apenas os padrões fixos.
+// Imagens enviadas pelos administradores são servidas pelo backend. Com o proxy
+// same-origin, a URL pública do browser é a da loja, mas o uploads devolve uma
+// URL absoluta no domínio da API — ambos os hosts entram nos padrões para o
+// next/image as poder otimizar.
+for (const base of [API_BASE, API_PROXY_TARGET]) {
+  try {
+    const u = new URL(base);
+    remotePatterns.push({
+      protocol: u.protocol.replace(":", "") as "http" | "https",
+      hostname: u.hostname,
+      ...(u.port ? { port: u.port } : {}),
+    });
+  } catch {
+    // URL vazia/inválida — mantém apenas os padrões fixos.
+  }
 }
 
 const nextConfig: NextConfig = {
@@ -36,6 +46,16 @@ const nextConfig: NextConfig = {
   // os URLs antigos (sitemap, SearchAction) continuam a funcionar.
   async redirects() {
     return [{ source: '/procurar', destination: '/explore', permanent: true }];
+  },
+  // Na Vercel, API_PROXY_TARGET=https://api.<dominio> faz o proxy same-origin
+  // para a API no Fly.io. Sem a variável (dev/local) não há rewrite: o browser
+  // chama NEXT_PUBLIC_API_BASE_URL diretamente.
+  async rewrites() {
+    if (!API_PROXY_TARGET) return [];
+    return [
+      { source: '/api/:path*', destination: `${API_PROXY_TARGET}/api/:path*` },
+      { source: '/uploads/:path*', destination: `${API_PROXY_TARGET}/uploads/:path*` },
+    ];
   },
   images: {
     remotePatterns,

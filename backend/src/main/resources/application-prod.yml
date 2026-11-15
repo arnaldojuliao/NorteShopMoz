@@ -1,0 +1,81 @@
+# NorteShopMoz — configuração de produção para Render + Supabase + Upstash.
+# Ativado por SPRING_PROFILES_ACTIVE=prod (ver render.yaml).
+# Segredos vêm das Environment Variables do Render; NÃO colocar valores aqui.
+
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+  datasource:
+    # DB_URL aceita a URI postgresql:// do painel do Supabase tal como está:
+    # o DbUrlEnvironmentPostProcessor converte-a para jdbc:postgresql:// e
+    # extrai user/password quando não há DB_USER/DB_PASSWORD separados.
+    #
+    # Use o Session Pooler (porta 5432) — não o Transaction Pooler (6543):
+    # o Flyway precisa de sessão/DDL e o Render é um backend persistente.
+    url: ${DB_URL:${DATABASE_URL}}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+      minimum-idle: ${DB_POOL_MIN_IDLE:2}
+      connection-timeout: ${DB_POOL_CONNECTION_TIMEOUT_MS:10000}
+      max-lifetime: 1800000
+      leak-detection-threshold: 20000
+
+  data:
+    redis:
+      # Upstash exige TLS e expõe apenas a base 0.
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      username: ${REDIS_USERNAME:default}
+      password: ${REDIS_PASSWORD}
+      database: 0
+      ssl:
+        enabled: true
+      timeout: ${REDIS_TIMEOUT:2s}
+
+  flyway:
+    enabled: true
+    # Por omissão migra contra a mesma base da aplicação (Session Pooler).
+    # Para usar a ligação direta do Supabase (IPv6), definir FLYWAY_URL com
+    # uma URL JDBC; FLYWAY_USER/FLYWAY_PASSWORD são opcionais.
+    url: ${FLYWAY_URL:${DB_URL:${DATABASE_URL}}}
+    user: ${FLYWAY_USER:${DB_USER}}
+    password: ${FLYWAY_PASSWORD:${DB_PASSWORD}}
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 0
+
+server:
+  # O Render injeta PORT (10000 por omissão); SERVER_PORT mantém compatibilidade.
+  port: ${SERVER_PORT:${PORT:8080}}
+
+app:
+  cookie:
+    secure: ${APP_COOKIE_SECURE:true}
+    domain: ${APP_COOKIE_DOMAIN:}
+
+  # A cache só usa uma instância separada quando CACHE_REDIS_HOST está definido
+  # (uma segunda base Upstash). Vazio = usa a conexão principal; as chaves de
+  # cache já têm prefixo próprio e não colidem com tokens/rate limit.
+  # Se apontar para a MESMA base Upstash, usar database: 0 (o Upstash não tem
+  # DB 1), mas cache e estado passam a partilhar a mesma política de eviction.
+  cache:
+    redis:
+      host: ${CACHE_REDIS_HOST:}
+      port: ${CACHE_REDIS_PORT:0}
+      username: ${CACHE_REDIS_USERNAME:${REDIS_USERNAME:default}}
+      password: ${CACHE_REDIS_PASSWORD:}
+      database: ${CACHE_REDIS_DATABASE:0}
+      ssl: ${CACHE_REDIS_SSL:true}
+
+  security:
+    # O pedido chega pelo proxy do Render; sem confiar nele todos os clientes
+    # partilham o mesmo IP e o rate limit atua sobre a loja inteira. O caminho
+    # normal (loja na Vercel → middleware → X-Proxy-Token/X-Real-IP) não precisa
+    # disto: deixe TRUSTED_PROXIES vazio.
+    trusted-proxies: ${TRUSTED_PROXIES:}
+
+  upload-dir: /app/uploads

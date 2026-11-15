@@ -144,9 +144,13 @@ app:
     redis:
       host: ${CACHE_REDIS_HOST:}
       port: ${CACHE_REDIS_PORT:0}
+      username: ${CACHE_REDIS_USERNAME:}
       password: ${CACHE_REDIS_PASSWORD:}
       # Índice da base de dados (útil quando partilha a instância; -1 = padrão).
+      # Upstash só suporta a base 0 — em produção deixar 0.
       database: ${CACHE_REDIS_DATABASE:-1}
+      # Upstash exige TLS. Desligado por omissão para o Redis local do compose.
+      ssl: ${CACHE_REDIS_SSL:false}
   jwt:
     # Default apenas para desenvolvimento local/testes — é público (está no
     # repositório). Em produção defina JWT_SECRET (mín. 32 caracteres, ex.:
@@ -177,6 +181,10 @@ app:
     # PROXY_TOKEN=<segredo enviado em X-Proxy-Token pelo proxy>.
     trusted-proxies: ${TRUSTED_PROXIES:}
     proxy-token: ${PROXY_TOKEN:}
+    # Cabeçalho de IP do cliente definido pelo proxy fidedigno (ex.: X-Real-IP
+    # enviado pela Vercel). Só é lido depois de o proxy autenticar com
+    # TRUSTED_PROXIES ou PROXY_TOKEN; vazio = usar X-Forwarded-For/X-Real-IP.
+    client-ip-header: ${CLIENT_IP_HEADER:}
     # Inatividade máxima de uma sessão, verificada no SERVIDOR (Redis, chave por
     # token de sessão). Sem isto o "timeout de sessão" era só cosmético no
     # cliente: o cookie do access token continuava válido até 7 dias

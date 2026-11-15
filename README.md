@@ -191,24 +191,38 @@ dentro do Root Directory, onde `scripts/` não existe.
 |---|---|
 | `framework: nextjs` | fixa o preset; sem ele a deteção podia cair em «Other» e perdia-se o SSR e o middleware |
 | `installCommand: npm ci --include=dev` | `tailwind`, `postcss` e `typescript` são devDependencies e o `next build` precisa delas |
-| `buildCommand: npm run build` | igual ao do `Dockerfile`; o `outputDirectory` fica por omissão (o `.next` do próprio Root Directory) |
+| `buildCommand: npm run build` | igual ao do `Dockerfile` |
+| `outputDirectory: .next` | fixa o output do Root Directory (`frontend/.next`). Sem isto, uma definição antiga `frontend/.next` no painel faz a Vercel procurar `frontend/frontend/.next` |
 
 O `output: 'standalone'` do `next.config.ts` é para o Docker: o `next build`
 continua a escrever o `.next` normal (`BUILD_ID`, `static/`, `server/`) e é esse
 que a Vercel empacota.
 
-O `installCommand` e o `buildCommand` deste ficheiro **substituem** os valores
-correspondentes do painel (é o que a documentação do `vercel.json` indica: a
-propriedade serve para «override the Build Command in the Project Settings
-dashboard»). O que o ficheiro **não** define continua a vir do painel — em
-particular o *Output Directory*: um valor antigo lá deixado (ex.:
-`frontend/.next`, do desenho em que a raiz do repositório era o Root Directory)
-continua a aplicar-se e aponta para um caminho que não existe dentro de
-`frontend/`. Deve ficar vazio, para usar o `.next` do próprio Root Directory.
+O `installCommand`, o `buildCommand` e o `outputDirectory` deste ficheiro
+**substituem** os valores correspondentes do painel. Em particular, o
+`outputDirectory: .next` corrige o caso em que o painel ainda tem
+`frontend/.next` (do desenho em que a raiz do repositório era o Root Directory):
+com Root Directory=`frontend/`, esse valor resolve para
+`frontend/frontend/.next` e o build falha com `NEXT_OUTPUT_DIR_MISSING`.
+
+O `output: 'standalone'` do `next.config.ts` é para o Docker: na Vercel só é
+ativado fora dela (`process.env.VERCEL`), porque no Next 16.3 o adapter da
+Vercel rebenta com `output: 'standalone'`.
 
 As variáveis públicas (`NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_SITE_URL`,
 `NEXT_PUBLIC_APP_URL`) têm de existir como env vars do projeto na Vercel: sem
-elas o bundle cai no `http://localhost:8080` por omissão.
+elas o bundle cai no `http://localhost:8080` por omissão. Para o browser falar
+com a API na mesma origem (necessário para cookies `SameSite=Lax`), define
+`NEXT_PUBLIC_API_BASE_URL=https://<loja>` e `API_PROXY_TARGET=https://api.<loja>`;
+o `next.config.ts` reescreve `/api/*` e `/uploads/*` para o backend. Para o SSR
+não passar pelo domínio público, define `API_INTERNAL_BASE_URL=https://api.<loja>`.
+
+O rewrite é autenticado: define `API_PROXY_SECRET` na Vercel com o mesmo valor
+da env var `PROXY_TOKEN` no Render (a API vive em `https://<serviço>.onrender.com`,
+criada pelo Blueprint `render.yaml` na raiz). A middleware acrescenta
+`X-Proxy-Token` e a API só aceita o `X-Real-IP` (IP do visitante enviado pela
+Vercel) quando esse segredo confere; sem isto, pedidos diretos podiam forjar o
+header e fugir ao rate limit. No Render, `CLIENT_IP_HEADER=X-Real-IP`.
 
 ### Disco e registos
 
