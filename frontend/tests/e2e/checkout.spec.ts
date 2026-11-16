@@ -63,20 +63,26 @@ test.describe('Checkout Flow', () => {
   });
 
   /**
-   * Checkout de convidado — o caminho principal da loja (sem conta).
+   * Comprar exige conta: sem sessão, o CTA abre o LoginModal e nenhum pedido
+   * é criado (o backend rejeita POST /api/orders não autenticado — 401).
    *
-   * Estava desativado com `test.skip(true, 'Skipping due to flaky selectors')`;
-   * os «selectors flaky» eram a UI antiga (endereço inline e botão «Confirmar
-   * pedido»), substituída pelo modal de endereços e pelo CTA «Comprar». O fluxo
-   * real (endereço → pagamento → pedido) corre de ponta a ponta contra a API.
+   * Antes era «should complete checkout as guest»; o guest checkout foi
+   * removido a pedido (o checkout é autenticado desde a migração).
    */
-  test('should complete checkout as guest', async ({ page }) => {
+  test('should require login before checkout', async ({ page }) => {
     await page.goto(TEST_PRODUCT_URL);
-    const orderId = await placeOrder(page);
+    await addTestProductToCart(page);
 
-    // O pedido existe no servidor e é consultável (convidado identifica-se pelo
-    // email usado no checkout).
-    expect(orderId).toMatch(/^NSM-/);
+    await page.goto('/checkout');
+    // Sem dados de endereço a verificação de login corre antes de tudo:
+    // o clique no CTA abre o modal de login incondicionalmente.
+    await page.getByRole('button', { name: 'Comprar' }).click();
+
+    const loginDialog = page.getByRole('dialog', { name: 'Entrar' });
+    await expect(loginDialog).toBeVisible({ timeout: 10000 });
+
+    // Nenhum pedido foi criado: ainda estamos no formulário de checkout.
+    await expect(page.getByRole('button', { name: 'Comprar' })).toBeVisible();
   });
 
   /** Checkout de cliente com sessão: o pedido fica ligado à conta. */

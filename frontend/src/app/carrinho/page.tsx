@@ -39,8 +39,8 @@ export default function CartPage() {
     }, 200);
   };
 
-  // O checkout é público (o backend aceita convidados) — não se exige conta
-  // para avançar; o registo é oferecido no fim da compra.
+  // O checkout exige conta (o backend só cria pedido autenticado). Chegar à
+  // página é livre: quem não tem sessão abre o login aí, no passo final.
   const handleCheckout = () => {
     router.push("/checkout");
   };

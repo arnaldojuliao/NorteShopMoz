@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   Loader2,
   Lock,
-  Mail,
   MapPin,
   PackageCheck,
   Plus,
@@ -72,9 +71,9 @@ export default function CheckoutPage() {
     const stored = getStoredUser();
     queueMicrotask(() => setLocalUser(stored));
   }, []);
-  // Sessão (real via token ou login local offline). **Não** é um pré-requisito:
-  // o checkout é público (o backend aceita convidados, `POST /api/orders`) — a
-  // conta serve só para pré-preencher dados e ligar o pedido ao histórico.
+  // Sessão (real via token ou login local offline). É um pré-requisito do
+  // checkout: o backend exige conta para criar pedido (POST /api/orders
+  // autenticado) — sem sessão, o botão «Comprar» abre o modal de login.
   const logged = Boolean(authUser || localUser);
   const { notify } = useToast();
   // Regras de envio do servidor (fallback para as locais enquanto não carregam).
@@ -111,7 +110,6 @@ export default function CheckoutPage() {
   const [form, setForm] = useState({
     fullName: "",
     phone: "",
-    email: "",
     address: "",
     city: "",
     notes: "",
@@ -132,17 +130,16 @@ export default function CheckoutPage() {
   // O setState é adiado com queueMicrotask (padrão do projeto) para não
   // disparar atualizações síncronas dentro do efeito.
   useEffect(() => {
-    if (!profile?.fullName && !profile?.email && !profile?.phone) return;
-    if (form.fullName || form.email || form.phone) return;
+    if (!profile?.fullName && !profile?.phone) return;
+    if (form.fullName || form.phone) return;
     queueMicrotask(() => {
       setForm((f) => ({
         ...f,
         fullName: profile?.fullName ?? "",
-        email: profile?.email ?? "",
         phone: profile?.phone ?? "",
       }));
     });
-  }, [profile, form.fullName, form.email, form.phone]);
+  }, [profile, form.fullName, form.phone]);
 
   // ── Dados de entrega guardados (livro de endereços de /configuracoes) ──
   // O checkout mostra os dados GRAVADOS em modo de leitura — o cliente não
@@ -489,14 +486,23 @@ export default function CheckoutPage() {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (placing) return;
+    // O checkout exige conta: o backend só cria pedido autenticado
+    // (POST /api/orders). Sem sessão, abre o modal de login e o fluxo
+    // retoma quando o utilizador entrar.
+    if (!logged) {
+      notify("Crie conta ou entre para finalizar a compra.", "info");
+      openLogin();
+      return;
+    }
     if (!selectedMethodAvailable) {
       notify("Escolha um método de pagamento disponível.", "info");
       return;
     }
-    // O email é a prova de contacto do convidado: é para ele que vai a
-    // confirmação e o link de acompanhamento do pedido.
-    if (!form.email.trim()) {
-      notify("Indique o seu email para receber a confirmação e acompanhar o pedido.", "info");
+    // O email da conta é a prova de contacto: é para ele que vai a confirmação
+    // e o link de acompanhamento do pedido.
+    const contactEmail = authUser?.email ?? localUser?.email ?? "";
+    if (!contactEmail.trim()) {
+      notify("A sua conta não tem email associado. Entre novamente para atualizar a sessão.", "info");
       return;
     }
     // Sem dados de entrega guardados, a encomenda não pode ser enviada:
@@ -531,12 +537,13 @@ export default function CheckoutPage() {
         paymentMethod: selectedMethod.name,
         // Sem paymentInfo: os dados do método são recolhidos na página do
         // provedor (checkout hospedado) — nada de cartão no nosso servidor.
-        address: { ...form, province },
+        address: { ...form, email: contactEmail, province },
         couponCode: coupon?.code || undefined,
       };
 
-      // Cria o pedido no backend (guest checkout) com uma perceção mínima de
-      // processamento. Em falha, o submitOrder devolve um pedido local.
+      // Cria o pedido no backend (autenticado — a conta exige sessão) com uma
+      // perceção mínima de processamento. Em falha, o submitOrder devolve um
+      // pedido local.
       const [order] = await Promise.all([
         submitOrder(payload, idemKey),
         new Promise((resolve) => setTimeout(resolve, 700)),
@@ -690,30 +697,6 @@ export default function CheckoutPage() {
     <div className="container-nsm py-6 pb-28">
       <form onSubmit={submit} className="mt-6 px-4 grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div className="space-y-6">
-          {/* Contacto — o email é a prova de contacto do convidado: é para ele
-              que vai a confirmação e o link de acompanhamento do pedido. */}
-          <div>
-            <h2 className="flex items-center gap-2 font-display text-lg font-bold text-slate-900">
-              <Mail className="size-5 text-primary-600" /> Contacto
-            </h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Enviamos a confirmação e o link de acompanhamento para este email.
-            </p>
-            <div className="mt-3">
-              <Input
-                label="Email"
-                type="email"
-                name="email"
-                required
-                autoComplete="email"
-                placeholder="nome@email.com"
-                leadingIcon={<Mail className="size-4" />}
-                value={form.email}
-                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-              />
-            </div>
-          </div>
-
           {/* Dados de entrega — o endereço escolhido aparece gravado; o botão
               tracejado abre o gestor (modal) para escolher ou adicionar outro. */}
           <div>

@@ -12,8 +12,10 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 import mz.norteshopmoz.api.domain.Product;
+import mz.norteshopmoz.api.domain.UserAccount;
 import mz.norteshopmoz.api.repository.OrderRepository;
 import mz.norteshopmoz.api.repository.ProductRepository;
+import mz.norteshopmoz.api.security.JwtService;
 import mz.norteshopmoz.api.service.CouponService;
 import mz.norteshopmoz.api.web.dto.CouponRequest;
 import org.junit.jupiter.api.Test;
@@ -26,7 +28,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 /**
- * Checkout ponta a ponta ({@code POST /api/orders}, convidado).
+ * Checkout ponta a ponta ({@code POST /api/orders}, autenticado — o checkout
+ * exige conta).
  *
  * <p>Cobre a ordem das operações do checkout depois de a cobrança passar a
  * correr <strong>fora</strong> da transação de escrita: validar → cobrar →
@@ -52,6 +55,21 @@ class OrderCheckoutFlowTest {
 
     @Autowired
     CouponService couponService;
+
+    @Autowired
+    JwtService jwtService;
+
+    /** Token JWT de um cliente autenticado (o checkout exige conta). */
+    private String token() {
+        UserAccount user = UserAccount.builder()
+                .id("chk-" + UUID.randomUUID())
+                .email("checkout-" + UUID.randomUUID() + "@example.com")
+                .fullName("Cliente Checkout")
+                .passwordHash("hash")
+                .role("CUSTOMER")
+                .build();
+        return jwtService.generateToken(user, null);
+    }
 
     private static final BigDecimal PRICE = new BigDecimal("1000");
 
@@ -98,6 +116,7 @@ class OrderCheckoutFlowTest {
     private MvcResult checkout(Product product, String paymentMethod, String idempotencyKey) throws Exception {
         return mockMvc.perform(post("/api/orders")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "Bearer " + token())
                         .header("Idempotency-Key", idempotencyKey)
                         .header("X-Guest-Id", UUID.randomUUID().toString())
                         .content(body(product, paymentMethod, 1, null)))
@@ -114,6 +133,7 @@ class OrderCheckoutFlowTest {
 
         mockMvc.perform(post("/api/orders")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "Bearer " + token())
                         .header("Idempotency-Key", "online-" + UUID.randomUUID())
                         .content(body(product, "m-pesa", 2, null)))
                 .andExpect(status().isCreated())
@@ -138,6 +158,7 @@ class OrderCheckoutFlowTest {
         for (String removed : List.of("Pagamento na entrega", "Transferência bancária")) {
             mockMvc.perform(post("/api/orders")
                             .contentType(MediaType.APPLICATION_JSON)
+                            .header("Authorization", "Bearer " + token())
                             .header("Idempotency-Key", "offline-" + UUID.randomUUID())
                             .content(body(product, removed, 1, null)))
                     .andExpect(status().isBadRequest())
@@ -155,6 +176,7 @@ class OrderCheckoutFlowTest {
 
         mockMvc.perform(post("/api/orders")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "Bearer " + token())
                         .header("Idempotency-Key", "sem-metodo-" + UUID.randomUUID())
                         .content(payload))
                 .andExpect(status().isBadRequest())
@@ -195,6 +217,7 @@ class OrderCheckoutFlowTest {
         // pedido nenhum e o stock nunca fica negativo.
         mockMvc.perform(post("/api/orders")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "Bearer " + token())
                         .header("Idempotency-Key", "esgota-2-" + UUID.randomUUID())
                         .content(body(product, "m-pesa", 1, null)))
                 .andExpect(status().isBadRequest())
@@ -212,6 +235,7 @@ class OrderCheckoutFlowTest {
 
         MvcResult result = mockMvc.perform(post("/api/orders")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "Bearer " + token())
                         .header("Idempotency-Key", "cupao-" + UUID.randomUUID())
                         .content(body(product, "m-pesa", 1, code)))
                 .andExpect(status().isCreated())
@@ -240,6 +264,7 @@ class OrderCheckoutFlowTest {
 
         assertThat(mockMvc.perform(post("/api/orders")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "Bearer " + token())
                         .header("Idempotency-Key", "lim-1-" + UUID.randomUUID())
                         .content(body(product, "m-pesa", 1, code)))
                 .andReturn().getResponse().getStatus())
@@ -252,6 +277,7 @@ class OrderCheckoutFlowTest {
         // criado a menos, nem deixar o stock preso.
         mockMvc.perform(post("/api/orders")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "Bearer " + token())
                         .header("Idempotency-Key", "lim-2-" + UUID.randomUUID())
                         .content(body(product, "m-pesa", 1, code)))
                 .andExpect(status().isBadRequest())
@@ -268,6 +294,7 @@ class OrderCheckoutFlowTest {
 
         mockMvc.perform(post("/api/orders")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "Bearer " + token())
                         .header("Idempotency-Key", "prov-" + UUID.randomUUID())
                         .content(payload))
                 .andExpect(status().isBadRequest());

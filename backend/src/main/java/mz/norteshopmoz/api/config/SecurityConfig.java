@@ -27,9 +27,10 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  * Segurança stateless com JWT em cookies HttpOnly + CSRF protection.
  * <ul>
  *   <li>Público: catálogo (GET /api/products, /api/categories), registo/login,
- *       criação de pedido (guest checkout) e consulta de um pedido por ID
- *       (GET /api/orders/{id} — lookup por ID de alta entropia).</li>
- *   <li>Autenticado: listar os meus pedidos (GET /api/orders) e perfil (/api/auth/me).</li>
+ *       consulta de um pedido por ID (GET /api/orders/{id} — lookup por ID de
+ *       alta entropia com prova de contacto) e carrinho de convidado.</li>
+ *   <li>Autenticado: criar pedido (POST /api/orders — o checkout exige conta),
+ *       listar os meus pedidos (GET /api/orders) e perfil (/api/auth/me).</li>
  *   <li>Admin: gestão de produtos, pedidos, newsletter, uploads.</li>
  * </ul>
  */
@@ -122,9 +123,11 @@ public class SecurityConfig {
                         // validado em PaymentWebhookService. Sem segredo configurado
                         // responde 503, nunca aceita uma notificação não assinada.
                         .requestMatchers(HttpMethod.POST, "/api/payments/webhook").permitAll()
-                        // Validação de cupão no checkout — pública (guest checkout).
+                        // Validação de cupão no checkout — pública (o carrinho de
+                        // convidado também o usa; a validação é sem efeitos).
                         .requestMatchers(HttpMethod.POST, "/api/orders/validate-coupon").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/orders").permitAll()
+                        // Criar pedido exige conta: o checkout é autenticado (sem
+                        // matcher público cai no anyRequest().authenticated()).
                         // Carrinho de convidado (X-Guest-Id) sem conta.
                         .requestMatchers(HttpMethod.PUT, "/api/cart").permitAll()
                         .anyRequest().authenticated())

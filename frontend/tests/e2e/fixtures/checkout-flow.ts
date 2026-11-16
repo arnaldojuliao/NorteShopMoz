@@ -16,11 +16,6 @@ export const TEST_PRODUCT_NAME = 'Capa para iPhone';
 /** Número usado nos dados de entrega (formato aceite pelo servidor). */
 export const TEST_PAYMENT_PHONE = '+258 84 123 4567';
 
-/** Email único por pedido — o travão de checkout é por contacto (3/hora). */
-function uniqueContactEmail(): string {
-  return `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@test.com`;
-}
-
 /** Adiciona o produto de teste ao carrinho (badge do cabeçalho ≥ 1 item). */
 export async function addTestProductToCart(page: Page): Promise<void> {
   await page.goto(TEST_PRODUCT_URL);
@@ -106,10 +101,9 @@ export async function placeOrder(
   await addTestProductToCart(page);
   await page.goto('/checkout');
   await fillDeliveryAddress(page, addressOptions);
-  // O email é obrigatório no submit (é a prova de contacto do convidado e o
-  // destino da confirmação). Único a cada pedido: o travão do checkout é por
-  // contacto (3 pedidos/hora) e sem isso os specs esgotavam a quota.
-  await page.getByPlaceholder('nome@email.com').fill(uniqueContactEmail());
+  // O email de contacto é o da conta logada (o checkout exige sessão) — não
+  // há campo a preencher. Único a cada pedido: o travão do checkout é por
+  // contacto (3/hora) e os specs usam utilizadores de teste distintos.
   await choosePaymentMethod(page);
   await page.getByRole('button', { name: 'Comprar', exact: true }).click();
 
