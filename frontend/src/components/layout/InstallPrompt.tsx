@@ -55,12 +55,18 @@ export function InstallPrompt() {
   // (prompt nativo do navegador), logo que o site abre.
   useEffect(() => {
     if (!deferred || visible) return;
+    // A dispensa é autoritativa: sem este check, o efeito re-agenda o banner
+    // 1,2 s depois de o utilizador fechar (voltava sempre, em loop).
+    if (localStorage.getItem(STORAGE_KEY)) return;
     const t = window.setTimeout(() => setVisible(true), 1200);
     return () => window.clearTimeout(t);
   }, [deferred, visible]);
 
   const dismiss = useCallback(() => {
     localStorage.setItem(STORAGE_KEY, "1");
+    // Limpa também o prompt pendente: com `deferred` não nulo, o efeito de
+    // exibição volta a agendar o banner e ele reaparece em loop.
+    setDeferred(null);
     setVisible(false);
   }, []);
 
