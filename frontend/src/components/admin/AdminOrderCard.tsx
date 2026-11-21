@@ -5,11 +5,24 @@ import Link from "next/link";
 import { ArrowRight, Package, Printer, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
+import { WhatsAppIcon } from "@/components/ui/SocialIcons";
 import { useCurrency } from "@/context/CurrencyContext";
 import { formatDate } from "@/lib/format";
 import { ORDER_STATUSES, STATUS_TONE } from "@/lib/orderStatus";
 import type { Order, OrderStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+/** Link wa.me para o telefone do cliente (acrescenta 258 a números locais). */
+function customerWhatsAppHref(order: Order, message: string): string | null {
+  const digits = (order.address?.phone ?? "").replace(/[^0-9]/g, "");
+  if (digits.length < 9) return null;
+  const full = digits.startsWith("258")
+    ? digits
+    : digits.length === 9
+      ? `258${digits}`
+      : digits;
+  return `https://wa.me/${full}?text=${encodeURIComponent(message)}`;
+}
 
 /** Pílula com o estado do pedido (cor vem de `STATUS_TONE`, fonte única). */
 function StatusPill({ status }: { status: OrderStatus }) {
@@ -77,6 +90,16 @@ export function AdminOrderCard({
   // para isso: antes, apagar o número e gravar não fazia nada (o clique era
   // engolido) e o tracking errado ficava no pedido do cliente.
   const clearingTracking = trackingValue.trim() === "" && Boolean(o.trackingCode);
+
+  // Reenvio manual do link pelo WhatsApp: o cliente recebe a mensagem já
+  // escrita no número da morada (canal de reserva quando o email não chega).
+  const firstName = (o.address?.fullName ?? "").trim().split(" ")[0];
+  const whatsappLinkHref = o.checkoutUrl
+    ? customerWhatsAppHref(
+        o,
+        `Olá${firstName ? ` ${firstName}` : ""}! O link de pagamento do seu pedido ${o.id} já está pronto: ${o.checkoutUrl}`,
+      )
+    : null;
 
   const saveTracking = async () => {
     const code = trackingValue.trim();
@@ -196,14 +219,26 @@ export function AdminOrderCard({
                 : "Link de pagamento em falta — o cliente foi avisado"}
             </p>
             {o.checkoutUrl && (
-              <a
-                href={o.checkoutUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs font-semibold text-primary-700 underline underline-offset-2"
-              >
-                Abrir link
-              </a>
+              <span className="flex flex-wrap items-center gap-3">
+                <a
+                  href={o.checkoutUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-semibold text-primary-700 underline underline-offset-2"
+                >
+                  Abrir link
+                </a>
+                {whatsappLinkHref && (
+                  <a
+                    href={whatsappLinkHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 underline underline-offset-2"
+                  >
+                    <WhatsAppIcon className="size-3.5" /> Enviar ao cliente
+                  </a>
+                )}
+              </span>
             )}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -220,7 +255,8 @@ export function AdminOrderCard({
             </Button>
           </div>
           <p className="mt-1.5 text-xs text-amber-800">
-            Ao guardar, o cliente recebe o link por email (e WhatsApp, se tiver o canal ligado).
+            Ao guardar, o cliente é avisado por email (e WhatsApp, se tiver o canal ligado).
+            Também pode enviar-lhe o link diretamente pelo WhatsApp, em «Enviar ao cliente».
           </p>
         </div>
       )}
