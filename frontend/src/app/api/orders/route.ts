@@ -1,6 +1,38 @@
 import { NextResponse } from "next/server";
-import { ApiError, forwardedAuthHeaders } from "@/lib/api";
+import type { Order } from "@/lib/types";
+import { apiGet, ApiError, forwardedAuthHeaders } from "@/lib/api";
 import { submitOrder, type OrderPayload } from "@/lib/orders";
+
+/**
+ * GET /api/orders
+ * Lista os pedidos da conta autenticada (same-origin proxy para o backend).
+ *
+ * Sem este handler, um GET /api/orders caía neste route handler local (que só
+ * tinha POST) e o Next respondia **405 Method Not Allowed** — a página
+ * «Pedidos» mostrava «Houve um problema a contactar a loja» mesmo com a API de
+ * pé. As rotas de ficheiro têm prioridade sobre os rewrites do next.config.
+ *
+ * A sessão (cookie HttpOnly) é encaminhada; sem credenciais o backend devolve
+ * 401 e o mesmo status é propagado (o chamador distingue sessão de avaria).
+ */
+export async function GET(request: Request) {
+  const headers = forwardedAuthHeaders(request);
+  if (!headers.cookie && !headers.Authorization) {
+    return NextResponse.json({ error: "Autenticação necessária" }, { status: 401 });
+  }
+  try {
+    const { data } = await apiGet<{ data: Order[] }>("/api/orders", 0, true, headers);
+    return NextResponse.json({ data });
+  } catch (err) {
+    if (err instanceof ApiError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json(
+      { error: "Serviço de pedidos indisponível. Tente novamente em instantes." },
+      { status: 503 },
+    );
+  }
+}
 
 /**
  * POST /api/orders

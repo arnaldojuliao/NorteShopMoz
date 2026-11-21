@@ -16,7 +16,7 @@
  * apaga todas as caches com outro nome (é também assim que se limpa a cache
  * antiga, que continha HTML e payloads RSC).
  */
-const CACHE = "nsm-static-v4";
+const CACHE = "nsm-static-v5";
 const CORE = [
   "/",
   "/manifest.webmanifest",
@@ -111,14 +111,13 @@ self.addEventListener("fetch", (event) => {
           return response;
         })
         .catch(() =>
-          caches.match(request).then(
-            (cached) =>
-              cached ||
-              new Response(OFFLINE_HTML, {
-                status: 503,
-                headers: { "Content-Type": "text/html; charset=utf-8" },
-              }),
-          ),
+          caches
+            .match(request)
+            .then((cached) => cached || offlineResponse())
+            // CacheStorage indisponível/corrompido: nunca deixar o respondWith
+            // resolver sem Response (o Chrome acusa «Failed to convert value
+            // to 'Response'» e a navegação falha em vez de mostrar o aviso).
+            .catch(() => offlineResponse()),
         ),
     );
     return;
@@ -135,8 +134,19 @@ self.addEventListener("fetch", (event) => {
           }
           return response;
         })
-        .catch(() => cached);
+        // Sem cache E sem rede, o `.catch(() => cached)` resolvia `undefined`
+        // e o navegador rebentava com "Failed to convert value to 'Response'".
+        // Um 503 vazio é uma resposta válida (o recurso simplesmente falha).
+        .catch(() => cached || new Response(null, { status: 503 }));
       return cached || network;
     }),
   );
 });
+
+/** Página offline — nova Response a cada chamada (o corpo é de uso único). */
+function offlineResponse() {
+  return new Response(OFFLINE_HTML, {
+    status: 503,
+    headers: { "Content-Type": "text/html; charset=utf-8" },
+  });
+}
