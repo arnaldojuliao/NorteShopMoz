@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>4.1.0</version>
+		<version>4.2.0</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>mz.norteshopmoz</groupId>
@@ -29,16 +29,16 @@
 	<properties>
 		<java.version>21</java.version>
 		<dependency-check.version>13.0.0</dependency-check.version>
-		<testcontainers.version>1.20.3</testcontainers.version>
-		<mockito.version>5.14.2</mockito.version>
-		<assertj.version>3.26.3</assertj.version>        <!-- 3.x é a linha compatível com Spring Boot 4 / Spring Framework 7.
+		<testcontainers.version>1.21.4</testcontainers.version>
+		<mockito.version>5.24.0</mockito.version>
+		<assertj.version>3.27.7</assertj.version>        <!-- 3.x é a linha compatível com Spring Boot 4 / Spring Framework 7.
              A 2.5.0 compilava mas rebentava em runtime:
              NoSuchMethodError: ControllerAdviceBean.<init>(Object) ao gerar
              /v3/api-docs (o Swagger respondia 500, não a documentação). -->
         <springdoc.version>3.2.0</springdoc.version>
 		<!-- Compatível com Spring Boot 4.x (matriz oficial do ShedLock 7.x). -->
-		<shedlock.version>7.7.0</shedlock.version>
-		<jacoco.version>0.8.13</jacoco.version>
+		<shedlock.version>7.11.0</shedlock.version>
+		<jacoco.version>0.8.16</jacoco.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -124,18 +124,18 @@
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>
 			<artifactId>jjwt-api</artifactId>
-			<version>0.12.6</version>
+			<version>0.13.0</version>
 		</dependency>
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>
 			<artifactId>jjwt-impl</artifactId>
-			<version>0.12.6</version>
+			<version>0.13.0</version>
 			<scope>runtime</scope>
 		</dependency>
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>
 			<artifactId>jjwt-jackson</artifactId>
-			<version>0.12.6</version>
+			<version>0.13.0</version>
 			<scope>runtime</scope>
 		</dependency>
 
