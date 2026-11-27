@@ -82,9 +82,10 @@ class FlywayMigrationTest {
             // A lista é deliberadamente explícita: crescer o schema obriga a
             // passar por aqui e a confirmar que a migração nova foi mesmo
             // aplicada (e que nenhuma foi saltada por um baseline).
+            // Versões atuais: V1 a V14 (V14 adiciona neighborhood/reference).
             assertThat(applied)
                     .as("num schema vazio o Flyway aplica todas as migrações, sem baseline")
-                    .containsExactly("1", "2", "3", "4", "5", "6", "7");
+                    .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14");
             assertThat(allSucceeded).isTrue();
             assertThat(applied).doesNotContain("0");
 
@@ -123,6 +124,12 @@ class FlywayMigrationTest {
             // A V7 criou a tabela do ShedLock (uma só execução das tarefas
             // periódicas por período, mesmo com várias réplicas da API).
             assertThat(tableExists(conn, "shedlock")).isTrue();
+
+            // A V14 adicionou neighborhood e reference nas moradas de entrega.
+            assertThat(columnExists(conn, "orders", "neighborhood")).isTrue();
+            assertThat(columnExists(conn, "orders", "reference")).isTrue();
+            assertThat(columnExists(conn, "address_book_entries", "neighborhood")).isTrue();
+            assertThat(columnExists(conn, "address_book_entries", "reference")).isTrue();
         }
 
         // O contexto arrancou com ddl-auto=validate (senão o teste nem corria) e
