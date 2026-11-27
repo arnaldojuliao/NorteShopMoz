@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { BadgeCheck, ChevronDown, Loader2, Send, Star } from "lucide-react";
 import type { Product, Review } from "@/lib/types";
-import { getReviewsFor, getFaqsFor } from "@/lib/data/reviews";
+import { getFaqsFor } from "@/lib/data/reviews";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useLoginModal } from "@/context/LoginModalContext";
@@ -61,8 +61,9 @@ export function ProductTabs({ product }: { product: Product }) {
   const { openLogin } = useLoginModal();
   const { notify } = useToast();
 
-  // Avaliações: começa com as locais (seed) e é substituída pela API quando chega.
-  const [reviews, setReviews] = useState<Review[]>(() => getReviewsFor(product));
+  // Avaliações reais: começa vazio e é preenchido pela API. Nunca há reviews
+  // de demonstração — um produto sem avaliações não pode parecer avaliado.
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({ rating: 0, title: "", comment: "" });
 
@@ -78,7 +79,7 @@ export function ProductTabs({ product }: { product: Product }) {
         setReviews(data.map((r) => ({ ...r, id: String(r.id) })));
       })
       .catch(() => {
-        // API indisponível — mantém as avaliações locais (seed).
+        // API indisponível — mantém a lista vazia (não inventar avaliações).
       });
     return () => {
       alive = false;
@@ -180,17 +181,32 @@ export function ProductTabs({ product }: { product: Product }) {
 
         {active === "avaliacoes" && (
           <div className="max-w-3xl space-y-6">
-            <div className="flex items-center gap-4 rounded-2xl bg-slate-50 p-5">
-              <span className="font-display text-5xl font-extrabold text-slate-900">
-                {product.rating.toFixed(1)}
-              </span>
-              <div>
-                <Rating value={product.rating} size="md" />
+            {reviews.length > 0 ? (
+              <div className="flex items-center gap-4 rounded-2xl bg-slate-50 p-5">
+                <span className="font-display text-5xl font-extrabold text-slate-900">
+                  {(reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)}
+                </span>
+                <div>
+                  <Rating
+                    value={reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length}
+                    size="md"
+                  />
+                  <p className="mt-1 text-sm text-slate-500">
+                    Baseado em {reviews.length}{" "}
+                    {reviews.length === 1 ? "avaliação" : "avaliações"}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl bg-slate-50 p-5">
+                <p className="font-display text-base font-bold text-slate-900">
+                  Ainda sem avaliações
+                </p>
                 <p className="mt-1 text-sm text-slate-500">
-                  Baseado em {product.ratingCount} avaliações verificadas
+                  Seja o primeiro a partilhar a sua experiência com este produto.
                 </p>
               </div>
-            </div>
+            )}
 
             {/* Formulário de avaliação — apenas clientes autenticados */}
             {logged ? (

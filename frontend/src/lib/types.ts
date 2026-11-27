@@ -83,6 +83,8 @@ export interface CartItem {
   qty: number;
   variant?: string;
   freeShipping?: boolean;
+  /** Stock disponível no momento em que foi adicionado (limite local). */
+  stock?: number;
 }
 
 export interface Province {
@@ -180,6 +182,10 @@ export interface AddressBookEntry {
   address: string;
   city: string;
   province: string;
+  /** Bairro/zona (opcional). */
+  neighborhood?: string;
+  /** Ponto de referência para o entregador (opcional). */
+  reference?: string;
   isDefault: boolean;
   /** Coordenadas GPS (para o entregador) — opcional. */
   coords?: { lat: number; lng: number };

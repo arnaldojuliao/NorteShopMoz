@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { ProductListing } from "@/components/product/ProductListing";
 import { ProductImage } from "@/components/product/ProductImage";
-import { repo } from "@/lib/repo";
 
 interface CategoryPageClientProps {
   initialCategory: {
@@ -57,26 +56,12 @@ export default function CategoryPageClient({
   // A categoria vem do URL: a lista lateral (que trocava a categoria sem mudar
   // de rota) saiu, portanto o slug é fixo enquanto este componente estiver montado.
   const activeSlug = initialCategory.slug;
-  const [products, setProducts] = useState(initialProducts);
+  // Os produtos já vêm renderizados do servidor: não há segundo pedido à API
+  // (que mostrava um esqueleto e podia apagar a lista se a rede falhasse).
+  const [products] = useState(initialProducts);
   const [categories] = useState(initialCategories);
-  const [loading, setLoading] = useState(false);
 
   const currentCategory = categories.find(c => c.slug === activeSlug) || initialCategory;
-
-  useEffect(() => {
-    const loadProducts = async () => {
-      setLoading(true);
-      try {
-        const data = await repo.getCategoryProducts(activeSlug);
-        setProducts(data);
-      } catch {
-        setProducts([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadProducts();
-  }, [activeSlug]);
 
   useEffect(() => {
     document.title = `${currentCategory.name} — Comprar online em Moçambique`;
@@ -121,13 +106,7 @@ export default function CategoryPageClient({
 
           {/* Products grid */}
           <div className="space-y-4">
-            {loading ? (
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-                {[...Array(8)].map((_, i) => (
-                  <div key={i} className="aspect-[3/4] animate-pulse bg-slate-100 rounded-xl" />
-                ))}
-              </div>
-            ) : products.length === 0 ? (
+            {products.length === 0 ? (
               <div className="text-center py-12">
                 <p className="text-slate-500">Nenhum produto nesta categoria.</p>
               </div>

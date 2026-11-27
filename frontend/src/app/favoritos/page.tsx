@@ -9,7 +9,6 @@ import { repo } from "@/lib/repo";
 import type { Product, UserProfile } from "@/lib/types";
 import { Avatar } from "@/components/ui/Avatar";
 import { ProductGrid } from "@/components/product/ProductGrid";
-import { ProductGridSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
 import { useLoginModal } from "@/context/LoginModalContext";
@@ -77,9 +76,7 @@ export default function FavoritesPage() {
             title="Entre para ver os seus favoritos"
             description="Os favoritos ficam guardados na sua conta e sincronizam entre dispositivos."
           />
-        ) : products === null ? (
-          <ProductGridSkeleton count={4} />
-        ) : count === 0 ? (
+        ) : products === null ? null : count === 0 ? (
           <EmptyState
             icon={Heart}
             title="Sem favoritos ainda"

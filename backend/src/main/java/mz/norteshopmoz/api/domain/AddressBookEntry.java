@@ -49,6 +49,12 @@ public class AddressBookEntry {
     @Column(nullable = false, length = 80)
     private String province;
 
+    @Column(length = 120)
+    private String neighborhood;
+
+    @Column(length = 300)
+    private String reference;
+
     @Column(nullable = false)
     @JsonProperty("isDefault")
     private boolean isDefault;

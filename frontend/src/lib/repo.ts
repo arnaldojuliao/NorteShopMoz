@@ -18,7 +18,14 @@ import { newCategories as localCategories } from "@/lib/new-categories";
  * (contrato /api/*, envelope { data, meta }); se a API estiver indisponível
  * (erro de rede, timeout, HTTP >= 400) ou demorar, cai para os dados locais
  * (src/lib/data) — a loja continua a funcionar offline.
+ *
+ * Em PRODUÇÃO os dados locais são de demonstração (preços, stock e avaliações
+ * inventados): uma falha da API NUNCA os pode mostrar a um cliente real. O
+ * fallback fica limitado a desenvolvimento, salvo opt-in explícito
+ * NEXT_PUBLIC_DEMO_DATA=1.
  */
+const demoDataEnabled =
+  process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_DEMO_DATA === "1";
 export interface ProductQuery {
   category?: string;
   q?: string;
@@ -91,6 +98,7 @@ function matchSearch(list: Product[], query: string): Product[] {
       p.name,
       p.brand ?? "",
       p.shortDescription,
+      ...p.description,
       ...p.tags,
       ...p.specs.map((s) => `${s.label} ${s.value}`),
     ]
@@ -164,7 +172,7 @@ export const repo = {
       const { data } = await apiGet<ApiEnvelope<Category[]>>("/api/categories");
       return data.filter((c) => !isTestCategory(c.slug));
     } catch {
-      return localCategories;
+      return demoDataEnabled ? localCategories : [];
     }
   },
 
@@ -196,7 +204,7 @@ export const repo = {
       if (query.limit && list.length > query.limit) list = list.slice(0, query.limit);
       return list;
     } catch {
-      return filterLocalProducts(query);
+      return demoDataEnabled ? filterLocalProducts(query) : [];
     }
   },
 
@@ -209,7 +217,7 @@ export const repo = {
       // Um produto de teste não tem página na loja (404), tal como um slug inválido.
       return isTestProduct(data) ? undefined : data;
     } catch {
-      return getProductBySlug(slug);
+      return demoDataEnabled ? getProductBySlug(slug) : undefined;
     }
   },
 
@@ -218,7 +226,7 @@ export const repo = {
       const { data } = await apiGet<ApiEnvelope<Product[]>>("/api/products?deal=1");
       return data;
     } catch {
-      return localDealsOfToday;
+      return demoDataEnabled ? localDealsOfToday : [];
     }
   },
 
@@ -227,7 +235,7 @@ export const repo = {
       const { data } = await apiGet<ApiEnvelope<Product[]>>("/api/products?featured=1");
       return data;
     } catch {
-      return localFeatured;
+      return demoDataEnabled ? localFeatured : [];
     }
   },
 
@@ -236,7 +244,7 @@ export const repo = {
       const { data } = await apiGet<ApiEnvelope<Product[]>>("/api/products?bestseller=1");
       return data;
     } catch {
-      return localBestsellers;
+      return demoDataEnabled ? localBestsellers : [];
     }
   },
 
@@ -245,7 +253,7 @@ export const repo = {
       const { data } = await apiGet<ApiEnvelope<Product[]>>("/api/products?isNew=1");
       return data;
     } catch {
-      return localNewArrivals;
+      return demoDataEnabled ? localNewArrivals : [];
     }
   },
 
@@ -274,8 +282,8 @@ export const repo = {
    * com ou sem backend e cobertura maior do que a pesquisa ?q= do backend
    * (que só cobre nome/marca/descrição).
    */
-  async search(query: string): Promise<Product[]> {
-    const all = await repo.getProducts();
+  async search(query: string, filters: ProductQuery = {}): Promise<Product[]> {
+    const all = await repo.getProducts(filters);
     return matchSearch(all, query);
   },
 };

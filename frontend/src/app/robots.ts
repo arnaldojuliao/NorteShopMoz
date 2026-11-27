@@ -22,6 +22,7 @@ export default function robots(): MetadataRoute.Robots {
           "/entrar",
           "/favoritos",
           "/pedido/",
+          "/pedidos",
           "/recuperar-password",
           "/verificar-email",
         ],

@@ -9,6 +9,46 @@ import { apiGet, apiPut } from "@/lib/api";
  * Autenticação via cookies HttpOnly + CSRF (anexados automaticamente por api.ts).
  */
 
+/**
+ * Chave local do livro de endereços, isolada por utilizador. A chave global
+ * antiga (`nsm:addresses`) fazia com que, numa conta sem endereços no servidor,
+ * o checkout usasse os endereços guardados pela conta anterior no mesmo
+ * dispositivo — e os enviasse para a conta errada.
+ */
+export function addressStorageKey(userId?: string | null): string {
+  return userId ? `nsm:addresses:${userId}` : "nsm:addresses:guest";
+}
+
+/** Lê os endereços locais do utilizador (ou do convidado). */
+export function readLocalAddresses(userId?: string | null): AddressBookEntry[] {
+  try {
+    const key = addressStorageKey(userId);
+    let raw = window.localStorage.getItem(key);
+    // Migração única dos endereços de convidado da chave antiga.
+    if (raw == null && !userId) {
+      raw = window.localStorage.getItem("nsm:addresses");
+      if (raw != null) window.localStorage.setItem(key, raw);
+    }
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as AddressBookEntry[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Grava os endereços locais do utilizador (ou do convidado). */
+export function writeLocalAddresses(
+  userId: string | null | undefined,
+  addresses: AddressBookEntry[],
+): void {
+  try {
+    window.localStorage.setItem(addressStorageKey(userId), JSON.stringify(addresses));
+  } catch {
+    /* armazenamento indisponível */
+  }
+}
+
 /** Forma devolvida pelo servidor (id numérico + coordenadas planas). */
 interface ServerAddress extends Omit<AddressBookEntry, "id" | "coords"> {
   id: number;
@@ -51,6 +91,8 @@ export async function saveMyAddresses(
       address: a.address,
       city: a.city,
       province: a.province,
+      neighborhood: a.neighborhood,
+      reference: a.reference,
       isDefault: a.isDefault,
       lat: a.coords?.lat,
       lng: a.coords?.lng,

@@ -77,6 +77,7 @@ public class CsrfProtectionFilter extends OncePerRequestFilter {
             "/api/auth/verify-email-code",   // autenticado + altera estado da conta
             "/api/auth/resend-verification", // idem (envia email)
             "/api/orders/",
+            "/api/returns",
             "/api/cart",
             "/api/favorites",
             "/api/addresses",

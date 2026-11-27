@@ -106,6 +106,14 @@ public class PaymentWebhookService {
                 .or(() -> reference == null ? Optional.empty() : orderRepository.findById(reference))
                 .orElseThrow(() -> ApiException.notFound("Referência de pagamento desconhecida."));
 
+        // O fallback por `reference` só é seguro quando o pedido ainda não tem
+        // referência de pagamento (gravação falhou) ou quando coincide com o id
+        // notificado. Sem isto, uma referência arbitrária confirmava outro pedido.
+        if (order.getPaymentReference() != null
+                && !order.getPaymentReference().equals(paymentId)) {
+            throw ApiException.notFound("Referência de pagamento desconhecida.");
+        }
+
         if (!EVENT_PAYMENT_SUCCESS.equalsIgnoreCase(event)) {
             // payment.failed (ou um evento que não conhecemos): o pagamento não foi
             // concluído. Não se cancela automaticamente o pedido — quem decide é a
@@ -119,13 +127,34 @@ public class PaymentWebhookService {
             return order.getId();
         }
 
-        if (order.getStatus().ordinal() >= OrderStatus.PAGAMENTO_CONFIRMADO.ordinal()
-                && order.getStatus() != OrderStatus.CANCELADO) {
+        // O dinheiro foi cobrado, mas o pedido já tinha sido cancelado (expiração,
+        // cancelamento manual). Não se reabre um pedido cancelado: fica uma
+        // incidência para a operação estornar/decidir no painel do provedor.
+        if (order.getStatus() == OrderStatus.CANCELADO) {
+            log.error("Pagamento {} confirmado para o pedido JÁ CANCELADO {} — estorno manual necessário",
+                    paymentId, order.getId());
+            incidentService.record(order.getId(), paymentId, PaymentIncident.TYPE_REFUND_FAILED,
+                    "Pagamento confirmado pelo gateway depois de o pedido ter sido cancelado. "
+                            + "É necessário estornar manualmente.");
+            return order.getId();
+        }
+
+        if (order.getStatus().ordinal() >= OrderStatus.PAGAMENTO_CONFIRMADO.ordinal()) {
             // Já confirmado (ou mais à frente): repetição da notificação — sem efeito.
             return order.getId();
         }
         if (order.getStatus() == OrderStatus.AGUARDA_PAGAMENTO
                 || order.getStatus() == OrderStatus.PEDIDO_RECEBIDO) {
+            // Montante/moeda: a assinatura prova a origem, mas não que o valor
+            // cobrado corresponde ao pedido. Só se confirma com os valores certos.
+            if (!valuesMatchOrder(data, order)) {
+                log.error("Notificação de pagamento com montante/moeda divergente — pedido {} (pagamento {})",
+                        order.getId(), paymentId);
+                incidentService.record(order.getId(), paymentId, PaymentIncident.TYPE_WEBHOOK_FAILED,
+                        "Montante ou moeda da notificação não corresponde ao total do pedido "
+                                + order.getTotal() + " MZN. Pedido NÃO confirmado.");
+                return order.getId();
+            }
             order.setStatus(OrderStatus.PAGAMENTO_CONFIRMADO);
             // O checkout já passou: o URL de pagamento não deve ficar exposto.
             order.setCheckoutUrl(null);
@@ -133,6 +162,29 @@ public class PaymentWebhookService {
             log.info("Pagamento confirmado por webhook para o pedido {}", order.getId());
         }
         return order.getId();
+    }
+
+    /**
+     * Confirma que o montante e a moeda notificados correspondem ao pedido.
+     * Campos ausentes são tolerados (gateways antigos); quando presentes, uma
+     * divergência bloqueia a confirmação.
+     */
+    private static boolean valuesMatchOrder(JsonNode data, Order order) {
+        JsonNode amountNode = data == null ? null : data.get("amount");
+        if (amountNode != null && !amountNode.isNull() && order.getTotal() != null) {
+            try {
+                java.math.BigDecimal notified = amountNode.isNumber()
+                        ? amountNode.decimalValue()
+                        : new java.math.BigDecimal(amountNode.asText().trim());
+                if (notified.compareTo(order.getTotal()) != 0) {
+                    return false;
+                }
+            } catch (NumberFormatException e) {
+                return false;
+            }
+        }
+        String currency = text(data, "currency");
+        return currency == null || "MZN".equalsIgnoreCase(currency);
     }
 
     /** HMAC-SHA256 do corpo cru comparado em tempo constante. */

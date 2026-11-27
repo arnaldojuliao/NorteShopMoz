@@ -91,15 +91,9 @@ export function OrderTracking({ id, email }: { id: string; email?: string }) {
   }, [order, notify]);
 
   if (loading) {
-    return (
-      <div className="container-nsm max-w-3xl py-6">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 w-56 rounded-xl bg-slate-100" />
-          <div className="h-24 rounded-2xl bg-slate-100" />
-          <div className="h-40 rounded-2xl bg-slate-100" />
-        </div>
-      </div>
-    );
+    // Sem esqueleto: a página aparece quando os dados chegam, sem um ecrã
+    // intermédio de "loading" que atrasa a percepção de velocidade.
+    return null;
   }
 
   if (!order) {

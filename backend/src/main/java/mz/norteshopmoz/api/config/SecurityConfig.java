@@ -50,7 +50,7 @@ public class SecurityConfig {
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/social",
-                                "/api/auth/verify-email", "/api/auth/refresh", "/api/auth/revoke-refresh",
+                                "/api/auth/verify-email", "/api/auth/refresh",
                                 "/api/auth/forgot-password", "/api/auth/reset-password",
                                 // Entrega o token CSRF no corpo (o cookie é host-only:
                                 // com a API num subdomínio o JS do frontend não o lê).

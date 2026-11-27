@@ -128,6 +128,11 @@ export function useLocalStorageState<T>(key: string, initial: T) {
   const initialRef = useRef(initial);
   const [state, setState] = useState<T>(initial);
   const [hydrated, setHydrated] = useState(false);
+  // Chave cujo valor já foi lido. Numa mudança de chave (ex.: login muda a
+  // chave de endereços para a do utilizador) o efeito de escrita NÃO pode
+  // gravar o estado da chave anterior na chave nova antes da leitura terminar
+  // — isso copiava endereços de uma conta para outra.
+  const [hydratedKey, setHydratedKey] = useState<string | null>(null);
 
   useEffect(() => {
     let value: T = initialRef.current;
@@ -141,17 +146,18 @@ export function useLocalStorageState<T>(key: string, initial: T) {
     queueMicrotask(() => {
       setState(value);
       setHydrated(true);
+      setHydratedKey(key);
     });
   }, [key]);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || hydratedKey !== key) return;
     try {
       window.localStorage.setItem(key, JSON.stringify(state));
     } catch {
       /* ignore */
     }
-  }, [key, state, hydrated]);
+  }, [key, state, hydrated, hydratedKey]);
 
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
@@ -170,5 +176,5 @@ export function useLocalStorageState<T>(key: string, initial: T) {
   // localStorage não existe no servidor). Quem NÃO pode decidir com o valor por
   // omissão (ex.: o guard de sessão local da área de conta, que abria o modal de
   // login antes de o perfil chegar) usa este sinal para esperar.
-  return [state, setState, hydrated] as const;
+  return [state, setState, hydrated && hydratedKey === key] as const;
 }

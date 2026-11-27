@@ -5,8 +5,8 @@ import type { Product } from "@/lib/types";
 import { ProductCard } from "@/components/product/ProductCard";
 import { cn } from "@/lib/utils";
 
-const INITIAL_COUNT = 100;
-const LOAD_MORE_COUNT = 100;
+const INITIAL_COUNT = 12;
+const LOAD_MORE_COUNT = 12;
 
 /**
  * Proporções de imagem que alternam no mosaico — são elas que fazem as
@@ -49,7 +49,8 @@ function useLayoutMode() {
  * - Carregamento progressivo: mostra `INITIAL_COUNT` cartões e revela mais
  *   `LOAD_MORE_COUNT` sempre que o fundo chega ao ecrã (IntersectionObserver),
  *   até ao último produto. A distribuição é por índice, por isso acrescentar
- *   um lote não move os cartões anteriores de coluna.
+ *   um lote não move os cartões anteriores de coluna. Lotes pequenos evitam
+ *   renderizar (e descarregar imagens de) 100 produtos de uma só vez.
  */
 export function ProductGrid({
   products,

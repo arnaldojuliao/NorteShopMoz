@@ -286,6 +286,10 @@ public class AuthService {
         user.setResetTokenExpiry(null);
         userRepository.save(user);
         sessionRevocationService.revokeAll(user.getId());
+        // A reposição via link também termina todas as sessões: sem isto, um
+        // atacante com um refresh token roubado continuava dentro da conta
+        // mesmo depois de a vítima repor a palavra-passe.
+        refreshTokenService.revokeAll(user.getId());
         auditService.logAuthEvent(AuditService.AuthEvent.PASSWORD_RESET_SUCCESS, user.getEmail(), clientIp, userAgent, true, "Password reset via email link");
     }
 

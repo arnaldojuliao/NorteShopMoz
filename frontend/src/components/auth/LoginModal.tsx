@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createPortal } from "react-dom";
 import {
@@ -95,12 +94,6 @@ async function getFacebookSdk() {
   return fb;
 }
 
-/** Após login/registo, volta à página inicial com a sessão já aplicada. */
-function goHome(router: ReturnType<typeof useRouter>) {
-  router.replace("/");
-  router.refresh();
-}
-
 /** Marca NorteShopMoz (monograma + nome) — usada no painel de marca e no topo mobile. */
 function BrandMark({ size = "md" }: { size?: "sm" | "md" }) {
   return (
@@ -141,7 +134,6 @@ const BENEFITS = [
 ];
 
 export function LoginModal() {
-  const router = useRouter();
   const { open, closeLogin } = useLoginModal();
   const { login, register, socialLogin } = useAuth();
   const { notify } = useToast();
@@ -191,14 +183,13 @@ export function LoginModal() {
       try {
         await socialLogin("google", credential);
         closeLogin();
-        goHome(router);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Não foi possível entrar com o Google.");
       } finally {
         setLoading(false);
       }
     },
-    [socialLogin, router, closeLogin],
+    [socialLogin, closeLogin],
   );
 
   /**
@@ -255,7 +246,6 @@ export function LoginModal() {
             }
             await socialLogin("facebook", response.authResponse.accessToken);
             closeLogin();
-            goHome(router);
           } catch (err) {
             setError(err instanceof Error ? err.message : "Não foi possível entrar com o Facebook.");
           } finally {
@@ -314,7 +304,6 @@ export function LoginModal() {
         setRegistered({ name: authUser.fullName || name, email });
       } else {
         closeLogin();
-        goHome(router);
       }
     } catch (err) {
       if (err instanceof ApiError) {
@@ -628,7 +617,6 @@ export function LoginModal() {
           if (!registered) return;
           setRegistered(null);
           closeLogin();
-          goHome(router);
         }}
         title="Conta criada"
         size="sm"
@@ -679,7 +667,7 @@ export function LoginModal() {
                 type="submit"
                 fullWidth
                 loading={verifying}
-                disabled={codeExpired || code.length !== 5}
+                disabled={codeExpired || code.length !== 6}
                 className="mt-3"
               >
                 Confirmar email
@@ -699,7 +687,6 @@ export function LoginModal() {
               if (!registered) return;
               setRegistered(null);
               closeLogin();
-              goHome(router);
             }}
           >
             Continuar para a loja

@@ -88,6 +88,23 @@ public interface OrderRepository extends JpaRepository<Order, String> {
             @Param("cancelled") OrderStatus cancelled,
             @Param("delivered") OrderStatus delivered);
 
+    /**
+     * Transição ATÓMICA AGUARDA_PAGAMENTO → CANCELADO, para a expiração.
+     *
+     * <p>O {@code markCancelled} genérico só exclui CANCELADO/ENTREGUE — pelo que
+     * uma expiração que leu o pedido como AGUARDA_PAGAMENTO podia cancelá-lo
+     * depois de o webhook o ter confirmado (dinheiro cobrado, stock reposto,
+     * encomenda perdida). Aqui a linha só muda se AINDA estiver à espera de
+     * pagamento.</p>
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update Order o set o.status = :cancelled "
+            + "where o.id = :id "
+            + "and o.status = :awaiting")
+    int markCancelledIfAwaitingPayment(@Param("id") String id,
+            @Param("cancelled") OrderStatus cancelled,
+            @Param("awaiting") OrderStatus awaiting);
+
     /* ── Retenção (expurgo opt-in dos pedidos antigos) ────────────────────────
      *
      * Ver OrderRetentionCleanup: só corre quando `app.orders.retention-days` > 0

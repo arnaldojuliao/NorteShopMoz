@@ -24,17 +24,17 @@ export const site = {
   url: envOr(process.env.NEXT_PUBLIC_SITE_URL, "https://norteshopmoz.com"),
 
   /** Telefone/WhatsApp de apoio (apenas dígitos, com indicativo). */
-  phoneDigits: envOr(process.env.NEXT_PUBLIC_SUPPORT_PHONE, "258841234567").replace(/[^0-9]/g, ""),
+  phoneDigits: envOr(process.env.NEXT_PUBLIC_SUPPORT_PHONE, "258878352877").replace(/[^0-9]/g, ""),
   /** Telefone formatado para exibição. */
-  phoneDisplay: envOr(process.env.NEXT_PUBLIC_SUPPORT_PHONE_DISPLAY, "+258 84 123 4567"),
+  phoneDisplay: envOr(process.env.NEXT_PUBLIC_SUPPORT_PHONE_DISPLAY, "+258 87 835 2877"),
 
   /** Emails institucionais. */
-  email: envOr(process.env.NEXT_PUBLIC_SUPPORT_EMAIL, "apoio@norteshopmoz.com"),
-  privacyEmail: envOr(process.env.NEXT_PUBLIC_PRIVACY_EMAIL, "privacidade@norteshopmoz.com"),
+  email: envOr(process.env.NEXT_PUBLIC_SUPPORT_EMAIL, "arnaldojuliaoj2@gmail.com"),
+  privacyEmail: envOr(process.env.NEXT_PUBLIC_PRIVACY_EMAIL, "arnaldojuliaoj2@gmail.com"),
 
   /** Morada física. */
-  addressLine1: envOr(process.env.NEXT_PUBLIC_ADDRESS_LINE1, "Av. 24 de Julho"),
-  addressCity: envOr(process.env.NEXT_PUBLIC_ADDRESS_CITY, "Maputo"),
+  addressLine1: envOr(process.env.NEXT_PUBLIC_ADDRESS_LINE1, "Av. Agostinho Neto - Murrapaniua"),
+  addressCity: envOr(process.env.NEXT_PUBLIC_ADDRESS_CITY, "Nampula"),
   addressCountry: envOr(process.env.NEXT_PUBLIC_ADDRESS_COUNTRY, "Moçambique"),
 
   /** Horário de atendimento. */

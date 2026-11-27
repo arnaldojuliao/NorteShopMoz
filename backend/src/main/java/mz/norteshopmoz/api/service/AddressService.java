@@ -60,6 +60,8 @@ public class AddressService {
                     .address(r.address().trim())
                     .city(r.city().trim())
                     .province(r.province())
+                    .neighborhood(trimToNull(r.neighborhood()))
+                    .reference(trimToNull(r.reference()))
                     .isDefault(isDefault)
                     .lat(r.lat())
                     .lng(r.lng())

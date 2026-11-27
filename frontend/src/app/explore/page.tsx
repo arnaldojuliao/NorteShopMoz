@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 
 import { ProductListing } from "@/components/product/ProductListing";
-import { ProductGridSkeleton } from "@/components/ui/Skeleton";
 import { repo } from "@/lib/repo";
 
 export const metadata: Metadata = {
@@ -36,36 +35,44 @@ async function ExploreContent({ searchParams }: ExplorePageProps) {
   const query = (params.q ?? "").trim();
 
   // Filtros de listagem — antigos parâmetros de /procurar, agora aqui.
-  if (params.deal) {
+  // Combinam com o termo de pesquisa em vez de o ignorarem: antes
+  // /explore?q=iphone&deal=1 devolvia TODAS as ofertas e escondia a pesquisa.
+  const filters = {
+    dealOnly: Boolean(params.deal),
+    newOnly: Boolean(params.new),
+    bestsellerOnly: Boolean(params.bestseller),
+  };
+  const flagTitle = filters.dealOnly
+    ? "Ofertas especiais"
+    : filters.newOnly
+      ? "Novidades"
+      : filters.bestsellerOnly
+        ? "Mais vendidos"
+        : null;
+  const flagEmpty = filters.dealOnly
+    ? "Sem ofertas ativas neste momento."
+    : filters.newOnly
+      ? "Ainda não há novidades para mostrar."
+      : "Ainda não há vendas suficientes para este ranking.";
+
+  if (query) {
     return (
       <ListingView
         state={{
-          title: "Ofertas especiais",
-          emptyMessage: "Sem ofertas ativas neste momento.",
+          title: flagTitle ? `${flagTitle}: “${query}”` : `Resultados para “${query}”`,
+          emptyMessage: "",
         }}
-        products={await repo.getProducts({ dealOnly: true })}
+        products={await repo.search(query, filters)}
+        query={query}
       />
     );
   }
-  if (params.new) {
+
+  if (flagTitle) {
     return (
       <ListingView
-        state={{
-          title: "Novidades",
-          emptyMessage: "Ainda não há novidades para mostrar.",
-        }}
-        products={await repo.getProducts({ newOnly: true })}
-      />
-    );
-  }
-  if (params.bestseller) {
-    return (
-      <ListingView
-        state={{
-          title: "Mais vendidos",
-          emptyMessage: "Ainda não há vendas suficientes para este ranking.",
-        }}
-        products={await repo.getProducts({ bestsellerOnly: true })}
+        state={{ title: flagTitle, emptyMessage: flagEmpty }}
+        products={await repo.getProducts(filters)}
       />
     );
   }
@@ -73,28 +80,13 @@ async function ExploreContent({ searchParams }: ExplorePageProps) {
   // Sem termo de pesquisa mostra-se o catálogo completo. Antes disto a página
   // era só um ícone e uma frase — e é o destino do botão «Filtrar e procurar»
   // da home, que aterrava numa página praticamente vazia.
-  if (!query) {
-    return (
-      <ListingView
-        state={{
-          title: "Explorar produtos",
-          emptyMessage: "Ainda não há produtos no catálogo.",
-        }}
-        products={await repo.getProducts()}
-      />
-    );
-  }
-
-  const products = await repo.search(query);
-
   return (
     <ListingView
       state={{
-        title: `Resultados para “${query}”`,
-        emptyMessage: "",
+        title: "Explorar produtos",
+        emptyMessage: "Ainda não há produtos no catálogo.",
       }}
-      products={products}
-      query={query}
+      products={await repo.getProducts()}
     />
   );
 }
@@ -143,13 +135,7 @@ function ListingView({
 
 export default function ExplorePage({ searchParams }: ExplorePageProps) {
   return (
-    <Suspense
-      fallback={
-        <div className="container-nsm py-6">
-          <ProductGridSkeleton count={8} />
-        </div>
-      }
-    >
+    <Suspense fallback={null}>
       <ExploreContent searchParams={searchParams} />
     </Suspense>
   );

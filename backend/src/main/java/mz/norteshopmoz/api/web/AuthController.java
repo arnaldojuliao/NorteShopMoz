@@ -3,6 +3,7 @@ package mz.norteshopmoz.api.web;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import mz.norteshopmoz.api.config.JwtCookieService;
+import mz.norteshopmoz.api.exception.ApiException;
 import mz.norteshopmoz.api.security.ClientIpResolver;
 import mz.norteshopmoz.api.security.UserPrincipal;
 import mz.norteshopmoz.api.service.AuthService;
@@ -216,6 +217,9 @@ public class AuthController {
     public ResponseEntity<?> revokeRefresh(
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody RefreshTokenRequest request) {
+        if (principal == null) {
+            throw ApiException.unauthorized("Sessão inválida");
+        }
         authService.revokeRefreshToken(principal.id(), request.refreshToken());
         return ResponseEntity.ok(ApiResponse.data(Map.of(
                 "message", "Sessão terminada neste dispositivo.")));

@@ -74,22 +74,28 @@ public class OrderIdempotencyService {
      * da primeira tentativa) — ou null se a chave for nova ou estiver apenas
      * reservada (em processamento).
      */
-    public Order findExisting(String key) {
+    public Order findExisting(String userId, String key) {
         if (key == null || key.isBlank()) {
             return null;
         }
         // Circuito aberto → falha aberta sem tocar no Redis (evita esperar o
         // timeout em cada checkout enquanto o Redis estiver pendurado).
-        if (!circuitBreaker.tryAcquire("idem:" + key)) {
+        if (!circuitBreaker.tryAcquire("idem:" + scope(userId) + key)) {
             return null;
         }
         try {
-            String value = redis.opsForValue().get(KEY_PREFIX + key);
+            String value = redis.opsForValue().get(storageKey(userId, key));
             circuitBreaker.markSuccess();
             if (value == null || PENDING.equals(value)) {
                 return null;
             }
-            return orderRepository.findById(value).orElse(null);
+            Order order = orderRepository.findById(value).orElse(null);
+            // A chave pertence ao utilizador que a criou: nunca devolver o
+            // pedido de outra conta a quem apresente uma chave alheia.
+            if (order == null || !sameUser(order.getUserId(), userId)) {
+                return null;
+            }
+            return order;
         } catch (Exception e) {
             logRedisFailure(key, e);
             return null;
@@ -105,15 +111,15 @@ public class OrderIdempotencyService {
      *         <p>Fail-open: com o Redis indisponível devolve {@code true} (deixa
      *         prosseguir), coerente com o resto do sistema.
      */
-    public boolean reserve(String key) {
+    public boolean reserve(String userId, String key) {
         if (key == null || key.isBlank()) {
             return true;
         }
-        if (!circuitBreaker.tryAcquire("idem:" + key)) {
+        if (!circuitBreaker.tryAcquire("idem:" + scope(userId) + key)) {
             return true;
         }
         try {
-            Boolean acquired = redis.opsForValue().setIfAbsent(KEY_PREFIX + key, PENDING, TTL);
+            Boolean acquired = redis.opsForValue().setIfAbsent(storageKey(userId, key), PENDING, TTL);
             circuitBreaker.markSuccess();
             return Boolean.TRUE.equals(acquired);
         } catch (Exception e) {
@@ -123,15 +129,15 @@ public class OrderIdempotencyService {
     }
 
     /** Conclui a reserva: associa a chave ao pedido criado (best-effort). */
-    public void complete(String key, Order order) {
+    public void complete(String userId, String key, Order order) {
         if (key == null || key.isBlank() || order == null) {
             return;
         }
-        if (!circuitBreaker.tryAcquire("idem:" + key)) {
+        if (!circuitBreaker.tryAcquire("idem:" + scope(userId) + key)) {
             return;
         }
         try {
-            redis.opsForValue().set(KEY_PREFIX + key, order.getId(), TTL);
+            redis.opsForValue().set(storageKey(userId, key), order.getId(), TTL);
             circuitBreaker.markSuccess();
         } catch (Exception e) {
             logRedisFailure(key, e);
@@ -143,19 +149,36 @@ public class OrderIdempotencyService {
      * cobrança falhou), permitindo ao cliente tentar de novo com a mesma chave.
      * Só apaga se a chave ainda estiver em {@code PENDING}.
      */
-    public void release(String key) {
+    public void release(String userId, String key) {
         if (key == null || key.isBlank()) {
             return;
         }
-        if (!circuitBreaker.tryAcquire("idem:" + key)) {
+        if (!circuitBreaker.tryAcquire("idem:" + scope(userId) + key)) {
             return;
         }
         try {
-            redis.execute(RELEASE_IF_PENDING, List.of(KEY_PREFIX + key), PENDING);
+            redis.execute(RELEASE_IF_PENDING, List.of(storageKey(userId, key)), PENDING);
             circuitBreaker.markSuccess();
         } catch (Exception e) {
             logRedisFailure(key, e);
         }
+    }
+
+    /**
+     * Chave de armazenamento namespaced por utilizador. Pedidos autenticados
+     * usam o id da conta; um pedido sem sessão (não acontece no checkout atual)
+     * cai no espaço "guest" para nunca colidir com chaves de contas.
+     */
+    private static String storageKey(String userId, String key) {
+        return KEY_PREFIX + scope(userId) + key;
+    }
+
+    private static String scope(String userId) {
+        return userId == null || userId.isBlank() ? "guest:" : userId + ":";
+    }
+
+    private static boolean sameUser(String orderUserId, String userId) {
+        return orderUserId == null ? userId == null : orderUserId.equals(userId);
     }
 
     /** Loga a falha (sem spam quando o circuito já está aberto) e alimenta o breaker. */

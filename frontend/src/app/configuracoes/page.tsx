@@ -44,7 +44,7 @@ import { useToast } from "@/context/ToastContext";
 import { apiPatch, clearApiCache } from "@/lib/api";
 import { useLocalStorageState } from "@/lib/hooks";
 import { CODE_LENGTH, useEmailVerificationCode } from "@/lib/useEmailVerificationCode";
-import { fetchMyAddresses, saveMyAddresses } from "@/lib/addresses";
+import { addressStorageKey, fetchMyAddresses, saveMyAddresses } from "@/lib/addresses";
 import { getOrdersKey, ORDERS_KEY } from "@/lib/orders";
 import { accountPaymentMethods } from "@/lib/payments";
 import { provinces } from "@/lib/data/provinces";
@@ -279,28 +279,6 @@ export default function SettingsPage() {
     DEFAULT_NOTIF_PREFS,
   );
 
-  // Endereços de entrega (mesma lista da área de cliente — nsm:addresses).
-  // Com sessão, a lista sincroniza com o servidor (GET/PUT /api/addresses).
-  const [addresses, setAddresses] = useLocalStorageState<AddressBookEntry[]>("nsm:addresses", []);
-  const addressesRef = useRef(addresses);
-  useEffect(() => {
-    addressesRef.current = addresses;
-  }, [addresses]);
-  // Último utilizador já sincronizado — reinicia por sessão (login/logout).
-  const addressSyncedForRef = useRef<string | null>(null);
-  const lastAddressesRef = useRef(addresses);
-  const [newAddr, setNewAddr] = useState({
-    label: "",
-    fullName: "",
-    phone: "",
-    address: "",
-    city: "",
-    province: provinces[0].name,
-    coords: undefined as { lat: number; lng: number } | undefined,
-  });
-  const [addingAddr, setAddingAddr] = useState(false);
-  const [locating, setLocating] = useState(false);
-
   // Perfil do utilizador (mesmos dados da área de cliente — nsm:profile/nsm:user).
   const {
     user: authUser,
@@ -312,6 +290,38 @@ export default function SettingsPage() {
   // Foto de perfil: do servidor quando há sessão (cada conta tem a sua), para a
   // cópia local de outra conta nunca aparecer aqui.
   const avatarSrc = useAvatarSrc();
+
+  // Endereços de entrega (mesma lista da área de cliente). A chave local é
+  // isolada por utilizador; com sessão, a lista sincroniza com o servidor
+  // (GET/PUT /api/addresses).
+  const [addresses, setAddresses] = useLocalStorageState<AddressBookEntry[]>(
+    authUser ? addressStorageKey(authUser.id) : addressStorageKey(null),
+    [],
+  );
+  const addressesRef = useRef(addresses);
+  useEffect(() => {
+    addressesRef.current = addresses;
+  }, [addresses]);
+  // Último utilizador já sincronizado — reinicia por sessão (login/logout).
+  const addressSyncedForRef = useRef<string | null>(null);
+  // Só depois de o GET do servidor terminar é que as alterações locais podem
+  // ser enviadas: sem esta barreira, a lista local (possivelmente vazia) de
+  // uma conta nova apagava os endereços que já existiam no servidor.
+  const addressReadyForRef = useRef<string | null>(null);
+  const lastAddressesRef = useRef(addresses);
+  const [newAddr, setNewAddr] = useState({
+    label: "",
+    fullName: "",
+    phone: "",
+    address: "",
+    city: "",
+    province: provinces[0].name,
+    neighborhood: "",
+    reference: "",
+    coords: undefined as { lat: number; lng: number } | undefined,
+  });
+  const [addingAddr, setAddingAddr] = useState(false);
+  const [locating, setLocating] = useState(false);
 
   // Preferências de notificação: guardadas localmente (instantâneo) e sincronizadas
   // com a conta no servidor (PATCH /api/auth/me/notification-prefs) quando há sessão.
@@ -337,7 +347,14 @@ export default function SettingsPage() {
 
   // Sincronização do livro de endereços com o servidor (só com sessão real).
   useEffect(() => {
-    if (!authUser || addressSyncedForRef.current === authUser.id) return;
+    if (!authUser) {
+      // Logout: a próxima conta tem de voltar a ler o servidor (e nunca herdar
+      // a lista local da conta anterior).
+      addressSyncedForRef.current = null;
+      addressReadyForRef.current = null;
+      return;
+    }
+    if (addressSyncedForRef.current === authUser.id) return;
     addressSyncedForRef.current = authUser.id;
     let alive = true;
     const boot = async () => {
@@ -350,6 +367,8 @@ export default function SettingsPage() {
         // Servidor vazio mas endereços locais existem → envia-os (primeiro acesso nesta conta).
         void saveMyAddresses(addressesRef.current);
       }
+      addressReadyForRef.current = authUser.id;
+      lastAddressesRef.current = addressesRef.current;
     };
     void boot();
     return () => {
@@ -360,7 +379,8 @@ export default function SettingsPage() {
 
   // Persiste no servidor cada alteração (fire-and-forget; evita eco com a ref).
   useEffect(() => {
-    if (!authUser || lastAddressesRef.current === addresses) return;
+    if (!authUser || addressReadyForRef.current !== authUser.id) return;
+    if (lastAddressesRef.current === addresses) return;
     lastAddressesRef.current = addresses;
     void saveMyAddresses(addresses);
   }, [addresses, authUser]);
@@ -499,7 +519,6 @@ export default function SettingsPage() {
     for (const key of [
       "nsm:cart",
       "nsm:favorites",
-      "nsm:addresses",
       "nsm:profile",
       "nsm:notif-prefs",
       "nsm:prefs",
@@ -507,6 +526,10 @@ export default function SettingsPage() {
     ]) {
       window.localStorage.removeItem(key);
     }
+    // Endereços vivem em chaves por utilizador (nsm:addresses:<id>/guest).
+    Object.keys(window.localStorage)
+      .filter((k) => k === "nsm:addresses" || k.startsWith("nsm:addresses:"))
+      .forEach((k) => window.localStorage.removeItem(k));
     // Pedidos: chave global de convidado + todas as chaves isoladas por utilizador.
     Object.keys(window.localStorage)
       .filter((k) => k === "nsm:orders" || k.startsWith("nsm:orders:"))
@@ -965,6 +988,11 @@ export default function SettingsPage() {
                   <p className="mt-0.5 text-sm text-slate-500">
                     {a.address}, {a.city} — {a.province}
                   </p>
+                  {(a.neighborhood || a.reference) && (
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      {[a.neighborhood, a.reference].filter(Boolean).join(" · ")}
+                    </p>
+                  )}
                   {a.coords && (
                     <a
                       href={`https://www.google.com/maps?q=${a.coords.lat},${a.coords.lng}`}
@@ -999,6 +1027,8 @@ export default function SettingsPage() {
                     address: newAddr.address,
                     city: newAddr.city,
                     province: newAddr.province,
+                    neighborhood: newAddr.neighborhood.trim() || undefined,
+                    reference: newAddr.reference.trim() || undefined,
                     isDefault: addresses.length === 0,
                     coords: newAddr.coords,
                   };
@@ -1010,6 +1040,8 @@ export default function SettingsPage() {
                     address: "",
                     city: "",
                     province: provinces[0].name,
+                    neighborhood: "",
+                    reference: "",
                     coords: undefined,
                   });
                   setAddingAddr(false);
@@ -1046,6 +1078,18 @@ export default function SettingsPage() {
                   value={newAddr.address}
                   onChange={(e) => setNewAddr({ ...newAddr, address: e.target.value })}
                 />
+                <div className="grid grid-cols-2 gap-3">
+                  <Input
+                    label="Bairro"
+                    value={newAddr.neighborhood}
+                    onChange={(e) => setNewAddr({ ...newAddr, neighborhood: e.target.value })}
+                  />
+                  <Input
+                    label="Ponto de referência"
+                    value={newAddr.reference}
+                    onChange={(e) => setNewAddr({ ...newAddr, reference: e.target.value })}
+                  />
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <Input
                     label="Cidade"
@@ -1344,7 +1388,10 @@ export default function SettingsPage() {
             <button
               type="button"
               onClick={() => {
-                window.localStorage.removeItem("nsm:addresses");
+                Object.keys(window.localStorage)
+                  .filter((k) => k === "nsm:addresses" || k.startsWith("nsm:addresses:"))
+                  .forEach((k) => window.localStorage.removeItem(k));
+                setAddresses([]);
                 notify("Endereços guardados removidos.");
               }}
               className="flex w-full items-center gap-3 py-3.5 text-left text-sm font-semibold text-slate-700 transition hover:text-red-600"

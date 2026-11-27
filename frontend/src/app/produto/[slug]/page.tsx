@@ -33,6 +33,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return {
     title: product.name,
     description: product.shortDescription,
+    alternates: { canonical: `/produto/${product.slug}` },
     openGraph: {
       title: `${product.name} — NorteShopMoz`,
       description: product.shortDescription,
@@ -70,11 +71,17 @@ export default async function ProductPage({ params }: PageProps) {
       itemCondition: "https://schema.org/NewCondition",
       seller: { "@type": "Organization", name: "NorteShopMoz" },
     },
-    aggregateRating: {
-      "@type": "AggregateRating",
-      ratingValue: product.rating,
-      reviewCount: product.ratingCount,
-    },
+    // Sem avaliações reais não se emite aggregateRating: dados inventados no
+    // JSON-LD violam as diretrizes do Google e podem gerar penalização.
+    ...(product.ratingCount > 0
+      ? {
+          aggregateRating: {
+            "@type": "AggregateRating",
+            ratingValue: product.rating,
+            reviewCount: product.ratingCount,
+          },
+        }
+      : {}),
   };
 
   const breadcrumbJsonLd = {

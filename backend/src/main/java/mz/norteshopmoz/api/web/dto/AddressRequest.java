@@ -11,6 +11,8 @@ public record AddressRequest(
         @NotBlank(message = "Endereço é obrigatório") @Size(max = 200) String address,
         @NotBlank(message = "Cidade é obrigatória") @Size(max = 80) String city,
         @NotBlank(message = "Província é obrigatória") @Size(max = 80) String province,
+        @Size(max = 120, message = "Bairro demasiado longo") String neighborhood,
+        @Size(max = 300, message = "Referência demasiado longa") String reference,
         Boolean isDefault,
         Double lat,
         Double lng) {}

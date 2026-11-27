@@ -144,6 +144,8 @@ export interface OrderPayload {
     address: string;
     city: string;
     province: string;
+    neighborhood?: string;
+    reference?: string;
     notes?: string;
   };
   /** Dados de pagamento online (M-Pesa/e-Mola: telefone; cartão: últimos 4 dígitos). */

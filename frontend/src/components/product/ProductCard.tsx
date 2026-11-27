@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Package, ShoppingCart, Truck } from "lucide-react";
 import type { Product } from "@/lib/types";
 import { formatCompact } from "@/lib/format";
@@ -61,6 +62,7 @@ export function ProductCard({
 }) {
   const { addItem } = useCart();
   const { notify } = useToast();
+  const router = useRouter();
   const { format } = useCurrency();
   const out = product.stock <= 0;
 
@@ -86,6 +88,13 @@ export function ProductCard({
   const handleAddToCart = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     if (out) return;
+    // Com variantes (cor/tamanho) não há adição rápida possível: a escolha é
+    // obrigatória, por isso o cartão leva ao produto em vez de comprar a
+    // variante errada (antes seguia sempre sem variante).
+    if (product.variants?.some((v) => (v.options?.length ?? 0) > 0)) {
+      router.push(`/produto/${product.slug}`);
+      return;
+    }
     addItem(product);
     notify("Adicionado ao carrinho 🛒");
   };

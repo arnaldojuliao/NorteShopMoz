@@ -87,6 +87,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
   // Bloqueia o sync até o carrinho do servidor ser carregado no arranque (senão
   // um carrinho local vazio sobrescreveria o do servidor antes do GET terminar).
   const booted = useRef(false);
+  // Sessão cujo carrinho do servidor já foi carregado. O sync só corre depois
+  // de o GET da sessão ATUAL terminar — sem isto, ao entrar na conta o carrinho
+  // de convidado era enviado para a conta antes de se ler o carrinho dela.
+  const bootedSession = useRef<string | null>(null);
+  // Sessão anterior: distingue login (guest→conta: fundir carrinhos) de logout
+  // (conta→guest: limpar o carrinho local, que é do utilizador que saiu).
+  const previousSession = useRef(sessionId);
+  const skipGuestLoad = useRef(false);
 
   const addItem = useCallback(
     (product: Product, qty = 1, variant?: string) => {
@@ -114,6 +122,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
             qty: product.stock > 0 ? Math.min(qty, product.stock) : qty,
             variant,
             freeShipping: product.freeShipping,
+            stock: product.stock,
           },
         ];
       });
@@ -135,11 +144,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
     (productId: string, qty: number, variant?: string) => {
       setItems((prev) =>
         prev
-          .map((i) =>
-            i.productId === productId && (i.variant ?? "") === (variant ?? "")
-              ? { ...i, qty: Math.max(1, qty) }
-              : i,
-          )
+          .map((i) => {
+            if (i.productId !== productId || (i.variant ?? "") !== (variant ?? "")) {
+              return i;
+            }
+            // Nunca acima do stock conhecido do produto: o servidor volta a
+            // validar no checkout, mas o carrinho não pode prometer unidades
+            // que já não existem.
+            const max = i.stock != null && i.stock > 0 ? i.stock : qty;
+            return { ...i, qty: Math.max(1, Math.min(qty, max)) };
+          })
           .filter((i) => i.qty > 0),
       );
     },
@@ -157,9 +171,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
    * usa o UUID de convidado do dispositivo.
    */
   const cartHeaders = useCallback((): Record<string, string> | null => {
+    // Com sessão o backend identifica o utilizador pelo cookie HttpOnly; enviar
+    // X-Guest-Id ao mesmo tempo misturava os dois carrinhos no servidor.
+    if (user) return {};
     if (guestId) return { "X-Guest-Id": guestId };
     return {};
-  }, [guestId]);
+  }, [guestId, user]);
 
   /**
    * Envia o carrinho atual ao servidor. O servidor recalcula preços do catálogo
@@ -197,7 +214,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   // Envia alterações do carrinho ao servidor (debounced), depois do arranque.
   useEffect(() => {
-    if (!cartHeaders() || !booted.current || !hydrated) return;
+    if (!cartHeaders() || !booted.current || bootedSession.current !== sessionId || !hydrated) return;
     if (skipSync.current) {
       skipSync.current = false;
       return;
@@ -215,6 +232,25 @@ export function CartProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const headers = cartHeaders();
     if (!headers) return;
+    const wasGuest = previousSession.current === "guest";
+    const isGuest = sessionId === "guest";
+    previousSession.current = sessionId;
+
+    // Logout: o carrinho local pertence à conta que saiu. Limpa-o e não o
+    // reidrata a partir do carrinho de convidado do servidor.
+    if (!wasGuest && isGuest) {
+      clearItems();
+      skipGuestLoad.current = true;
+      booted.current = true;
+      bootedSession.current = sessionId;
+      return;
+    }
+    if (isGuest && skipGuestLoad.current) {
+      skipGuestLoad.current = false;
+      bootedSession.current = sessionId;
+      return;
+    }
+
     let alive = true;
     // Nova sessão (login/arranque/convidado): recomeça a fase de boot para o
     // carrinho do servidor ser carregado antes de qualquer sync (não misturar).
@@ -224,8 +260,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
         const { data } = await apiGet<{ data: CartItem[] }>("/api/cart", 0, true, headers);
         if (!alive) return;
         if (data && data.length > 0) {
-          skipSync.current = true;
-          setItems(dedupeCart(data));
+          if (wasGuest && !isGuest && itemsRef.current.length > 0) {
+            // Login com carrinho de convidado: funde-o com o da conta em vez
+            // de o descartar. O sync seguinte grava a lista combinada.
+            setItems(dedupeCart([...data, ...itemsRef.current]));
+          } else {
+            skipSync.current = true;
+            setItems(dedupeCart(data));
+          }
         } else if (itemsRef.current.length > 0) {
           // Servidor vazio mas carrinho local com itens → envia para o servidor.
           syncToServer();
@@ -233,13 +275,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
       } catch {
         // Offline — mantém o carrinho local.
       } finally {
-        if (alive) booted.current = true;
+        if (alive) {
+          booted.current = true;
+          bootedSession.current = sessionId;
+        }
       }
     })();
     return () => {
       alive = false;
     };
-  }, [cartHeaders, setItems, syncToServer, sessionId]);
+  }, [cartHeaders, clearItems, setItems, syncToServer, sessionId]);
 
   const { count, subtotal } = useMemo(() => {
     return {

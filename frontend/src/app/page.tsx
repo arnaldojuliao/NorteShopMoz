@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { repo } from "@/lib/repo";
 import { TrustBar } from "@/components/home/TrustBar";
 import { FlashDeals } from "@/components/home/FlashDeals";
@@ -11,6 +12,10 @@ import { selectFlashDeals } from "@/lib/deals";
 
 /** Quantos produtos as ofertas relâmpago mostram (5 = uma linha no desktop). */
 const FLASH_DEALS_SIZE = 5;
+
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+};
 
 export default async function HomePage() {
   const catalog = await repo.getProducts();

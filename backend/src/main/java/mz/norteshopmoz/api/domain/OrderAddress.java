@@ -35,6 +35,14 @@ public class OrderAddress {
     @Column(nullable = false, length = 80)
     private String province;
 
+    /** Bairro/zona — usado pelo entregador em conjunto com a referência. */
+    @Column(length = 120)
+    private String neighborhood;
+
+    /** Ponto de referência (ex.: "perto da escola primária"). */
+    @Column(length = 300)
+    private String reference;
+
     @Column(length = 500)
     private String notes;
 }

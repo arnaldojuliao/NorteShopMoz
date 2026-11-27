@@ -134,7 +134,7 @@ public class OrderService {
         // após falha de rede) em vez de criar outro. Verificado ANTES da validação
         // para o retry também passar por erros de validação transitórios.
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-            Order existing = idempotency.findExisting(idempotencyKey);
+            Order existing = idempotency.findExisting(userId, idempotencyKey);
             if (existing != null) {
                 return existing;
             }
@@ -258,8 +258,8 @@ public class OrderService {
         // concluído, devolve-se esse pedido; se ainda estiver em curso (outra
         // tentativa a cobrar), responde-se 409 sem cobrar — o cliente reenvia e
         // recebe o pedido que entretanto ficou concluído.
-        if (hasIdempotencyKey && !idempotency.reserve(idempotencyKey)) {
-            Order concurrent = idempotency.findExisting(idempotencyKey);
+        if (hasIdempotencyKey && !idempotency.reserve(userId, idempotencyKey)) {
+            Order concurrent = idempotency.findExisting(userId, idempotencyKey);
             if (concurrent != null) {
                 return concurrent;
             }
@@ -278,7 +278,7 @@ public class OrderService {
             // A cobrança não chegou a acontecer (ou foi rejeitada): liberta a
             // reserva para o cliente poder tentar de novo com a mesma chave.
             if (hasIdempotencyKey) {
-                idempotency.release(idempotencyKey);
+                idempotency.release(userId, idempotencyKey);
             }
             throw e;
         }
@@ -344,7 +344,7 @@ public class OrderService {
                         // (que continua PENDING) e o cliente podia tentar de novo —
                         // em vez de ficar 24h com uma chave a apontar para um
                         // pedido inexistente.
-                        idempotency.complete(idempotencyKey, saved);
+                        idempotency.complete(userId, idempotencyKey, saved);
                         emailService.sendOrderConfirmation(saved);
                         whatsApp.sendOrderConfirmation(saved);
                         // Pedido online sem link do gateway: o admin tem de o
@@ -370,7 +370,7 @@ public class OrderService {
             // é libertada para o cliente poder repetir a compra. Um estorno que
             // falhe abre uma incidência (REFUND_FAILED) na fila de reconciliação.
             if (hasIdempotencyKey) {
-                idempotency.release(idempotencyKey);
+                idempotency.release(userId, idempotencyKey);
             }
             if (paymentReference != null) {
                 paymentService.refund(paymentReference, chargeAmount, orderId);
@@ -472,14 +472,14 @@ public class OrderService {
             throw ApiException.forbidden("Só pode cancelar os seus próprios pedidos");
         }
 
-        return applyCancellation(order);
+        return applyCancellation(order, false);
     }
 
     /**
      * Cancela o pedido: marca o estado, repõe stock/vendas dos itens e envia o
      * email de cancelamento. Assume que as validações de estado já foram feitas.
      */
-    private Order applyCancellation(Order order) {
+    private Order applyCancellation(Order order, boolean onlyIfAwaitingPayment) {
         OrderStatus current = order.getStatus();
         if (current == OrderStatus.CANCELADO) {
             throw ApiException.badRequest("Este pedido já foi cancelado");
@@ -499,19 +499,44 @@ public class OrderService {
         // linha repõe o stock — sem isto, dois cancelamentos simultâneos (dono +
         // admin, ou duplo clique) passavam ambos pela verificação de estado acima
         // e repunham o stock DUAS vezes, inflando o inventário (oversell futuro).
-        if (orderRepository.markCancelled(order.getId(), OrderStatus.CANCELADO, OrderStatus.ENTREGUE) == 0) {
-            throw ApiException.badRequest("Este pedido já foi cancelado");
+        int transitioned = onlyIfAwaitingPayment
+                ? orderRepository.markCancelledIfAwaitingPayment(order.getId(),
+                        OrderStatus.CANCELADO, OrderStatus.AGUARDA_PAGAMENTO)
+                : orderRepository.markCancelled(order.getId(),
+                        OrderStatus.CANCELADO, OrderStatus.ENTREGUE);
+        if (transitioned == 0) {
+            // Na expiração pode ter sido o webhook a confirmar entretanto: não é
+            // um erro de utilizador, é a corrida resolvida a favor do pagamento.
+            throw ApiException.badRequest(onlyIfAwaitingPayment
+                    ? "O pedido deixou de estar à espera de pagamento"
+                    : "Este pedido já foi cancelado");
         }
         order.setStatus(OrderStatus.CANCELADO);
         Order cancelled = order;
 
         restoreStockAndSold(toRestore, order.getId());
+        // O cupão consumido no checkout volta a poder ser usado: sem isto, um
+        // pedido cancelado queimava uma utilização do limite para sempre.
+        if (order.getCouponCode() != null && !order.getCouponCode().isBlank()) {
+            couponService.release(order.getCouponCode());
+        }
+
+        // Pedido já pago: cancelar sem devolver o dinheiro deixava o cliente sem
+        // produto e sem reembolso. O estorno corre depois do commit (chamada
+        // externa); uma falha fica registada como incidência REFUND_FAILED.
+        final boolean alreadyPaid = current.ordinal() >= OrderStatus.PAGAMENTO_CONFIRMADO.ordinal();
+        final String paidReference = order.getPaymentReference();
+        final BigDecimal paidAmount = order.getTotal();
 
         // Email SÓ após commit — um rollback a seguir não pode anunciar um
         // cancelamento que não aconteceu.
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
+                if (alreadyPaid && paidReference != null && paidAmount != null
+                        && paidAmount.signum() > 0) {
+                    paymentService.refund(paidReference, paidAmount, cancelled.getId());
+                }
                 emailService.sendOrderCancellation(cancelled);
                 whatsApp.sendOrderStatusUpdate(cancelled);
             }
@@ -567,7 +592,7 @@ public class OrderService {
         // Cancelar por aqui tem de repor o stock — igual ao DELETE /api/orders/{id}.
         // Sem isto, o stock decrementado na criação ficava perdido para sempre.
         if (next == OrderStatus.CANCELADO) {
-            return applyCancellation(order);
+            return applyCancellation(order, false);
         }
         order.setStatus(next);
         if (trackingCode != null) {
@@ -616,7 +641,7 @@ public class OrderService {
         int expired = 0;
         for (Order order : stale) {
             try {
-                applyCancellation(order);
+                applyCancellation(order, true);
                 expired++;
             } catch (RuntimeException e) {
                 // Já cancelado/entregue entretanto, ou erro pontual: segue o lote.
@@ -673,6 +698,8 @@ public class OrderService {
                 .address(a.address())
                 .city(a.city())
                 .province(a.province())
+                .neighborhood(a.neighborhood())
+                .reference(a.reference())
                 .notes(a.notes())
                 .build();
     }

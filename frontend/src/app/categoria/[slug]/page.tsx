@@ -27,6 +27,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return {
     title: `${category.name} — Comprar online em Moçambique`,
     description: `${category.description} Compre ${category.name.toLowerCase()} online na NorteShopMoz com entrega para todo Moçambique.`,
+    alternates: { canonical: `/categoria/${category.slug}` },
     openGraph: {
       title: `${category.name} · NorteShopMoz`,
       description: category.description,

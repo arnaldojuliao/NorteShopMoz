@@ -86,7 +86,7 @@ class OrderServiceTest {
                 new BigDecimal("100"),
                 new BigDecimal("0"),
                 new BigDecimal("1100"),
-                new OrderRequest.AddressRequest("John", "+258840000000", email, "Street", "City", "Maputo Cidade", null),
+                new OrderRequest.AddressRequest("John", "+258840000000", email, "Street", "City", "Maputo Cidade", null, null, null),
                 "m-pesa",
                 new OrderRequest.PaymentInfoRequest("+258840000000", null),
                 couponCode
@@ -184,7 +184,7 @@ class OrderServiceTest {
                         "img.jpg", product.getPrice(), 1, null)),
                 new BigDecimal("500"), new BigDecimal("100"), BigDecimal.ZERO, new BigDecimal("600"),
                 new OrderRequest.AddressRequest("John", "+258840000000", "conc@example.com",
-                        "Street", "City", "Maputo Cidade", null),
+                        "Street", "City", "Maputo Cidade", null, null, null),
                 "m-pesa", new OrderRequest.PaymentInfoRequest("+258840000000", null), null);
 
         ExecutorService pool = Executors.newFixedThreadPool(2);

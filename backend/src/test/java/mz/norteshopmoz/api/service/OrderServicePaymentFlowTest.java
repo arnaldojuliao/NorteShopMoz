@@ -205,7 +205,7 @@ class OrderServicePaymentFlowTest {
                 BigDecimal.ZERO,
                 new BigDecimal("1100"),
                 new OrderRequest.AddressRequest("John", "+258840000000", "buyer@example.com",
-                        "Street", "City", "Maputo Cidade", null),
+                        "Street", "City", "Maputo Cidade", null, null, null),
                 "m-pesa",
                 new OrderRequest.PaymentInfoRequest("+258840000000", null),
                 null);

@@ -32,8 +32,11 @@ spring:
       username: ${REDIS_USERNAME:default}
       password: ${REDIS_PASSWORD}
       database: 0
+      # Upstash exige TLS; o Redis local do docker-compose.prod.yml não tem.
+      # Sem este interruptor, o perfil prod falhava TODAS as operações de estado
+      # (rate limit, idempotência, refresh tokens) contra o Redis do compose.
       ssl:
-        enabled: true
+        enabled: ${REDIS_SSL:true}
       timeout: ${REDIS_TIMEOUT:2s}
 
   flyway:

@@ -3,6 +3,7 @@ package mz.norteshopmoz.api.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -15,6 +16,7 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import mz.norteshopmoz.api.config.AppProperties;
 import mz.norteshopmoz.api.domain.Order;
+import mz.norteshopmoz.api.domain.PaymentIncident;
 import mz.norteshopmoz.api.domain.OrderStatus;
 import mz.norteshopmoz.api.exception.ApiException;
 import mz.norteshopmoz.api.repository.OrderRepository;
@@ -33,20 +35,27 @@ class PaymentWebhookServiceTest {
     private static final String PAYMENT_ID = "01H8X9V8X9Y8Z9A8B8C8D8E8F8";
 
     private final OrderRepository orderRepository = mock(OrderRepository.class);
+    private final PaymentIncidentService incidentService = mock(PaymentIncidentService.class);
 
     private PaymentWebhookService service(String secret) {
         AppProperties props = new AppProperties(null, null, null, null, null,
                 new AppProperties.Payments("live", "https://paysuite.tech/api/v1", "k", secret,
                         "https://loja.mz/api/payments/webhook", "https://loja.mz/pedidos", 5_000),
                 null, null);
-        return new PaymentWebhookService(orderRepository, mock(PaymentIncidentService.class), props);
+        return new PaymentWebhookService(orderRepository, incidentService, props);
     }
 
     private static Order order(String id, String paymentId, OrderStatus status) {
+        return order(id, paymentId, status, null);
+    }
+
+    private static Order order(String id, String paymentId, OrderStatus status,
+            java.math.BigDecimal total) {
         return Order.builder()
                 .id(id)
                 .paymentReference(paymentId)
                 .status(status)
+                .total(total)
                 .build();
     }
 
@@ -101,6 +110,50 @@ class PaymentWebhookServiceTest {
 
         assertThat(orderId).isEqualTo("NSM-1");
         assertThat(order.getStatus()).isEqualTo(OrderStatus.PAGAMENTO_CONFIRMADO);
+    }
+
+    @Test
+    void handle_montanteDivergente_naoConfirmaNemGrava() throws Exception {
+        String payload = body("payment.success", "NSM-1");
+        Order order = order("NSM-1", PAYMENT_ID, OrderStatus.AGUARDA_PAGAMENTO,
+                new java.math.BigDecimal("90.00"));
+        when(orderRepository.findByPaymentReference(PAYMENT_ID)).thenReturn(Optional.of(order));
+
+        String orderId = service(SECRET).handle(payload, sign(SECRET, payload));
+
+        assertThat(orderId).isEqualTo("NSM-1");
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.AGUARDA_PAGAMENTO);
+        verify(orderRepository, never()).save(any());
+        verify(incidentService).record(eq("NSM-1"), eq(PAYMENT_ID), eq(PaymentIncident.TYPE_WEBHOOK_FAILED), any());
+    }
+
+    @Test
+    void handle_moedaDiferente_naoConfirma() throws Exception {
+        String payload = "{\"event\":\"payment.success\",\"data\":{\"id\":\"" + PAYMENT_ID
+                + "\",\"amount\":100.50,\"currency\":\"USD\",\"reference\":\"NSM-1\"}}";
+        Order order = order("NSM-1", PAYMENT_ID, OrderStatus.AGUARDA_PAGAMENTO,
+                new java.math.BigDecimal("100.50"));
+        when(orderRepository.findByPaymentReference(PAYMENT_ID)).thenReturn(Optional.of(order));
+
+        service(SECRET).handle(payload, sign(SECRET, payload));
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.AGUARDA_PAGAMENTO);
+        verify(orderRepository, never()).save(any());
+        verify(incidentService).record(eq("NSM-1"), eq(PAYMENT_ID), eq(PaymentIncident.TYPE_WEBHOOK_FAILED), any());
+    }
+
+    @Test
+    void handle_pagamentoAposCancelamento_naoReabreEPedeEstorno() throws Exception {
+        String payload = body("payment.success", "NSM-1");
+        Order order = order("NSM-1", PAYMENT_ID, OrderStatus.CANCELADO,
+                new java.math.BigDecimal("100.50"));
+        when(orderRepository.findByPaymentReference(PAYMENT_ID)).thenReturn(Optional.of(order));
+
+        service(SECRET).handle(payload, sign(SECRET, payload));
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELADO);
+        verify(orderRepository, never()).save(any());
+        verify(incidentService).record(eq("NSM-1"), eq(PAYMENT_ID), eq(PaymentIncident.TYPE_REFUND_FAILED), any());
     }
 
     @Test

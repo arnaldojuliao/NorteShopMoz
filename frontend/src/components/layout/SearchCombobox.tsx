@@ -34,6 +34,10 @@ const POPULAR_TERMS = [
 
 const MAX_SUGGESTIONS = 8;
 
+/** O seed local é de demonstração: em produção só serve com opt-in explícito. */
+const demoDataEnabled =
+  process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_DEMO_DATA === "1";
+
 interface ProductSuggestion {
   name: string;
   slug: string;
@@ -163,28 +167,38 @@ export function SearchCombobox({
     const apiMatches = apiProducts
       .filter((p) => {
         if (seenSlugs.has(p.slug)) return false;
+        // O pedido é debounced: uma resposta atrasada pode ser de um termo
+        // anterior. Só entra se ainda corresponder ao que está escrito.
+        const haystack = `${p.name} ${p.brand ?? ""}`.toLowerCase();
+        if (!haystack.includes(q)) return false;
         seenSlugs.add(p.slug);
         return true;
       })
       .slice(0, MAX_SUGGESTIONS);
     for (const p of apiMatches) seenSlugs.add(p.slug);
-    const nameMatches = products.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) &&
-        !seenSlugs.has(p.slug) &&
-        (seenSlugs.add(p.slug) || true),
-    );
-    const tagMatches = products.filter(
-      (p) =>
-        !nameMatches.includes(p) &&
-        p.tags.some((tag) => tag.toLowerCase().includes(q)) &&
-        !seenSlugs.has(p.slug) &&
-        (seenSlugs.add(p.slug) || true),
-    );
+    const nameMatches = demoDataEnabled
+      ? products.filter(
+          (p) =>
+            p.name.toLowerCase().includes(q) &&
+            !seenSlugs.has(p.slug) &&
+            (seenSlugs.add(p.slug) || true),
+        )
+      : [];
+    const tagMatches = demoDataEnabled
+      ? products.filter(
+          (p) =>
+            !nameMatches.includes(p) &&
+            p.tags.some((tag) => tag.toLowerCase().includes(q)) &&
+            !seenSlugs.has(p.slug) &&
+            (seenSlugs.add(p.slug) || true),
+        )
+      : [];
     const brandSet = new Set<string>();
-    for (const p of products) {
-      const brand = p.brand;
-      if (brand && brand.toLowerCase().includes(q)) brandSet.add(brand);
+    if (demoDataEnabled) {
+      for (const p of products) {
+        const brand = p.brand;
+        if (brand && brand.toLowerCase().includes(q)) brandSet.add(brand);
+      }
     }
     return {
       products: [...apiMatches, ...nameMatches, ...tagMatches]

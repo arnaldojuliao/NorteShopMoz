@@ -15,9 +15,9 @@ interface RouteCtx {
  */
 export async function PATCH(request: Request, { params }: RouteCtx) {
   const { id } = await params;
-  let body: { status?: string };
+  let body: { status?: string; trackingCode?: string };
   try {
-    body = (await request.json()) as { status?: string };
+    body = (await request.json()) as { status?: string; trackingCode?: string };
   } catch {
     return NextResponse.json({ error: "Corpo JSON inválido" }, { status: 400 });
   }
@@ -31,7 +31,9 @@ export async function PATCH(request: Request, { params }: RouteCtx) {
   try {
     const { data } = await apiPatch<{ data: Order }>(
       `/api/orders/${encodeURIComponent(id)}/status`,
-      { status: body.status },
+      body.trackingCode === undefined
+        ? { status: body.status }
+        : { status: body.status, trackingCode: body.trackingCode },
       headers,
     );
     return NextResponse.json({ data });

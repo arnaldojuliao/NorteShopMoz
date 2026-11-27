@@ -3,7 +3,6 @@ import { ConditionalHeader } from "@/components/layout/ConditionalHeader";
 import { Footer } from "@/components/layout/Footer";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { InstallPrompt } from "@/components/layout/InstallPrompt";
-import { DeliveryLoader } from "@/components/ui/DeliveryLoader";
 import { ApiDegradedBanner } from "@/components/ApiDegradedBanner";
 import { Providers } from "@/app/providers";
 import { site } from "@/config/site";
@@ -53,9 +52,6 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
   },
-  alternates: {
-    canonical: SITE_URL,
-  },
 };
 
 const organizationJsonLd = {
@@ -72,7 +68,8 @@ const organizationJsonLd = {
     "Loja online moçambicana de eletrónica, moda, casa, beleza e muito mais, com entrega para todo Moçambique.",
   address: {
     "@type": "PostalAddress",
-    addressLocality: "Maputo",
+    streetAddress: site.addressLine1,
+    addressLocality: site.addressCity,
     addressCountry: "MZ",
   },
   contactPoint: {
@@ -119,13 +116,6 @@ export default function RootLayout({
          */}
         {/* eslint-disable-next-line @next/next/no-sync-scripts */}
         <script src="/theme-init.js" />
-        {/*
-         * Liga o preloader de entrada antes da primeira pintura. Desligar o
-         * preloader = trocar `enabled` no componente abaixo (ou apagar este
-         * script, que também deixa o overlay escondido).
-         */}
-        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
-        <script src="/preloader-init.js" />
       </head>
       <body className="flex min-h-screen flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0">
         <Providers>
@@ -152,7 +142,6 @@ export default function RootLayout({
           <Footer />
           <BottomNav />
           <InstallPrompt />
-          <DeliveryLoader />
         </Providers>
       </body>
     </html>

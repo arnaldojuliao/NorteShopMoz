@@ -59,6 +59,22 @@ public class CouponService {
         repository.save(coupon);
     }
 
+    /**
+     * Devolve uma utilização consumida por um pedido que acabou cancelado.
+     * Usa o mesmo row lock do {@link #consume(String)} para não perder
+     * decrementos concorrentes; nunca desce abaixo de zero.
+     */
+    @Transactional
+    public void release(String code) {
+        if (code == null || code.isBlank()) {
+            return;
+        }
+        repository.findByCodeForUpdate(normalize(code)).ifPresent(coupon -> {
+            coupon.setUsedCount(Math.max(0, coupon.getUsedCount() - 1));
+            repository.save(coupon);
+        });
+    }
+
     @Transactional(readOnly = true)
     public List<Coupon> list() { return repository.findAllByOrderByIdDesc(); }
 

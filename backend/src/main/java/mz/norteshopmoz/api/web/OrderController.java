@@ -181,7 +181,13 @@ public class OrderController {
         if (value == null) {
             return "";
         }
-        String s = String.valueOf(value).replace("\"", "\"\"");
+        String s = String.valueOf(value);
+        // Fórmulas do Excel/Sheets: um valor começado por = + - @ (ou tab/CR)
+        // é executado ao abrir o CSV. Prefixar com apóstrofo força texto.
+        if (!s.isEmpty() && "=+-@\t\r".indexOf(s.charAt(0)) >= 0) {
+            s = "'" + s;
+        }
+        s = s.replace("\"", "\"\"");
         return s.contains(";") || s.contains("\"") || s.contains("\n") ? "\"" + s + "\"" : s;
     }
 

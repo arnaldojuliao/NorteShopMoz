@@ -3,6 +3,7 @@ package mz.norteshopmoz.api.web.dto;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
@@ -23,7 +24,7 @@ import java.util.List;
 public record OrderRequest(
         @NotEmpty(message = "Pedido sem itens")
         @Size(max = 50, message = "Máximo de 50 itens por pedido")
-        @Valid List<ItemRequest> items,
+        @Valid List<@NotNull(message = "Item inválido") ItemRequest> items,
         BigDecimal subtotal,
         BigDecimal shipping,
         BigDecimal discount,
@@ -60,6 +61,8 @@ public record OrderRequest(
             @Size(max = 80, message = "Cidade demasiado longa") String city,
             @NotBlank(message = "Província é obrigatória")
             @Size(max = 80, message = "Província demasiado longa") String province,
+            @Size(max = 120, message = "Bairro demasiado longo") String neighborhood,
+            @Size(max = 300, message = "Referência demasiado longa") String reference,
             @Size(max = 500, message = "Notas demasiado longas") String notes) {}
 
     /** Corpo do PATCH /api/orders/{id}/status (rótulo ou nome do enum). */

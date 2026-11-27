@@ -14,10 +14,9 @@ import {
 } from "lucide-react";
 import { AccountGuard } from "@/components/account/AccountGuard";
 import { AccountSidebar } from "@/components/account/AccountSidebar";
-import { OrderCard, OrderCardSkeleton } from "@/components/account/OrderCard";
+import { OrderCard } from "@/components/account/OrderCard";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { ProductGridSkeleton } from "@/components/ui/Skeleton";
 import { useCart } from "@/context/CartContext";
 import { useToast } from "@/context/ToastContext";
 import { repo } from "@/lib/repo";
@@ -33,9 +32,6 @@ import { listMyReturns, type ReturnRequestItem, type ReturnStatus } from "@/lib/
 import { cn } from "@/lib/utils";
 import { whatsappHref } from "@/config/site";
 
-/** Quantos esqueletos mostrar durante o carregamento. */
-const SKELETON_COUNT = 3;
-
 /** Separações válidas de `/pedidos?estado=` (senão cai em "todos"). */
 function parseTab(value: string | null): OrderTabId {
   return (ORDER_TABS.find((t) => t.id === value)?.id ?? "todos") as OrderTabId;
@@ -43,20 +39,11 @@ function parseTab(value: string | null): OrderTabId {
 
 export default function OrdersPage() {
   return (
-    <Suspense fallback={<OrdersFallback />}>
+    <Suspense fallback={null}>
       <AccountGuard>
         <OrdersView />
       </AccountGuard>
     </Suspense>
-  );
-}
-
-/** Esqueleto de página — usado enquanto o Suspense resolve os parâmetros de URL. */
-function OrdersFallback() {
-  return (
-    <div className="container-nsm py-6">
-      <ProductGridSkeleton count={SKELETON_COUNT} />
-    </div>
   );
 }
 
@@ -311,14 +298,6 @@ function OrdersView() {
 
           {/* Área de pedidos */}
           <div className="mt-5">
-            {phase === "loading" && (
-              <div className="space-y-4" aria-busy="true" aria-label="A carregar pedidos">
-                {Array.from({ length: SKELETON_COUNT }, (_, i) => (
-                  <OrderCardSkeleton key={i} />
-                ))}
-              </div>
-            )}
-
             {phase === "error" && (
               <div className="rounded-2xl border border-red-100 bg-red-50/60 p-6 text-center">
                 <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl bg-surface text-red-600 shadow-card">

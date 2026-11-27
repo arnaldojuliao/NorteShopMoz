@@ -152,6 +152,15 @@ public class DataSeeder implements CommandLineRunner {
             return;
         }
 
+        // O catálogo do seed é de DEMONSTRAÇÃO (produtos, preços e avaliações
+        // inventados). Em produção nunca é semeado: uma loja real começa vazia
+        // e os produtos são publicados no painel de administração.
+        if (prodProfile) {
+            log.warn("[PROD] Base de dados sem produtos — catálogo de demonstração NÃO semeado. "
+                    + "Publique os produtos reais em /admin.");
+            return;
+        }
+
         log.info("Base de dados vazia — a semear catálogo…");
         SeedCatalog seed = objectMapper.readValue(
                 new ClassPathResource("seed/catalog.json").getInputStream(), SeedCatalog.class);

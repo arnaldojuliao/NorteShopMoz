@@ -24,7 +24,7 @@ import { getShippingConfig, LOCAL_FREE_SHIPPING_THRESHOLD } from "@/lib/shipping
 import { isProviderPaymentLink, paymentMethods } from "@/lib/payments";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { getStoredUser, saveLocalOrder, submitOrder, type OrderPayload } from "@/lib/orders";
-import { saveMyAddresses } from "@/lib/addresses";
+import { readLocalAddresses, saveMyAddresses, writeLocalAddresses } from "@/lib/addresses";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/format";
 import { site, whatsappHref } from "@/config/site";
@@ -112,6 +112,8 @@ export default function CheckoutPage() {
     phone: "",
     address: "",
     city: "",
+    neighborhood: "",
+    reference: "",
     notes: "",
   });
   // Dados de pagamento online — NÃO são recolhidos aqui: todos os métodos
@@ -156,6 +158,8 @@ export default function CheckoutPage() {
     address: "",
     city: "",
     province: "",
+    neighborhood: "",
+    reference: "",
     coords: undefined as AddressBookEntry["coords"],
   });
   // Endereço usado pela encomenda: o escolhido, ou o padrão, ou o primeiro.
@@ -169,32 +173,29 @@ export default function CheckoutPage() {
   // preenche o formulário em silêncio — a UI já não mostra campos de entrega,
   // mas o payload da encomenda continua a levar os dados guardados.
   // queueMicrotask: evita setState síncrono dentro do efeito (padrão do projeto).
+  const addressUserId = authUser?.id ?? null;
   useEffect(() => {
     queueMicrotask(() => {
-      try {
-        const raw = window.localStorage.getItem("nsm:addresses");
-        if (!raw) return;
-        const list = JSON.parse(raw) as AddressBookEntry[];
-        setAddressList(list);
-        const addr = list.find((a) => a.isDefault) ?? list[0] ?? null;
-        if (!addr) return;
-        setSavedAddress(addr);
-        setSelectedAddressId(addr.id);
-        setForm((f) => ({
-          ...f,
-          fullName: f.fullName || addr.fullName,
-          phone: f.phone || addr.phone,
-          address: f.address || addr.address,
-          city: f.city || addr.city,
-        }));
-        setProvince((cur) =>
-          cur === localProvinces[0].name && addr.province ? addr.province : cur,
-        );
-      } catch {
-        /* armazenamento indisponível ou JSON inválido */
-      }
+      const list = readLocalAddresses(addressUserId);
+      setAddressList(list);
+      const addr = list.find((a) => a.isDefault) ?? list[0] ?? null;
+      if (!addr) return;
+      setSavedAddress(addr);
+      setSelectedAddressId(addr.id);
+      setForm((f) => ({
+        ...f,
+        fullName: f.fullName || addr.fullName,
+        phone: f.phone || addr.phone,
+        address: f.address || addr.address,
+        city: f.city || addr.city,
+        neighborhood: f.neighborhood || addr.neighborhood || "",
+        reference: f.reference || addr.reference || "",
+      }));
+      setProvince((cur) =>
+        cur === localProvinces[0].name && addr.province ? addr.province : cur,
+      );
     });
-  }, []);
+  }, [addressUserId]);
 
   // Revalida o cupão aplicado quando o subtotal muda (mínimo e percentagem
   // dependem do subtotal) — o desconto é sempre recalculado pelo servidor.
@@ -639,12 +640,8 @@ export default function CheckoutPage() {
       ? addressList.map((a) => (a.id === entry.id ? { ...a, ...entry } : a))
       : [...addressList.map((a) => ({ ...a, isDefault: false })), entry];
     setAddressList(next);
-    try {
-      window.localStorage.setItem("nsm:addresses", JSON.stringify(next));
-      void saveMyAddresses(next);
-    } catch {
-      /* armazenamento indisponível */
-    }
+    writeLocalAddresses(addressUserId, next);
+    void saveMyAddresses(next);
     setSavedAddress(entry);
     // O endereço acabado de guardar é o que a encomenda passa a usar — e os
     // dados do formulário são substituídos (não só preenchidos se estiverem
@@ -663,6 +660,8 @@ export default function CheckoutPage() {
       phone: entry.phone,
       address: entry.address,
       city: entry.city,
+      neighborhood: entry.neighborhood ?? "",
+      reference: entry.reference ?? "",
     }));
     setProvince(entry.province || province);
     setAddrModalOpen(false);
@@ -672,12 +671,8 @@ export default function CheckoutPage() {
   const removeAddress = (entry: AddressBookEntry) => {
     const next = addressList.filter((a) => a.id !== entry.id);
     setAddressList(next);
-    try {
-      window.localStorage.setItem("nsm:addresses", JSON.stringify(next));
-      void saveMyAddresses(next);
-    } catch {
-      /* armazenamento indisponível */
-    }
+    writeLocalAddresses(addressUserId, next);
+    void saveMyAddresses(next);
     if (entry.id !== selectedAddressId) return;
     const fallback = next.find((a) => a.isDefault) ?? next[0] ?? null;
     setSelectedAddressId(fallback?.id ?? null);
@@ -688,6 +683,8 @@ export default function CheckoutPage() {
         phone: fallback.phone,
         address: fallback.address,
         city: fallback.city,
+        neighborhood: fallback.neighborhood ?? "",
+        reference: fallback.reference ?? "",
       }));
       setProvince(fallback.province || province);
     }
@@ -981,6 +978,11 @@ export default function CheckoutPage() {
                 <p className="mt-0.5 text-sm text-slate-500">
                   {a.address}, {a.city} — {a.province}
                 </p>
+                {(a.neighborhood || a.reference) && (
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {[a.neighborhood, a.reference].filter(Boolean).join(" · ")}
+                  </p>
+                )}
                 {a.coords && (
                   <a
                     href={`https://www.google.com/maps?q=${a.coords.lat},${a.coords.lng}`}
@@ -1035,6 +1037,8 @@ export default function CheckoutPage() {
                   address: newAddr.address,
                   city: newAddr.city,
                   province: newAddr.province || localProvinces[0].name,
+                  neighborhood: newAddr.neighborhood.trim() || undefined,
+                  reference: newAddr.reference.trim() || undefined,
                   isDefault: addressList.length === 0,
                   coords: newAddr.coords,
                 };
@@ -1046,6 +1050,8 @@ export default function CheckoutPage() {
                   address: "",
                   city: "",
                   province: "",
+                  neighborhood: "",
+                  reference: "",
                   coords: undefined,
                 });
                 setAddingAddr(false);
@@ -1082,6 +1088,18 @@ export default function CheckoutPage() {
                 value={newAddr.address}
                 onChange={(e) => setNewAddr({ ...newAddr, address: e.target.value })}
               />
+              <div className="grid grid-cols-2 gap-3">
+                <Input
+                  label="Bairro"
+                  value={newAddr.neighborhood}
+                  onChange={(e) => setNewAddr({ ...newAddr, neighborhood: e.target.value })}
+                />
+                <Input
+                  label="Ponto de referência"
+                  value={newAddr.reference}
+                  onChange={(e) => setNewAddr({ ...newAddr, reference: e.target.value })}
+                />
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <Input
                   label="Cidade"

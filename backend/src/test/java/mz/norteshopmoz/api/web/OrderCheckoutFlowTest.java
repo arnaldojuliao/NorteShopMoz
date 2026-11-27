@@ -114,9 +114,14 @@ class OrderCheckoutFlowTest {
     }
 
     private MvcResult checkout(Product product, String paymentMethod, String idempotencyKey) throws Exception {
+        return checkout(product, paymentMethod, idempotencyKey, token());
+    }
+
+    private MvcResult checkout(Product product, String paymentMethod, String idempotencyKey,
+            String authToken) throws Exception {
         return mockMvc.perform(post("/api/orders")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .header("Authorization", "Bearer " + token())
+                        .header("Authorization", "Bearer " + authToken)
                         .header("Idempotency-Key", idempotencyKey)
                         .header("X-Guest-Id", UUID.randomUUID().toString())
                         .content(body(product, paymentMethod, 1, null)))
@@ -189,9 +194,11 @@ class OrderCheckoutFlowTest {
     void mesmaIdempotencyKeyNaoCobraNemDecrementaDuasVezes() throws Exception {
         Product product = product(3);
         String key = "idem-" + UUID.randomUUID();
+        // O MESMO utilizador nas duas tentativas: a chave está vinculada à conta.
+        String authToken = token();
 
-        MvcResult first = checkout(product, "m-pesa", key);
-        MvcResult second = checkout(product, "m-pesa", key);
+        MvcResult first = checkout(product, "m-pesa", key, authToken);
+        MvcResult second = checkout(product, "m-pesa", key, authToken);
 
         assertThat(first.getResponse().getStatus()).isEqualTo(201);
         assertThat(second.getResponse().getStatus()).isEqualTo(201);
@@ -201,6 +208,24 @@ class OrderCheckoutFlowTest {
         String secondId = JsonPath.read(second.getResponse().getContentAsString(), "$.data.id");
         assertThat(secondId).isEqualTo(firstId);
         assertThat(stockOf(product.getId())).isEqualTo(2);
+    }
+
+    @Test
+    void mesmaIdempotencyKeyDeOutroUtilizadorNaoDevolveOPedidoAlheio() throws Exception {
+        Product product = product(3);
+        String key = "idem-alheia-" + UUID.randomUUID();
+
+        MvcResult first = checkout(product, "m-pesa", key, token());
+        MvcResult second = checkout(product, "m-pesa", key, token());
+
+        assertThat(first.getResponse().getStatus()).isEqualTo(201);
+        assertThat(second.getResponse().getStatus()).isEqualTo(201);
+        String firstId = JsonPath.read(first.getResponse().getContentAsString(), "$.data.id");
+        String secondId = JsonPath.read(second.getResponse().getContentAsString(), "$.data.id");
+        // Chaves iguais de contas diferentes são independentes: nunca se expõe
+        // (nem se reutiliza) o pedido de outra conta.
+        assertThat(secondId).isNotEqualTo(firstId);
+        assertThat(stockOf(product.getId())).isEqualTo(1);
     }
 
     @Test

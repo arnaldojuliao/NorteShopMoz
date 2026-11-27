@@ -34,13 +34,25 @@ export function BuyBox({ product }: { product: Product }) {
   const defaultColor = colorOptions[0]?.name;
   const hasColor = colorOptions.length > 0;
 
-  const chosenVariant = hasColor ? selectedColor ?? defaultColor : undefined;
+  const sizeOptions = sizeVariant?.options?.length ? sizeVariant.options : [];
+  const hasSize = sizeOptions.length > 0;
+  // A variante enviada ao carrinho tem de conter TODAS as escolhas (cor e
+  // tamanho). Antes só a cor seguia: o cliente escolhia M e comprava sem
+  // tamanho, e o carrinho/stock não distinguiam as variantes.
+  const chosenVariant =
+    [hasColor ? selectedColor ?? defaultColor : undefined, hasSize ? variant : undefined]
+      .filter(Boolean)
+      .join(" · ") || undefined;
 
   // Adicionar ao carrinho **não** exige conta: o carrinho de convidado existe
   // (identidade `X-Guest-Id` no backend e `localStorage` sem ligação). Exigir
   // login no primeiro clique punha um muro à frente do CTA principal da loja.
   const handleAdd = (buyNow = false) => {
     if (out) return;
+    if (hasSize && !variant) {
+      notify("Escolha um tamanho antes de adicionar ao carrinho.", "info");
+      return;
+    }
     addItem(product, qty, chosenVariant);
     notify("Adicionado ao carrinho 🛒");
     if (buyNow) router.push("/carrinho");
@@ -129,7 +141,7 @@ export function BuyBox({ product }: { product: Product }) {
         <div>
           <p className="mb-2 text-sm font-semibold text-slate-700">Tamanho</p>
           <div className="flex flex-wrap gap-2">
-            {sizeVariant.options.map((o) => (
+            {sizeOptions.map((o) => (
               <button
                 key={o.name}
                 onClick={() => setVariant(o.name)}
