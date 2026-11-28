@@ -1,5 +1,5 @@
 import type { Badge, Category, Product } from "@/lib/types";
-import { apiGet } from "@/lib/api";
+import { apiGet, ApiError } from "@/lib/api";
 import {
   bestsellers as localBestsellers,
   dealsOfToday as localDealsOfToday,
@@ -216,8 +216,13 @@ export const repo = {
       );
       // Um produto de teste não tem página na loja (404), tal como um slug inválido.
       return isTestProduct(data) ? undefined : data;
-    } catch {
-      return demoDataEnabled ? getProductBySlug(slug) : undefined;
+    } catch (err) {
+      if (demoDataEnabled) return getProductBySlug(slug);
+      // 404 do backend = o produto não existe (notFound é correto). Falha de
+      // rede/5xx = a API não respondeu: devolver undefined aqui fazia o ISR
+      // cachear um 404 permanente e o produto "desaparecia" da loja.
+      if (err instanceof ApiError && err.status === 404) return undefined;
+      throw err;
     }
   },
 

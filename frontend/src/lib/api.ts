@@ -37,9 +37,25 @@ export const API_BASE = envOr(process.env.NEXT_PUBLIC_API_BASE_URL, "http://loca
  */
 const SERVER_API_BASE = envOr(process.env.API_INTERNAL_BASE_URL, "").replace(/\/+$/, "");
 
+/**
+ * Alvo do proxy same-origin (`next.config.ts` → rewrites `/api` e `/uploads`).
+ *
+ * É o backend que o browser usa com sucesso em produção. No servidor serve de
+ * segunda tentativa quando `API_INTERNAL_BASE_URL` está definida mas morta
+ * (ex.: deploy antigo) — sem isto o SSR devolvia 404 e o ISR congelava-o.
+ */
+const PROXY_API_BASE = envOr(process.env.API_PROXY_TARGET, "").replace(/\/+$/, "");
+
+/** Bases a tentar, por ordem, no contexto atual. */
+function apiBases(): string[] {
+  if (typeof window !== "undefined") return [API_BASE];
+  const bases = [SERVER_API_BASE, PROXY_API_BASE, API_BASE].filter(Boolean);
+  return [...new Set(bases)];
+}
+
 /** URL base da API para o contexto atual (no servidor usa a interna, se definida). */
 export function apiBaseUrl(): string {
-  return typeof window === "undefined" && SERVER_API_BASE ? SERVER_API_BASE : API_BASE;
+  return apiBases()[0];
 }
 
 const REQUEST_TIMEOUT_MS = 4_000;
@@ -235,6 +251,51 @@ export function onApiHealthChange(listener: (down: boolean) => void): () => void
   return () => apiHealthListeners.delete(listener);
 }
 
+/**
+ * fetch com timeout e, no servidor, fallback entre bases da API.
+ *
+ * Em produção o SSR pode ter `API_INTERNAL_BASE_URL` a apontar para um backend
+ * que já não existe (ex.: deploy antigo). Nesse caso a página de produto
+ * devolvia `notFound()` e o ISR congelava um 404 — enquanto o proxy público
+ * (`/api`) continuava a funcionar. O fallback tenta, por ordem, a base interna,
+ * o alvo do proxy e a base pública; em Docker, se a interna funciona, nada muda.
+ */
+type NextFetchInit = RequestInit & { next?: { revalidate?: number } };
+
+async function fetchApi(
+  path: string,
+  init: Omit<NextFetchInit, "signal">,
+  allowFallback = false,
+): Promise<Response> {
+  const attempt = async (base: string): Promise<Response> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      return await fetch(`${base}${path}`, { ...init, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  const bases = allowFallback ? apiBases() : [apiBaseUrl()];
+  for (let i = 0; i < bases.length; i += 1) {
+    const isLast = i === bases.length - 1;
+    try {
+      const res = await attempt(bases[i]);
+      // 404/5xx de uma base não-final pode ser um host morto a responder com o
+      // envelope do edge (ex.: Railway "Application not found", HTTP 404) e não
+      // o backend. Só a última base responde de forma autoritária; antes disso
+      // tenta-se a seguinte (o produto pode existir no backend vivo).
+      if (!isLast && (res.status === 404 || res.status >= 500)) continue;
+      return res;
+    } catch (err) {
+      // Falha de rede/timeout: tenta a base seguinte; na última, propaga.
+      if (isLast) throw err;
+    }
+  }
+  throw new Error("API indisponível");
+}
+
 /** Erro com resposta HTTP do backend (ex.: 400 validação) — NÃO é falha de rede. */
 export class ApiError extends Error {
   constructor(
@@ -273,21 +334,29 @@ export async function apiGet<T>(
     throw new Error("API indisponível (janela de espera)");
   }
 
+  // No servidor, dados públicos usam o Data Cache do Next com o TTL pedido:
+  // `cache: "no-store"` marcava a rota como dinâmica e, quando a API falhava,
+  // o erro era convertido em 503 e o build pré-renderizava 404s permanentes.
+  // Pedidos autenticados (cookies/Bearer) e `bypassCache` continuam sem cache.
+  const hasAuth = Boolean(
+    headers?.authorization ||
+      headers?.Authorization ||
+      headers?.cookie ||
+      headers?.Cookie,
+  );
+  const init: Omit<NextFetchInit, "signal"> = {
+    headers,
+    credentials: "include", // Essencial para cookies HttpOnly
+  };
+  if (typeof window === "undefined" && !bypassCache && !hasAuth) {
+    init.next = { revalidate: Math.max(1, Math.round(ttlMs / 1000)) };
+  } else {
+    init.cache = "no-store";
+  }
+
   let httpStatus: number | null = null;
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-    let res: Response;
-    try {
-      res = await fetch(`${apiBaseUrl()}${path}`, {
-        headers,
-        signal: controller.signal,
-        cache: "no-store",
-        credentials: "include", // Essencial para cookies HttpOnly
-      });
-    } finally {
-      clearTimeout(timer);
-    }
+    const res = await fetchApi(path, init, true);
     httpStatus = res.status;
     if (!res.ok) {
       throw new ApiError(res.status, await safeErrorText(res));
@@ -356,20 +425,12 @@ async function apiSend<T>(
 
   let httpStatus: number | null = null;
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-    let res: Response;
-    try {
-      res = await fetch(`${apiBaseUrl()}${path}`, {
-        method,
-        headers: { ...withDefaults, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
-        body: body === undefined ? undefined : JSON.stringify(body),
-        signal: controller.signal,
-        credentials: "include", // Essencial para cookies HttpOnly + CSRF
-      });
-    } finally {
-      clearTimeout(timer);
-    }
+    const res = await fetchApi(path, {
+      method,
+      headers: { ...withDefaults, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      credentials: "include", // Essencial para cookies HttpOnly + CSRF
+    });
     httpStatus = res.status;
     if (!res.ok) {
       throw new ApiError(res.status, await safeErrorText(res));
